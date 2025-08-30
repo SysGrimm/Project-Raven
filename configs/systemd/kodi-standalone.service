@@ -1,0 +1,45 @@
+[Unit]
+Description=Kodi Standalone Media Center
+Documentation=https://kodi.wiki/
+After=multi-user.target graphical-session.target sound.target network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=reaper
+Group=reaper
+PAMName=login
+TTYPath=/dev/tty7
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+
+# Environment setup
+Environment=HOME=/home/reaper
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+
+# Kodi execution
+ExecStartPre=/bin/bash -c 'while ! /usr/bin/test -c /dev/dri/card0; do /bin/sleep 1; done'
+ExecStart=/usr/bin/kodi-standalone
+ExecStop=/bin/kill -TERM $MAINPID
+
+# Service behavior
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=30
+
+# Security and resource limits
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/reaper
+NoNewPrivileges=yes
+LimitNOFILE=16384
+
+# GPU and hardware access
+SupplementaryGroups=audio video render input
+
+[Install]
+WantedBy=graphical.target

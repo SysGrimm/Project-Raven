@@ -1,0 +1,94 @@
+# SoulBox Raspberry Pi 5 Configuration
+# Optimized for Kodi media center performance
+# 
+# WARNING: This file is critical for system boot
+# Always backup before modifications
+# Duplicate entries will cause boot failures
+
+[pi5]
+# Raspberry Pi 5 specific settings
+
+# === GPU and Graphics Configuration ===
+# vc4-kms-v3d: Enable KMS (Kernel Mode Setting) driver for Pi 5 BCM2712
+dtoverlay=vc4-kms-v3d
+
+# GPU Memory Allocation
+# 256MB provides optimal balance for 4K media playback
+gpu_mem=256
+
+# GPU Performance Settings
+# 700MHz provides stable high-performance operation
+gpu_freq=700
+
+# Voltage boost required for stable high-frequency GPU operation
+over_voltage=2
+
+# Maximum framebuffers for multi-display support
+max_framebuffers=2
+
+# === Video and Codec Configuration ===
+# HDMI Settings for optimal video output
+hdmi_drive=2
+hdmi_force_hotplug=1
+hdmi_boost=7
+hdmi_blanking=1
+
+# Hardware Codec Frequencies
+# Optimized for H.264 and HEVC decoding
+h264_freq=600
+hevc_freq=600
+isp_freq=600
+v3d_freq=600
+
+# Enable all hardware codecs
+codec_enabled=ALL
+
+# === Audio Configuration ===
+# Force HDMI audio output
+hdmi_force_edid_audio=1
+
+# === Power Management ===
+# Disable unnecessary features for headless operation
+dtoverlay=disable-wifi
+dtoverlay=disable-bt
+
+# USB power management
+usb_max_current_enable=1
+
+# === Boot Configuration ===
+# Optimize boot for faster startup
+boot_delay=0
+disable_splash=1
+
+# === Thermal Management ===
+# Conservative thermal limits for stability
+temp_limit=75
+
+# === Memory Configuration ===
+# Optimize memory split for media workloads
+start_x=1
+
+# === Additional Overlays for Stability ===
+# Ensure stable operation under load
+dtparam=pcie_gen=2
+dtparam=pciex1_gen=2
+
+# === Debug and Logging ===
+# Reduce unnecessary logging for performance
+# Remove these lines for troubleshooting
+consoleblank=1
+quiet=1
+
+# === Legacy Support (if needed) ===
+# Uncomment only if legacy applications require it
+# arm_64bit=0
+# gpu_mem_256=128
+# gpu_mem_512=256
+# gpu_mem_1024=256
+
+# === SoulBox Custom Settings ===
+# Custom device tree modifications for media center optimization
+# dtoverlay=soulbox-optimizations
+
+# End of SoulBox configuration
+# Last updated: 2025-08-30
