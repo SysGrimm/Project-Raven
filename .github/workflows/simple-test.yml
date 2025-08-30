@@ -1,0 +1,47 @@
+name: Simple Runner Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-no-checkout:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Test basic functionality
+      run: |
+        echo "=== Runner Environment Test ==="
+        echo "Hostname: $(hostname)"
+        echo "User: $(whoami)"
+        echo "Date: $(date)"
+        echo "PWD: $(pwd)"
+        echo "OS Info: $(uname -a)"
+        echo "Disk Space:"
+        df -h
+        echo ""
+        echo "=== Docker Test ==="
+        docker --version || echo "Docker not available"
+        docker info || echo "Docker daemon not accessible"
+        echo ""
+        echo "=== Network Test ==="
+        curl -s http://192.168.176.113:3000 | head -10 || echo "Cannot reach Gitea"
+        echo ""
+        echo "=== Build Tools Test ==="
+        which git || echo "git not found"
+        which curl || echo "curl not found"  
+        which wget || echo "wget not found"
+        echo ""
+        echo "✅ Basic runner test completed!"
+        
+    - name: Create test output
+      run: |
+        mkdir -p test-output
+        echo "Runner test completed at $(date)" > test-output/test-result.txt
+        echo "Runner is working!" >> test-output/test-result.txt
+        
+    - name: Upload test output
+      uses: actions/upload-artifact@v3
+      with:
+        name: simple-test-result
+        path: test-output/
+        retention-days: 1
