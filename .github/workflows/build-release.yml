@@ -46,9 +46,25 @@ jobs:
     - name: Set up ARM64 emulation
       run: |
         echo "=== Setting up ARM64 Emulation ==="
-        sudo mount -t binfmt_misc binfmt_misc /proc/sys/fs/binfmt_misc 2>/dev/null || echo "binfmt_misc already mounted"
-        echo ':qemu-aarch64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-aarch64-static:F' | sudo tee /proc/sys/fs/binfmt_misc/register > /dev/null || echo "ARM64 already registered"
-        echo "ARM64 emulation configured"
+        # Check if qemu-aarch64-static is available
+        if [ -f /usr/bin/qemu-aarch64-static ]; then
+            echo "qemu-aarch64-static found"
+        else
+            echo "ERROR: qemu-aarch64-static not found"
+            exit 1
+        fi
+        
+        # Use update-binfmts instead of manual registration
+        echo "Registering ARM64 emulation via update-binfmts..."
+        sudo update-binfmts --enable qemu-aarch64 || echo "Using existing registration"
+        
+        # Verify emulation works
+        echo "Testing ARM64 emulation..."
+        sudo /usr/bin/qemu-aarch64-static /bin/echo "ARM64 emulation working" || {
+            echo "ERROR: ARM64 emulation test failed"
+            exit 1
+        }
+        echo "ARM64 emulation configured successfully"
         
     - name: Free up disk space
       run: |
