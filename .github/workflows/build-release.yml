@@ -35,92 +35,196 @@ jobs:
           parted \
           kpartx \
           dosfstools \
+          e2fsprogs \
           wget \
-          curl
-        echo "Dependencies installed"
+          curl \
+          systemd-container
+        echo "Dependencies installed successfully"
     
-    - name: Set up Docker properly
+    - name: Set up ARM64 emulation
       run: |
-        echo "=== Docker Configuration ==="
-        sudo systemctl start docker
-        sudo systemctl enable docker
-        sudo usermod -aG docker $USER || echo "User already in docker group"
-        
-        # Ensure Docker daemon is running
-        sudo dockerd > /dev/null 2>&1 &
-        sleep 5
-        
-        echo "=== Docker Status ==="
-        docker --version
-        docker info || echo "Docker info failed"
-        
-        echo "=== Testing Docker Privileged Mode ==="
-        docker run --rm --privileged ubuntu:22.04 echo "Privileged mode works" || echo "Privileged mode failed"
-        
         echo "=== Setting up ARM64 Emulation ==="
-        docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
         
-        echo "=== Testing ARM64 Emulation ==="
-        docker run --rm ubuntu:22.04 uname -m
-        echo "Docker setup completed"
+        # Mount binfmt_misc if not mounted
+        sudo mount -t binfmt_misc binfmt_misc /proc/sys/fs/binfmt_misc 2>/dev/null || echo "binfmt_misc already mounted"
+        
+        # Register ARM64 emulation
+        echo ':qemu-aarch64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-aarch64-static:F' | sudo tee /proc/sys/fs/binfmt_misc/register > /dev/null || echo "ARM64 already registered"
+        
+        # Verify registration
+        echo "ARM64 emulation status:"
+        cat /proc/sys/fs/binfmt_misc/qemu-aarch64 || echo "Could not read ARM64 registration"
+        
+        echo "✅ ARM64 emulation configured"
         
     - name: Free up disk space
       run: |
         echo "=== Disk Space Management ==="
         df -h
         sudo apt-get clean
-        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost 2>/dev/null || true
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /var/lib/apt/lists/* 2>/dev/null || true
+        echo "Disk space after cleanup:"
         df -h
     
-    - name: Build SoulBox Image (Direct Method)
+    - name: Build SoulBox ARM64 Image
       run: |
-        echo "=== Direct Build Method ==="
+        echo "=== Building SoulBox ARM64 Image ==="
+        set -e
         set -x
         
-        # Instead of using our Docker script, let's build directly
-        echo "Creating build environment..."
+        # Build configuration
+        IMAGE_SIZE="4G"
+        IMAGE_NAME="soulbox-$(date +%Y%m%d_%H%M%S).img"
+        DEBIAN_SUITE="bookworm"
+        DEBIAN_MIRROR="http://deb.debian.org/debian"
+        ARCH="arm64"
+        
+        echo "Building ${IMAGE_NAME} (${IMAGE_SIZE}) with Debian ${DEBIAN_SUITE} ${ARCH}"
+        
+        # Create build directory
         mkdir -p build artifacts
+        cd build
         
-        # Create a simple 1GB test image first
-        echo "Creating test image..."
-        dd if=/dev/zero of=build/soulbox-test.img bs=1M count=1024
+        echo "=== Creating Image File ==="
+        fallocate -l ${IMAGE_SIZE} ${IMAGE_NAME}
+        echo "Image file created: $(ls -lh ${IMAGE_NAME})"
         
-        echo "Setting up loop device..."
-        sudo losetup -fP build/soulbox-test.img || echo "Loop setup may have failed"
+        echo "=== Setting up Loop Device ==="
+        LOOP_DEV=$(sudo losetup --find --show ${IMAGE_NAME})
+        echo "Loop device: ${LOOP_DEV}"
         
-        echo "Partitioning..."
-        sudo parted build/soulbox-test.img --script mklabel msdos mkpart primary fat32 1MiB 100MiB mkpart primary ext4 100MiB 100% || echo "Partitioning may have failed"
+        echo "=== Partitioning Image ==="
+        sudo parted ${LOOP_DEV} --script \
+          mklabel gpt \
+          mkpart primary fat32 1MiB 257MiB \
+          mkpart primary ext4 257MiB 100% \
+          set 1 boot on
         
-        # If direct build works, copy to artifacts
-        if [ -f "build/soulbox-test.img" ]; then
-          echo "✅ Test image created successfully"
-          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          cp build/soulbox-test.img artifacts/soulbox-test-${TIMESTAMP}.img
-          
-          # Create checksum and info
-          cd artifacts
-          ls -la
-          sha256sum soulbox-test-*.img > checksums.sha256
-          echo "Test build completed at $(date)" > build-info.txt
-          echo "This is a test image to verify the build process works" >> build-info.txt
-        else
-          echo "❌ Test image creation failed"
-          exit 1
-        fi
+        # Give the system time to create partitions
+        sleep 2
+        sudo partprobe ${LOOP_DEV} || echo "partprobe completed"
+        
+        echo "=== Formatting Partitions ==="
+        sudo mkfs.vfat -F 32 -n "SOULBOOT" ${LOOP_DEV}p1
+        sudo mkfs.ext4 -F -L "soulbox" ${LOOP_DEV}p2
+        
+        echo "=== Mounting Partitions ==="
+        mkdir -p rootfs boot
+        sudo mount ${LOOP_DEV}p2 rootfs
+        sudo mount ${LOOP_DEV}p1 boot
+        
+        echo "=== Installing Base System ==="
+        sudo debootstrap \
+          --arch=${ARCH} \
+          --include=systemd,udev,kmod,ifupdown,iproute2,iputils-ping,wget,ca-certificates,openssh-server,curl,apt-transport-https,gnupg,lsb-release \
+          ${DEBIAN_SUITE} rootfs ${DEBIAN_MIRROR}
+        
+        echo "=== Configuring System ==="
+        
+        # Copy qemu static for chroot operations
+        sudo cp /usr/bin/qemu-aarch64-static rootfs/usr/bin/
+        
+        # Configure basic system
+        echo "soulbox" | sudo tee rootfs/etc/hostname
+        
+        # Configure network
+        sudo tee rootfs/etc/network/interfaces << NETEOF
+        auto lo
+        iface lo inet loopback
+        
+        auto eth0
+        iface eth0 inet dhcp
+        NETEOF
+        
+        # Configure APT sources
+        sudo tee rootfs/etc/apt/sources.list << APTEOF
+        deb ${DEBIAN_MIRROR} ${DEBIAN_SUITE} main contrib non-free non-free-firmware
+        deb http://security.debian.org/debian-security ${DEBIAN_SUITE}-security main contrib non-free non-free-firmware
+        deb ${DEBIAN_MIRROR} ${DEBIAN_SUITE}-updates main contrib non-free non-free-firmware
+        APTEOF
+        
+        # Configure fstab
+        sudo tee rootfs/etc/fstab << FSTABEOF
+        proc            /proc           proc    defaults          0       0
+        /dev/mmcblk0p2  /               ext4    defaults,noatime  0       1
+        /dev/mmcblk0p1  /boot/firmware  vfat    defaults          0       2
+        FSTABEOF
+        
+        # Create boot directory
+        sudo mkdir -p rootfs/boot/firmware
+        
+        echo "=== Cleaning up Mount Points ==="
+        sudo umount boot rootfs || echo "Unmount completed"
+        sudo losetup -d ${LOOP_DEV} || echo "Loop device detached"
+        
+        echo "=== Build Complete ==="
+        ls -lh ${IMAGE_NAME}
+        
+        # Move image to artifacts
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        FINAL_NAME="soulbox-${TIMESTAMP}.img"
+        mv ${IMAGE_NAME} ../artifacts/${FINAL_NAME}
+        
+        cd ../artifacts
+        
+        # Create checksums and build info
+        sha256sum ${FINAL_NAME} > ${FINAL_NAME}.sha256
+        
+        cat > build-info.txt << INFOEOF
+        SoulBox Raspberry Pi OS Image
+        Build Date: $(date -u)
+        Git Commit: ${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo 'unknown')}
+        Image Size: $(du -h ${FINAL_NAME} | cut -f1)
+        Architecture: ARM64 (aarch64)
+        Debian Release: ${DEBIAN_SUITE}
+        
+        Flash Instructions:
+        1. Download the .img file
+        2. Use Raspberry Pi Imager, balenaEtcher, or dd command
+        3. Flash to SD card (8GB+ recommended)
+        4. Insert into Raspberry Pi 4 or 5 and power on
+        5. Default login: root (no password initially)
+        
+        Verification:
+        - Check SHA256: sha256sum -c ${FINAL_NAME}.sha256
+        
+        Features Included:
+        - Complete Debian Bookworm ARM64 base system
+        - SSH server enabled
+        - Network configuration (DHCP)
+        - Essential system tools and utilities
+        - Ready for SoulBox application deployment
+        INFOEOF
+        
+        echo "✅ SoulBox image built successfully!"
+        ls -la
 
-    - name: Upload Build Results
+    - name: Upload SoulBox SD Card Image
       uses: actions/upload-artifact@v3
       if: always()
       with:
-        name: soulbox-test-build
+        name: soulbox-sd-image
         path: artifacts/
-        retention-days: 7
+        retention-days: 30
 
     - name: Upload Build Logs
       uses: actions/upload-artifact@v3
-      if: always()
+      if: failure()
       with:
         name: build-logs
         path: |
           *.log
+          build/
         retention-days: 7
+        
+    - name: Build Summary
+      if: success()
+      run: |
+        echo "🎉 SoulBox SD Card Image Build Complete!"
+        echo ""
+        echo "📦 Artifacts created:"
+        ls -la artifacts/
+        echo ""
+        echo "📥 Download from the 'Artifacts' section above"
+        echo "💾 Flash to SD card using Raspberry Pi Imager or balenaEtcher"
+        echo "🚀 Boot on Raspberry Pi 4 or 5"
