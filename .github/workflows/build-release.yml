@@ -77,23 +77,21 @@ jobs:
           cd artifacts
           sha256sum "$ARTIFACT_NAME" > "${ARTIFACT_NAME}.sha256"
           
-          # Create build info
-          cat > build-info.txt << EOL
-SoulBox SD Card Image
-Build Date: $(date -u)
-Git Commit: ${GITHUB_SHA:-unknown}
-Image Size: $IMAGE_SIZE
-Architecture: ARM64 (aarch64)
-
-Flash Instructions:
-1. Download the .img file
-2. Use balenaEtcher, Raspberry Pi Imager, or dd command
-3. Flash to SD card (minimum 8GB recommended)
-4. Insert into Raspberry Pi 4/5 and power on
-
-Verification:
-- Check SHA256: sha256sum -c ${ARTIFACT_NAME}.sha256
-EOL
+          # Create build info file
+          echo "SoulBox SD Card Image" > build-info.txt
+          echo "Build Date: $(date -u)" >> build-info.txt
+          echo "Git Commit: ${GITHUB_SHA:-unknown}" >> build-info.txt
+          echo "Image Size: $IMAGE_SIZE" >> build-info.txt
+          echo "Architecture: ARM64 (aarch64)" >> build-info.txt
+          echo "" >> build-info.txt
+          echo "Flash Instructions:" >> build-info.txt
+          echo "1. Download the .img file" >> build-info.txt
+          echo "2. Use balenaEtcher, Raspberry Pi Imager, or dd command" >> build-info.txt
+          echo "3. Flash to SD card (minimum 8GB recommended)" >> build-info.txt
+          echo "4. Insert into Raspberry Pi 4/5 and power on" >> build-info.txt
+          echo "" >> build-info.txt
+          echo "Verification:" >> build-info.txt
+          echo "- Check SHA256: sha256sum -c ${ARTIFACT_NAME}.sha256" >> build-info.txt
           
           echo "Artifacts prepared:"
           ls -la
