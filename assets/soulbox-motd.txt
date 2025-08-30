@@ -1,0 +1,33 @@
+
+     ____              _ ____            
+    / ___|  ___  _   _| | __ )  _____  __
+    \___ \ / _ \| | | | |  _ \ / _ \ \/ /
+     ___) | (_) | |_| | | |_) | (_) >  < 
+    |____/ \___/ \__,_|_|____/ \___/_/\_\
+    
+    Will-o'-Wisp Media Center ~ OpenELEC Style
+    
+    Default credentials:
+    - soulbox:soulbox (media center user)
+    - pi:soulbox (compatibility)
+    - root:soulbox (admin access)
+    
+    Services:
+    - Kodi media center (auto-starts on boot)
+    - Tailscale VPN (run 'sudo tailscale up' to connect)
+    - SSH enabled on port 22
+    
+    Hardware Optimizations:
+    - GPU memory: 320MB for media processing
+    - Video codecs: H264/HEVC hardware acceleration
+    - Display: Optimized for HDMI output
+    - Audio: Hardware audio enabled
+    
+    Quick Start:
+    1. Kodi starts automatically (OpenELEC style)
+    2. Connect to Tailscale: sudo tailscale up
+    3. SSH access available locally and via Tailscale
+    4. Media directories: ~/Videos, ~/Music, ~/Pictures
+    
+    The blue flame guides your media journey...
+    
