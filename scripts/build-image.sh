@@ -35,7 +35,24 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 check_dependencies() {
     log_info "Checking build dependencies..."
     
-    local deps=("debootstrap" "qemu-user-static" "parted" "kpartx" "losetup")
+    local deps=("debootstrap" "parted" "kpartx" "losetup")
+# Clean up any existing loop devices for this image
+cleanup_existing_loops() {
+    local image_file="${BUILD_DIR}/${IMAGE_NAME}"
+    if [ -f "$image_file" ]; then
+        local existing_loops=$(losetup -j "$image_file" | cut -d: -f1)
+        if [ -n "$existing_loops" ]; then
+            log_info "Cleaning up existing loop devices for $image_file"
+            echo "$existing_loops" | while read loop_dev; do
+                # Remove any partition mappings first
+                kpartx -dv "$loop_dev" 2>/dev/null || true
+                # Detach the loop device
+                losetup -d "$loop_dev" 2>/dev/null || true
+            done
+        fi
+    fi
+}
+
     for dep in "${deps[@]}"; do
         if ! command -v ${dep} >/dev/null 2>&1; then
             log_error "Missing dependency: ${dep}"
@@ -43,6 +60,13 @@ check_dependencies() {
             exit 1
         fi
     done
+
+    # Check for qemu-user-static binaries
+    if [[ ! -f "/usr/bin/qemu-arm-static" ]] || [[ ! -f "/usr/bin/qemu-aarch64-static" ]]; then
+        log_error "Missing qemu-user-static binaries"
+        log_error "Install with: sudo apt-get install qemu-user-static"
+        exit 1
+    fi
     
     if [[ $EUID -ne 0 ]]; then
         log_error "This script must be run as root (use sudo)"
@@ -55,6 +79,9 @@ check_dependencies() {
 # Create build directories
 setup_build_env() {
     log_info "Setting up build environment..."
+    # Clean up any existing loop devices first
+    cleanup_existing_loops
+
     
     mkdir -p "${BUILD_DIR}"/{image,rootfs,boot}
     
@@ -97,18 +124,30 @@ partition_image() {
 mount_image() {
     log_info "Mounting image partitions..."
     
+    # Use absolute path for the image file
+    local image_path="$(readlink -f "${BUILD_DIR}/${IMAGE_NAME}")"
+    
     # Set up loop device
-    local loop_device=$(losetup --find --partscan --show "${BUILD_DIR}/${IMAGE_NAME}")
+    local loop_device=$(losetup --find --show "${image_path}")
     echo ${loop_device} > "${BUILD_DIR}/loop_device"
+
+    # Use kpartx to create partition mappings
+    kpartx -av ${loop_device}
+    sleep 2
+    
+    # Get device basename for mapper names
+    local loop_base=$(basename ${loop_device})
+    local boot_dev="/dev/mapper/${loop_base}p1"
+    local root_dev="/dev/mapper/${loop_base}p2"
     
     # Format partitions
-    mkfs.vfat -F 32 -n "SOULBOOT" ${loop_device}p1
-    mkfs.ext4 -L "SOULROOT" ${loop_device}p2
+    mkfs.vfat -F 32 -n "SOULBOOT" ${boot_dev}
+    mkfs.ext4 -L "SOULROOT" ${root_dev}
     
     # Mount partitions
-    mount ${loop_device}p2 "${BUILD_DIR}/rootfs"
+    mount ${root_dev} "${BUILD_DIR}/rootfs"
     mkdir -p "${BUILD_DIR}/rootfs/boot/firmware"
-    mount ${loop_device}p1 "${BUILD_DIR}/rootfs/boot/firmware"
+    mount ${boot_dev} "${BUILD_DIR}/rootfs/boot/firmware"
     
     log_info "Image partitions mounted"
 }
@@ -117,15 +156,20 @@ mount_image() {
 bootstrap_system() {
     log_info "Bootstrapping Debian ${DEBIAN_SUITE} system..."
     
-    # Enable QEMU emulation
-    systemctl start systemd-binfmt.service
-    
-    # Bootstrap base system with additional packages for SoulBox
-    debootstrap --arch=${ARCH} --include=systemd,udev,kmod,ifupdown,iproute2,iputils-ping,wget,ca-certificates,openssh-server,curl,apt-transport-https,gnupg,lsb-release,jq \
+    # Stage 1: Extract packages without configuration (foreign mode)
+    debootstrap --arch=${ARCH} --foreign --include=systemd,udev,kmod,ifupdown,iproute2,iputils-ping,wget,ca-certificates,openssh-server,curl,apt-transport-https,gnupg,lsb-release,jq \
         ${DEBIAN_SUITE} "${BUILD_DIR}/rootfs" ${DEBIAN_MIRROR}
     
     # Copy QEMU static for chroot operations
     cp /usr/bin/qemu-aarch64-static "${BUILD_DIR}/rootfs/usr/bin/"
+    
+    # Enable binfmt for aarch64 if not already enabled
+    if [ ! -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+        echo ":qemu-aarch64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-aarch64-static:F" > /proc/sys/fs/binfmt_misc/register
+    fi
+    
+    # Stage 2: Complete the bootstrap inside chroot with emulation
+    chroot "${BUILD_DIR}/rootfs" /debootstrap/debootstrap --second-stage
     
     log_info "Base system bootstrapped"
 }
@@ -277,6 +321,7 @@ cleanup() {
     # Detach loop device
     if [[ -f "${BUILD_DIR}/loop_device" ]]; then
         local loop_device=$(cat "${BUILD_DIR}/loop_device")
+        kpartx -dv ${loop_device} 2>/dev/null || true
         losetup -d ${loop_device} 2>/dev/null || true
         rm -f "${BUILD_DIR}/loop_device"
     fi
