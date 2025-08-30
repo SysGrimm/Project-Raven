@@ -69,10 +69,33 @@ install_packages() {
         "alsa-utils"
         "pulseaudio"
         "pulseaudio-utils"
+        "curl"
+        "apt-transport-https"
+        "ca-certificates"
+        "gnupg"
+        "lsb-release"
     )
     
     apt-get install -y -qq "${packages[@]}"
     log_info "Required packages installed"
+}
+
+# Install Tailscale
+install_tailscale() {
+    log_info "Installing Tailscale..."
+    
+    # Add Tailscale repository
+    curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+    curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.tailscale-keyring.list | tee /etc/apt/sources.list.d/tailscale.list
+    
+    # Update package list and install Tailscale
+    apt-get update -qq
+    apt-get install -y -qq tailscale
+    
+    # Enable but don't start Tailscale service (will be handled by first-boot service)
+    systemctl enable tailscaled
+    
+    log_info "Tailscale installed and enabled"
 }
 
 # Create reaper user with proper groups
@@ -145,6 +168,41 @@ install_service() {
         log_info "Service installed and enabled"
     else
         log_error "Service file not found in configs/systemd/"
+        exit 1
+    fi
+}
+
+# Install Tailscale first-boot service
+install_tailscale_firstboot_service() {
+    log_info "Installing Tailscale first-boot service..."
+    
+    local config_dir=$(dirname $(dirname $(realpath $0)))
+    local script_source="${config_dir}/scripts/tailscale-firstboot.sh"
+    local script_dest="/usr/local/bin/tailscale-firstboot.sh"
+    local service_source="${config_dir}/configs/systemd/soulbox-tailscale-firstboot.service"
+    local service_dest="/etc/systemd/system/soulbox-tailscale-firstboot.service"
+    
+    # Install the script
+    if [[ -f "${script_source}" ]]; then
+        cp "${script_source}" "${script_dest}"
+        chmod +x "${script_dest}"
+        log_info "Tailscale first-boot script installed"
+    else
+        log_error "Tailscale first-boot script not found"
+        exit 1
+    fi
+    
+    # Install the service
+    if [[ -f "${service_source}" ]]; then
+        cp "${service_source}" "${service_dest}"
+        
+        # Reload systemd and enable service
+        systemctl daemon-reload
+        systemctl enable soulbox-tailscale-firstboot.service
+        
+        log_info "Tailscale first-boot service installed and enabled"
+    else
+        log_error "Tailscale first-boot service file not found"
         exit 1
     fi
 }
@@ -271,9 +329,11 @@ main() {
     check_root
     update_system
     install_packages
+    install_tailscale
     create_user
     configure_gpu
     install_service
+    install_tailscale_firstboot_service
     configure_boot
     configure_audio
     setup_autologin
@@ -283,6 +343,8 @@ main() {
     log_info "SoulBox setup completed successfully!"
     log_info "Reboot the system to apply all changes."
     log_info "After reboot, Kodi should start automatically."
+    log_info "Tailscale first-boot configuration will run automatically."
+    log_info "Place tailscale-authkey.txt in /boot/firmware/ for automatic setup."
 }
 
 # Execute main function

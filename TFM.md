@@ -342,7 +342,254 @@ sudo ./scripts/build-image.sh [output-directory]
 ./scripts/deploy-config.sh -i soulbox.local
 ```
 
+## Tailscale Integration
+
+SoulBox includes built-in Tailscale VPN integration for secure remote access and network management. Tailscale is automatically installed and configured on first boot.
+
+### Features
+- **Zero-Config VPN**: Automatic mesh networking between devices
+- **First-Boot Setup**: Automated configuration during initial system startup
+- **SSH Access**: Secure shell access via Tailscale network
+- **Exit Node Support**: Route traffic through designated exit nodes
+- **Route Advertisement**: Share local network access with Tailscale peers
+- **Authentication Options**: Support for auth keys or manual authentication
+
+### Configuration Methods
+
+#### Method 1: Automatic Setup with Auth Key
+1. **Generate Auth Key**: Visit https://login.tailscale.com/admin/settings/keys
+2. **Create Configuration**: Use the helper script
+   ```bash
+   ./scripts/create-tailscale-config.sh --auth-key tskey-auth-YOUR-KEY
+   ```
+3. **Deploy to SD Card**: Copy generated files to SD card's boot partition
+4. **Boot SoulBox**: Tailscale will configure automatically
+
+#### Method 2: Interactive Configuration
+```bash
+# Generate configuration interactively
+./scripts/create-tailscale-config.sh --interactive
+```
+
+#### Method 3: Manual Authentication
+1. Boot SoulBox without auth key
+2. Connect monitor to see QR code
+3. Scan QR code with Tailscale mobile app
+4. Or visit the displayed URL for web authentication
+
+### Configuration Files
+
+#### /boot/firmware/tailscale-authkey.txt
+```
+tskey-auth-YOUR-AUTHENTICATION-KEY-HERE
+```
+**Security Note**: This file is automatically deleted after first use.
+
+#### /boot/firmware/soulbox-config.txt
+```ini
+# SoulBox Configuration
+hostname=soulbox-living-room
+tailscale_exit_node=100.64.0.1
+tailscale_advertise_routes=192.168.1.0/24,10.0.0.0/8
+```
+
+### First-Boot Service
+
+The `soulbox-tailscale-firstboot.service` handles initial Tailscale configuration:
+
+**Service Features:**
+- Waits for network connectivity
+- Reads configuration from boot partition
+- Configures hostname if specified
+- Authenticates with Tailscale
+- Sets up exit nodes and route advertisement
+- Enables SSH access
+- Runs only once (creates completion marker)
+
+**Service Status:**
+```bash
+# Check first-boot service status
+sudo systemctl status soulbox-tailscale-firstboot.service
+
+# View first-boot logs
+journalctl -u soulbox-tailscale-firstboot.service
+
+# Check if setup completed
+ls -la /var/lib/soulbox-tailscale-setup-complete
+```
+
+### Tailscale Management
+
+#### Essential Commands
+```bash
+# Check Tailscale status
+tailscale status
+
+# Show IP addresses
+tailscale ip -4
+tailscale ip -6
+
+# Configure exit node
+tailscale set --exit-node=100.64.0.1
+tailscale set --exit-node-allow-lan-access
+
+# Disable exit node
+tailscale set --exit-node=""
+
+# Advertise routes
+tailscale set --advertise-routes=192.168.1.0/24
+
+# Enable/disable SSH
+tailscale set --ssh
+```
+
+#### Network Information
+```bash
+# View detailed status
+tailscale status --json | jq
+
+# Check connectivity to specific peer
+tailscale ping peer-hostname
+
+# View network map
+tailscale netcheck
+```
+
+### Access Methods
+
+#### SSH Access
+```bash
+# Via Tailscale hostname
+ssh reaper@soulbox-living-room.tailscale-domain.ts.net
+
+# Via Tailscale IP
+ssh reaper@100.64.0.x
+
+# Via local network (if accessible)
+ssh reaper@192.168.1.x
+```
+
+#### Kodi Web Interface
+If enabled in Kodi settings:
+```
+# Via Tailscale
+http://100.64.0.x:8080
+
+# Via local network
+http://192.168.1.x:8080
+```
+
+### Troubleshooting Tailscale Issues
+
+#### Issue 1: First-Boot Service Fails
+**Symptoms:**
+- Tailscale not configured after first boot
+- Service shows failed status
+- No network connectivity
+
+**Diagnosis:**
+```bash
+# Check service status
+sudo systemctl status soulbox-tailscale-firstboot.service
+
+# View detailed logs
+journalctl -u soulbox-tailscale-firstboot.service -f
+
+# Check network connectivity
+ping 1.1.1.1
+```
+
+**Solutions:**
+1. Verify network connectivity
+2. Check auth key validity
+3. Manually run configuration script:
+   ```bash
+   sudo /usr/local/bin/tailscale-firstboot.sh
+   ```
+
+#### Issue 2: Authentication Failures
+**Symptoms:**
+- "Invalid auth key" errors
+- Manual authentication not working
+
+**Solutions:**
+1. Regenerate auth key from Tailscale admin panel
+2. Ensure auth key is reusable if needed
+3. Check key expiration date
+4. Verify network connectivity to Tailscale servers
+
+#### Issue 3: SSH Access Not Working
+**Symptoms:**
+- Cannot connect via SSH through Tailscale
+- Connection refused errors
+
+**Diagnosis:**
+```bash
+# Check SSH service status
+sudo systemctl status ssh
+
+# Verify Tailscale SSH is enabled
+tailscale status | grep -i ssh
+
+# Check SSH configuration
+sudo sshd -T | grep -i passwordauth
+```
+
+**Solutions:**
+1. Enable SSH in Tailscale: `tailscale set --ssh`
+2. Restart SSH service: `sudo systemctl restart ssh`
+3. Check firewall settings: `sudo ufw status`
+
+### Security Considerations
+
+#### Network Security
+- SSH access is key-based only (no passwords)
+- Tailscale provides encrypted mesh networking
+- Firewall rules restrict unnecessary services
+- Auth keys are securely deleted after use
+
+#### Access Control
+- Configure Tailscale ACLs in admin panel
+- Use exit nodes for additional privacy
+- Monitor device access in Tailscale dashboard
+- Enable MFA for Tailscale account
+
+### Advanced Configuration
+
+#### Custom Exit Node Setup
+```bash
+# Set specific exit node
+tailscale set --exit-node=exit-node-hostname
+
+# Allow LAN access while using exit node
+tailscale set --exit-node-allow-lan-access
+
+# Auto-approve exit node usage
+tailscale set --accept-dns=false
+```
+
+#### Route Advertisement
+```bash
+# Advertise multiple networks
+tailscale set --advertise-routes=192.168.1.0/24,10.0.0.0/8,172.16.0.0/12
+
+# Enable IP forwarding (required for route advertisement)
+echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.conf
+echo 'net.ipv6.conf.all.forwarding = 1' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
 ## Change Log
+
+### Version 1.1.0 - 2025-08-30
+**Tailscale Integration**
+- Added comprehensive Tailscale VPN integration
+- Implemented first-boot automatic configuration
+- Created interactive configuration generator
+- Added support for auth keys, exit nodes, and route advertisement
+- Enabled SSH access through Tailscale mesh network
+- Implemented secure cleanup of authentication keys
+- Added comprehensive troubleshooting documentation
 
 ### Version 1.0.0 - 2025-08-30
 **Initial Project Setup**

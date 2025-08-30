@@ -120,8 +120,8 @@ bootstrap_system() {
     # Enable QEMU emulation
     systemctl start systemd-binfmt.service
     
-    # Bootstrap base system
-    debootstrap --arch=${ARCH} --include=systemd,udev,kmod,ifupdown,iproute2,iputils-ping,wget,ca-certificates,openssh-server \
+    # Bootstrap base system with additional packages for SoulBox
+    debootstrap --arch=${ARCH} --include=systemd,udev,kmod,ifupdown,iproute2,iputils-ping,wget,ca-certificates,openssh-server,curl,apt-transport-https,gnupg,lsb-release,jq \
         ${DEBIAN_SUITE} "${BUILD_DIR}/rootfs" ${DEBIAN_MIRROR}
     
     # Copy QEMU static for chroot operations

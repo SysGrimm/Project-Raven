@@ -1,0 +1,31 @@
+[Unit]
+Description=SoulBox Tailscale First-Boot Configuration
+Documentation=https://github.com/[username]/soulbox
+After=multi-user.target network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/soulbox-tailscale-setup-complete
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/bin/tailscale-firstboot.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=600
+RemainAfterExit=yes
+
+# Environment
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Security settings
+PrivateTmp=yes
+ProtectSystem=no
+ProtectHome=no
+NoNewPrivileges=no
+
+# Network access required
+PrivateNetwork=no
+
+[Install]
+WantedBy=multi-user.target
