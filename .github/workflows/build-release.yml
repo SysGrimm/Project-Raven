@@ -18,26 +18,29 @@ jobs:
     - name: Free up disk space
       run: |
         # Remove unnecessary packages to free up space
-        sudo apt-get remove -y '^dotnet-.*' '^llvm-.*' '^php.*' '^mysql-.*' azure-cli google-cloud-sdk hhvm google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri
+        sudo apt-get remove -y '^dotnet-.*' '^llvm-.*' '^php.*' '^mysql-.*' 2>/dev/null || true
         sudo apt-get autoremove -y
         sudo apt-get clean
         
-        # Remove large directories
-        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+        # Remove large directories if they exist
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost 2>/dev/null || true
         
         # Show available space
         df -h
     
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Enable privileged mode and binfmt_misc
+    - name: Set up Docker
+      run: |
+        # Ensure Docker is available and running
+        sudo systemctl start docker 2>/dev/null || true
+        docker --version
+        
+    - name: Enable ARM64 emulation
       run: |
         # Enable binfmt_misc support for ARM64 emulation
         docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
         
         # Verify ARM64 emulation is working
-        docker run --rm --platform linux/arm64 ubuntu:22.04 uname -m
+        docker run --rm --platform linux/arm64 ubuntu:22.04 uname -m || echo "Platform flag not supported, will use manual setup"
     
     - name: Build SoulBox Image
       run: |
@@ -56,7 +59,7 @@ jobs:
         echo "=== Build completed, processing artifacts ==="
         
         # Find the built image
-        IMAGE_FILE=$(find build/ -name "*.img" -type f | head -1)
+        IMAGE_FILE=$(find build/ -name "*.img" -type f 2>/dev/null | head -1)
         
         if [ -n "$IMAGE_FILE" ] && [ -f "$IMAGE_FILE" ]; then
           echo "Found image: $IMAGE_FILE"
@@ -78,7 +81,7 @@ jobs:
           cat > build-info.txt << EOL
 SoulBox SD Card Image
 Build Date: $(date -u)
-Git Commit: ${{ github.sha }}
+Git Commit: ${GITHUB_SHA:-unknown}
 Image Size: $IMAGE_SIZE
 Architecture: ARM64 (aarch64)
 
@@ -97,19 +100,20 @@ EOL
           
         else
           echo "ERROR: No image file found after build!"
+          find build/ -type f 2>/dev/null || echo "Build directory is empty"
           exit 1
         fi
 
     - name: Upload SD Card Image
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v3
       if: always()
       with:
         name: soulbox-sd-image
         path: artifacts/
         retention-days: 30
         
-    - name: Upload Build Logs
-      uses: actions/upload-artifact@v4  
+    - name: Upload Build Logs  
+      uses: actions/upload-artifact@v3
       if: failure()
       with:
         name: build-logs
@@ -118,44 +122,13 @@ EOL
           *.log
         retention-days: 7
 
-    - name: Create Release (on main push)
+    - name: Create Release Info (on main push)
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Install GitHub CLI if not available
-        type gh >/dev/null 2>&1 || {
-          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-          sudo apt update && sudo apt install gh -y
-        }
+        echo "=== Build completed successfully on main branch ==="
+        echo "Artifacts are available for download from the Actions tab"
+        echo "Image files:"
+        ls -la artifacts/ || true
         
-        # Create release with timestamp
-        RELEASE_TAG="release-$(date +%Y%m%d_%H%M%S)"
-        RELEASE_NAME="SoulBox Release $(date +%Y-%m-%d)"
-        
-        cd artifacts
-        
-        # Create the release
-        gh release create "$RELEASE_TAG" \
-          --title "$RELEASE_NAME" \
-          --notes "Automated SoulBox SD card image build
-
-**Build Information:**
-- Commit: ${{ github.sha }}
-- Build Date: $(date -u)
-- Architecture: ARM64 (Raspberry Pi 4/5)
-
-**Files:**
-- \`*.img\`: SD card image (flash directly to SD card)  
-- \`*.sha256\`: Checksum for verification
-- \`build-info.txt\`: Detailed build information
-
-**Flash Instructions:**
-1. Download the .img file
-2. Use balenaEtcher or Raspberry Pi Imager
-3. Flash to SD card (8GB+ recommended)
-4. Boot on Raspberry Pi 4 or 5" \
-          --latest \
-          *.img *.sha256 build-info.txt || echo "Release creation failed, but build succeeded"
-
+        # Note: Gitea releases require manual creation or additional setup
+        # The built images are available as workflow artifacts

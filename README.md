@@ -6,7 +6,7 @@ A Debian-based Raspberry Pi 5 operating system with Docker-based cross-compilati
 
 ### Download Pre-built Images
 Ready-to-flash SD card images are automatically built on every commit:
-- Check the [Releases page](https://github.com/yourusername/soulbox/releases) for the latest builds
+- Check the [Releases page](https://192.168.176.113:3000/yourusername/soulbox/releases) for the latest builds
 - Download the `.img` file and flash it to an SD card (8GB+ recommended)
 - Use [balenaEtcher](https://www.balena.io/etcher/) or [Raspberry Pi Imager](https://rpi.org/imager)
 
@@ -20,7 +20,7 @@ Ready-to-flash SD card images are automatically built on every commit:
 #### Build Commands
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/soulbox.git
+git clone https://192.168.176.113:3000/yourusername/soulbox.git
 cd soulbox
 
 # Run the Docker-based build
@@ -40,7 +40,7 @@ The build process will:
 - **Docker-based**: Runs on any system with Docker support
 - **ARM64 Emulation**: Uses QEMU user-static for cross-architecture builds
 - **Unraid Compatible**: Tested and optimized for Unraid NAS systems
-- **CI/CD Ready**: Automated builds via GitHub Actions
+- **CI/CD Ready**: Automated builds via Gitea Actions
 
 ### Key Technologies
 - **Base System**: Debian Bookworm (ARM64)
@@ -91,7 +91,7 @@ fdisk -l build/soulbox-*.img
 
 ### Automated Testing
 Every push triggers:
-- Full ARM64 image build via GitHub Actions
+- Full ARM64 image build via Gitea Actions
 - Automated artifact generation and upload
 - Release creation for main branch pushes
 
@@ -153,10 +153,10 @@ This project is open source. See LICENSE file for details.
 - [Raspberry Pi Foundation](https://www.raspberrypi.org/) for excellent ARM hardware
 - [Debian Project](https://www.debian.org/) for the solid base system  
 - [Docker](https://www.docker.com/) for containerization technology
-- [GitHub Actions](https://github.com/features/actions) for CI/CD automation
+- [Gitea Actions](https://192.168.176.113:3000/features/actions) for CI/CD automation
 
 ---
 
-**Build Status**: ![Build Status](https://github.com/yourusername/soulbox/workflows/Build%20SoulBox%20SD%20Card%20Image/badge.svg)
+**Build Status**: ![Build Status](https://192.168.176.113:3000/yourusername/soulbox/workflows/Build%20SoulBox%20SD%20Card%20Image/badge.svg)
 
 Ready to flash and boot! 🔥
