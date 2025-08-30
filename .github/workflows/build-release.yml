@@ -1,4 +1,4 @@
-name: Build SoulBox Will-o'-Wisp SD Card Components
+name: Build SoulBox Will-o'-Wisp Media Center
 
 on:
   push:
@@ -76,479 +76,43 @@ jobs:
         echo "Disk space after cleanup:"
         df -h
     
-    - name: Build SoulBox Will-o'-Wisp Components
+    - name: Build SoulBox Media Center Image
       run: |
-        echo "=== Building SoulBox Will-o'-Wisp Components ==="
+        echo "=== Building SoulBox Will-o'-Wisp Media Center ==="
         set -e
         set -x
         
-        # Build configuration matching local script
-        DEBIAN_SUITE="bookworm"
-        DEBIAN_MIRROR="http://deb.debian.org/debian"
-        ARCH="arm64"
-        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-        
-        echo "Building SoulBox Will-o'-Wisp components with Debian ${DEBIAN_SUITE} ${ARCH}"
-        
-        # Create build directory
-        mkdir -p build artifacts rootfs boot-template
-        cd build
-        
-        echo "=== Installing Base System ==="
-        sudo debootstrap \
-          --arch=${ARCH} \
-          --include=systemd,udev,kmod,ifupdown,iproute2,iputils-ping,wget,ca-certificates,openssh-server,curl,apt-transport-https,gnupg,lsb-release,sudo,nano,htop,rsync,net-tools,fbi \
-          ${DEBIAN_SUITE} ../rootfs ${DEBIAN_MIRROR}
-        
-        echo "=== Configuring SoulBox System ==="
-        sudo cp /usr/bin/qemu-aarch64-static ../rootfs/usr/bin/
-        
-        # Configure system exactly like local build
-        sudo chroot ../rootfs /bin/bash << 'CHROOTEOF'
-        export DEBIAN_FRONTEND=noninteractive
-        
-        # Add Tailscale repository
-        curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-        curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.tailscale-keyring.list | tee /etc/apt/sources.list.d/tailscale.list
-        
-        # Update and install packages
-        apt-get update -qq
-        apt-get install -y tailscale kodi mesa-utils xinit xorg openbox python3-pip screen tmux unzip zip alsa-utils
-        
-        # Enable services
-        systemctl enable tailscaled
-        systemctl enable ssh
-        
-        # Create users
-        echo 'pi:soulbox' | chpasswd
-        useradd -m -s /bin/bash -G sudo,adm,dialout,cdrom,audio,video,plugdev,games,users,input,netdev,gpio,i2c,spi,render soulbox
-        echo 'soulbox:soulbox' | chpasswd
-        echo 'root:soulbox' | chpasswd
-        
-        # Configure SSH
-        sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-        sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-        
-        # Set hostname
-        echo 'soulbox' > /etc/hostname
-        sed -i 's/raspberrypi/soulbox/g' /etc/hosts
-        
-        # Configure autologin
-        mkdir -p /etc/systemd/system/getty@tty1.service.d
-        cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'AUTOLOGIN'
-        [Service]
-        ExecStart=
-        ExecStart=-/sbin/agetty --autologin soulbox --noclear %I $TERM
-        AUTOLOGIN
-        
-        # Create OpenELEC-style Kodi service
-        cat > /etc/systemd/system/kodi-standalone.service << 'KODI_SERVICE'
-        [Unit]
-        Description=SoulBox Kodi Media Center
-        After=systemd-user-sessions.service network.target sound.target soulbox-splash.service
-        Wants=network-online.target
-        Conflicts=getty@tty1.service
-        
-        [Service]
-        User=soulbox
-        Group=soulbox
-        Type=simple
-        ExecStart=/usr/bin/kodi-standalone
-        Restart=always
-        RestartSec=5
-        StandardInput=tty
-        TTYPath=/dev/tty1
-        TTYReset=yes
-        TTYVHangup=yes
-        TTYVTDisallocate=yes
-        KillMode=mixed
-        TimeoutStopSec=10
-        
-        Environment="HOME=/home/soulbox"
-        Environment="USER=soulbox"
-        Environment="DISPLAY=:0.0"
-        Environment="KODI_HOME=/home/soulbox/.kodi"
-        Environment="MESA_LOADER_DRIVER_OVERRIDE=v3d"
-        
-        [Install]
-        WantedBy=multi-user.target
-        KODI_SERVICE
-        
-        systemctl enable kodi-standalone.service
-        systemctl mask getty@tty1.service
-        
-        # Create splash service
-        cat > /etc/systemd/system/soulbox-splash.service << 'SPLASH_SERVICE'
-        [Unit]
-        Description=SoulBox Boot Splash Screen
-        DefaultDependencies=false
-        After=local-fs.target
-        Before=kodi-standalone.service
-        
-        [Service]
-        Type=forking
-        User=root
-        StandardInput=tty
-        StandardOutput=tty
-        TTYPath=/dev/tty1
-        ExecStart=/opt/soulbox/show-splash.sh
-        TimeoutStartSec=5
-        KillMode=process
-        
-        [Install]
-        WantedBy=multi-user.target
-        SPLASH_SERVICE
-        
-        systemctl enable soulbox-splash.service
-        
-        # Clean up
-        apt-get clean
-        apt-get autoremove -y
-        rm -rf /var/lib/apt/lists/*
-        CHROOTEOF
-        
-        # Configure system files
-        echo "soulbox" | sudo tee ../rootfs/etc/hostname
-        
-        sudo tee ../rootfs/etc/hosts << 'HOSTS'
-        127.0.0.1    localhost
-        127.0.1.1    soulbox
-        ::1          localhost ip6-localhost ip6-loopback
-        ff02::1      ip6-allnodes
-        ff02::2      ip6-allrouters
-        HOSTS
-        
-        sudo tee ../rootfs/etc/network/interfaces << 'NETWORK'
-        auto lo
-        iface lo inet loopback
-        
-        auto eth0
-        iface eth0 inet dhcp
-        NETWORK
-        
-        sudo tee ../rootfs/etc/fstab << 'FSTAB'
-        proc            /proc           proc    defaults          0       0
-        /dev/mmcblk0p2  /               ext4    defaults,noatime  0       1
-        /dev/mmcblk0p1  /boot/firmware  vfat    defaults          0       2
-        tmpfs           /tmp            tmpfs   defaults,noatime  0       0
-        FSTAB
-        
-        # Create directory structure
-        sudo mkdir -p ../rootfs/home/soulbox/{Videos,Music,Pictures,Downloads}
-        sudo mkdir -p ../rootfs/home/soulbox/.kodi/{userdata,addons,media}
-        sudo mkdir -p ../rootfs/opt/soulbox/assets
-        
-        # Create Kodi advanced settings
-        sudo tee ../rootfs/home/soulbox/.kodi/userdata/advancedsettings.xml << 'KODI_SETTINGS'
-        <advancedsettings>
-            <video>
-                <playcountminimumpercent>90</playcountminimumpercent>
-                <ignoreseasonzero>true</ignoreseasonzero>
-            </video>
-            <videoplayer>
-                <usedisplayasclock>true</usedisplayasclock>
-                <adjustrefreshrate>true</adjustrefreshrate>
-            </videoplayer>
-            <videolibrary>
-                <importwatchedstate>true</importwatchedstate>
-                <importresumepoint>true</importresumepoint>
-            </videolibrary>
-            <network>
-                <curlclienttimeout>30</curlclienttimeout>
-                <curllowspeedtime>20</curllowspeedtime>
-                <cachemembuffersize>20971520</cachemembuffersize>
-            </network>
-        </advancedsettings>
-        KODI_SETTINGS
-        
-        # Create splash script
-        sudo tee ../rootfs/opt/soulbox/show-splash.sh << 'SPLASH_SCRIPT'
-        #!/bin/bash
-        clear > /dev/tty1 2>&1
-        cat << 'SPLASH_ART' > /dev/tty1 2>&1
-        
-             ____              _ ____            
-            / ___|  ___  _   _| | __ )  _____  __
-            \___ \ / _ \| | | | |  _ \ / _ \ \/ /
-             ___) | (_) | |_| | | |_) | (_) >  < 
-            |____/ \___/ \__,_|_|____/ \___/_/\_\
-            
-                   🔥 Will-o'-Wisp Media Center 🔥
-            
-                            Loading...
-            
-                The blue flame guides your media journey
-        
-        SPLASH_ART
-        
-        if command -v fbi >/dev/null 2>&1 && [ -f "/opt/soulbox/assets/logo.png" ]; then
-            timeout 4 fbi -T 1 -d /dev/fb0 -noverbose -a /opt/soulbox/assets/logo.png >/dev/null 2>&1 || true
-        fi
-        sleep 3
-        SPLASH_SCRIPT
-        
-        sudo chmod +x ../rootfs/opt/soulbox/show-splash.sh
-        
-        # Create Tailscale setup script
-        sudo tee ../rootfs/home/soulbox/setup-tailscale.sh << 'TAILSCALE_SCRIPT'
-        #!/bin/bash
-        
-        clear
-        echo ""
-        echo "     🔥 SoulBox Will-o'-Wisp Tailscale Setup 🔥"
-        echo "     =========================================="
-        echo ""
-        echo "     Let the blue flame extend across networks..."
-        echo ""
-        
-        if tailscale status | grep -q "not logged in"; then
-            echo "     Igniting Tailscale connection..."
-            echo ""
-            
-            sudo tailscale up \
-                --accept-routes \
-                --accept-dns=false \
-                --hostname=soulbox-$(hostname -s) \
-                --advertise-tags=tag:soulbox,tag:mediaserver
-                
-            echo ""
-            echo "     🔥 Connection established! 🔥"
-            echo "     Your SoulBox Tailscale IP: $(tailscale ip -4)"
-            echo "     SSH via Tailscale: ssh soulbox@$(tailscale ip -4)"
+        # Get version for build
+        if [ -f "scripts/version-manager.sh" ]; then
+            VERSION=$(./scripts/version-manager.sh auto 2>/dev/null | tail -1 || echo "v0.1.0")
         else
-            echo "     🔥 The flame already burns across networks! 🔥"
-            echo "     Your SoulBox IP: $(tailscale ip -4)"
+            VERSION="v0.1.0"
         fi
         
-        echo ""
-        echo "     The blue flame now guides you from anywhere..."
-        echo "     Manage at: https://login.tailscale.com/admin/machines"
-        echo ""
-        TAILSCALE_SCRIPT
+        echo "Building SoulBox $VERSION - Complete Media Center with Kodi & Tailscale"
         
-        sudo chmod +x ../rootfs/home/soulbox/setup-tailscale.sh
+        # Run primary image build using image modification
+        ./build-soulbox-image-mod.sh --version "$VERSION" --clean
         
-        # Create branded MOTD
-        sudo tee ../rootfs/etc/motd << 'MOTD'
-        
-             ____              _ ____            
-            / ___|  ___  _   _| | __ )  _____  __
-            \___ \ / _ \| | | | |  _ \ / _ \ \/ /
-             ___) | (_) | |_| | | |_) | (_) >  < 
-            |____/ \___/ \__,_|_|____/ \___/_/\_\
-            
-            Will-o'-Wisp Media Center ~ Boot Complete
-            
-            🔥 The blue flame burns bright 🔥
-            
-            Default credentials:
-            - soulbox:soulbox (media center user)
-            - pi:soulbox (compatibility)
-            - root:soulbox (admin access)
-            
-            Services:
-            - Kodi media center (auto-starts after splash)
-            - Tailscale VPN (run './setup-tailscale.sh')
-            - Boot splash service active
-            
-            The blue flame has guided you home...
-            
-        MOTD
-        
-        # Set proper ownership
-        sudo chown -R 1001:1001 ../rootfs/home/soulbox/
-        
-        # Remove qemu static
-        sudo rm ../rootfs/usr/bin/qemu-aarch64-static
-        
-        echo "=== Creating Boot Template ==="
-        # Create boot partition template with Pi optimizations
-        cat > ../boot-template/config.txt << 'BOOT_CONFIG'
-        # SoulBox Will-o'-Wisp Configuration for Raspberry Pi 5
-        
-        # Basic settings
-        gpu_mem=320
-        arm_64bit=1
-        disable_overscan=1
-        
-        # Boot splash settings
-        disable_splash=0
-        
-        # GPU optimizations 
-        dtoverlay=vc4-kms-v3d
-        max_framebuffers=2
-        gpu_freq=800
-        over_voltage=2
-        arm_freq=2200
-        
-        # Display
-        hdmi_drive=2
-        hdmi_force_hotplug=1
-        hdmi_boost=7
-        hdmi_group=1
-        hdmi_mode=16
-        
-        # Video codecs
-        h264_freq=700
-        hevc_freq=700
-        isp_freq=700
-        v3d_freq=800
-        
-        # Audio
-        dtparam=audio=on
-        audio_pwm_mode=2
-        
-        # Hardware
-        dtparam=spi=on
-        dtparam=i2c_arm=on
-        
-        # Boot speed
-        boot_delay=0
-        
-        # Performance
-        force_turbo=1
-        temp_limit=75
-        BOOT_CONFIG
-        
-        echo 'console=serial0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet splash plymouth.ignore-serial-consoles' > ../boot-template/cmdline.txt
-        
-        echo "=== Creating Filesystem Archives ==="
-        cd ../rootfs
-        sudo tar -czf ../artifacts/soulbox-rootfs-${TIMESTAMP}.tar.gz .
-        
-        cd ../boot-template
-        tar -czf ../artifacts/soulbox-boot-${TIMESTAMP}.tar.gz .
-        
-        cd ../artifacts
-        sha256sum *.tar.gz > checksums.sha256
-        
-        # Create comprehensive build documentation
-        cat > README.txt << 'README'
-        SoulBox Will-o'-Wisp SD Card Components
-        =====================================
-        
-        This build contains all components needed to create a complete SoulBox SD card image.
-        The components match the successful local build process.
-        
-        FILES INCLUDED:
-        - soulbox-rootfs-[timestamp].tar.gz: Complete ARM64 root filesystem
-        - soulbox-boot-[timestamp].tar.gz: Optimized boot configuration  
-        - checksums.sha256: SHA256 verification checksums
-        - README.txt: This documentation
-        - assembly-instructions.sh: Script to create final image
-        
-        FEATURES:
-        - OpenELEC-style Kodi auto-start
-        - Tailscale VPN integration with themed setup
-        - Boot splash screen with will-o'-wisp branding
-        - Hardware acceleration for Raspberry Pi 5
-        - Pre-configured media directories
-        - SSH enabled with multiple user accounts
-        - Complete systemd service configuration
-        
-        ASSEMBLY INSTRUCTIONS:
-        Use the assembly-instructions.sh script on a system with loop device support
-        to create the final flashable .img file from these components.
-        
-        DEFAULT CREDENTIALS:
-        - soulbox:soulbox (recommended user)
-        - pi:soulbox (compatibility)
-        - root:soulbox (admin access)
-        
-        The blue flame guides your media journey!
-        README
-        
-        # Create assembly script that matches local build
-        cat > assembly-instructions.sh << 'ASSEMBLY'
-        #!/bin/bash
-        
-        echo "SoulBox Will-o'-Wisp Image Assembly"
-        echo "=================================="
-        echo ""
-        echo "This script assembles the SoulBox components into a flashable SD card image."
-        echo "Requires: Linux system with loop device support and root access"
-        echo ""
-        
-        # Check for required files
-        if [ ! -f "soulbox-rootfs-"*".tar.gz" ] || [ ! -f "soulbox-boot-"*".tar.gz" ]; then
-            echo "Error: Required component files not found"
-            echo "Make sure soulbox-rootfs-*.tar.gz and soulbox-boot-*.tar.gz are present"
+        # Create artifacts directory and copy result
+        mkdir -p artifacts
+        if [ -f "soulbox-v"*".img" ]; then
+            cp soulbox-v*.img artifacts/
+            cp soulbox-v*.img.sha256 artifacts/
+            echo "✅ SoulBox image created successfully!"
+            ls -lh artifacts/
+        else
+            echo "❌ Build failed - no image file found"
             exit 1
         fi
         
-        if [ "$EUID" -ne 0 ]; then
-            echo "Please run as root: sudo $0"
-            exit 1
-        fi
-        
-        IMAGE_SIZE="4G"
-        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-        IMAGE_NAME="soulbox-${TIMESTAMP}.img"
-        
-        echo "Creating ${IMAGE_SIZE} image: ${IMAGE_NAME}"
-        fallocate -l $IMAGE_SIZE "$IMAGE_NAME"
-        
-        echo "Setting up loop device..."
-        LOOP_DEV=$(losetup --find --show "$IMAGE_NAME")
-        
-        echo "Partitioning..."
-        parted $LOOP_DEV --script mklabel gpt
-        parted $LOOP_DEV --script mkpart primary fat32 1MiB 257MiB  
-        parted $LOOP_DEV --script mkpart primary ext4 257MiB 100%
-        parted $LOOP_DEV --script set 1 boot on
-        
-        sleep 2 && partprobe $LOOP_DEV && sleep 2
-        
-        echo "Formatting partitions..."
-        mkfs.vfat -F 32 -n "SOULBOOT" ${LOOP_DEV}p1
-        mkfs.ext4 -F -L "soulbox" ${LOOP_DEV}p2
-        
-        echo "Mounting and extracting..."
-        mkdir -p mnt/boot mnt/root
-        mount ${LOOP_DEV}p1 mnt/boot
-        mount ${LOOP_DEV}p2 mnt/root
-        
-        tar -xzf soulbox-rootfs-*.tar.gz -C mnt/root
-        tar -xzf soulbox-boot-*.tar.gz -C mnt/boot
-        
-        # Download Pi firmware
-        echo "Adding Raspberry Pi firmware..."
-        cd mnt/boot
-        wget -q https://github.com/raspberrypi/firmware/archive/refs/heads/master.zip
-        unzip -q master.zip
-        cp -r firmware-master/boot/* .
-        rm -rf firmware-master master.zip
-        cd ../..
-        
-        echo "Finalizing..."
-        sync
-        umount mnt/boot mnt/root
-        losetup -d $LOOP_DEV
-        
-        sha256sum "$IMAGE_NAME" > "${IMAGE_NAME}.sha256"
-        
-        echo ""
-        echo "SUCCESS! SoulBox image created: $IMAGE_NAME"
-        echo "Size: $(ls -lh $IMAGE_NAME | awk '{print $5}')"
-        echo ""
-        echo "Ready to flash to SD card with:"
-        echo "- Raspberry Pi Imager"
-        echo "- balenaEtcher" 
-        echo "- dd command"
-        echo ""
-        echo "The blue flame awaits!"
-        ASSEMBLY
-        
-        chmod +x assembly-instructions.sh
-        
-        echo "Components build complete!"
-        ls -la
+        echo "🔥 SoulBox build complete - ready to flash and deploy! 🔥"
 
-    - name: Upload SoulBox Components
+    - name: Upload SoulBox Image
       uses: actions/upload-artifact@v3
       if: always()
       with:
-        name: soulbox-wisp-components
+        name: soulbox-wisp-image
         path: artifacts/
         retention-days: 30
 
@@ -565,21 +129,31 @@ jobs:
     - name: Build Summary
       if: success()
       run: |
-        echo "SoulBox Will-o'-Wisp Components Build Complete!"
-        echo "=============================================="
+        echo "🔥 SoulBox Will-o'-Wisp Media Center Build Complete! 🔥"
+        echo "====================================================="
         echo ""
-        echo "Components created:"
+        echo "Image created:"
         ls -la artifacts/
         echo ""
-        echo "Features included:"
-        echo "- OpenELEC-style Kodi with boot splash"
-        echo "- Tailscale VPN with will-o'-wisp theming"
-        echo "- Raspberry Pi 5 optimizations"
-        echo "- Complete systemd service configuration"
-        echo "- Ready for logo integration"
+        echo "✨ Features included:"
+        echo "   🎬 Kodi Media Center (auto-start with splash)"
+        echo "   🌐 Tailscale VPN integration"
+        echo "   ⚡ Raspberry Pi 5 optimizations"
+        echo "   🔧 Complete systemd service configuration"
+        echo "   🔐 SSH enabled with default credentials"
+        echo "   🏠 Pre-configured media directories"
+        echo "   🎨 Will-o'-wisp branding and theming"
         echo ""
-        echo "Download artifacts and run assembly-instructions.sh"
-        echo "to create the final flashable SD card image!"
+        echo "🚀 Ready to deploy:"
+        echo "   1. Download the .img file from artifacts"
+        echo "   2. Flash to SD card (8GB+ recommended)"
+        echo "   3. Boot on Raspberry Pi 5"
+        echo "   4. First boot will complete setup automatically"
         echo ""
-        echo "The blue flame burns in the cloud and awaits assembly!"
+        echo "📋 Default credentials:"
+        echo "   - soulbox:soulbox (recommended user)"
+        echo "   - pi:soulbox (compatibility)"
+        echo "   - root:soulbox (admin access)"
+        echo ""
+        echo "🔥 The blue flame burns bright and awaits deployment! 🔥"
 
