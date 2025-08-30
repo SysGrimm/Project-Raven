@@ -35,10 +35,33 @@ Raspberry Pi 5 BCM2712
 
 ## Quick Start
 
-1. Flash the SoulBox image to your SD card
-2. Insert into Raspberry Pi 5
-3. Connect HDMI and power on
-4. Kodi will start automatically
+### Method 1: Using Raspberry Pi Imager (Recommended)
+
+1. **Generate Configuration** (optional):
+   ```bash
+   git clone YOUR-SOULBOX-REPO
+   cd soulbox
+   ./scripts/rpi-imager-workflow.sh configure
+   ```
+
+2. **Flash with rpi-imager**:
+   - Download [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
+   - Use custom image or repository (see deployment guide)
+   - Configure SSH, WiFi in advanced options
+
+3. **Add Tailscale config** to SD card boot partition (optional)
+
+4. **Boot and enjoy** - Kodi starts automatically!
+
+### Method 2: Complete Guided Workflow
+
+```bash
+git clone YOUR-SOULBOX-REPO
+cd soulbox
+./scripts/rpi-imager-workflow.sh deploy
+```
+
+This provides step-by-step guidance through the entire process.
 
 ## Documentation
 
