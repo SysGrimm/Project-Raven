@@ -39,7 +39,8 @@ jobs:
           wget \
           curl \
           systemd-container \
-          util-linux
+          util-linux \
+          mount
         echo "Dependencies installed successfully"
     
     - name: Set up ARM64 emulation
@@ -67,117 +68,50 @@ jobs:
         echo "Disk space after cleanup:"
         df -h
     
-    - name: Check system capabilities
+    - name: Build SoulBox ARM64 Root Filesystem
       run: |
-        echo "=== System Diagnostics ==="
-        echo "Available loop devices:"
-        ls -la /dev/loop* || echo "No loop devices found"
-        echo ""
-        echo "Loop device status:"
-        sudo losetup -a || echo "No loop devices in use"
-        echo ""
-        echo "Kernel modules:"
-        lsmod | grep loop || echo "Loop module not loaded"
-        echo ""
-        echo "Loading loop module if needed:"
-        sudo modprobe loop || echo "Loop module already loaded or not available"
-        echo ""
-        echo "After loading:"
-        ls -la /dev/loop* || echo "Still no loop devices"
-    
-    - name: Build SoulBox ARM64 Image
-      run: |
-        echo "=== Building SoulBox ARM64 Image ==="
+        echo "=== Building SoulBox ARM64 Root Filesystem ==="
         set -e
         set -x
         
         # Build configuration
-        IMAGE_SIZE="4G"
-        IMAGE_NAME="soulbox-$(date +%Y%m%d_%H%M%S).img"
         DEBIAN_SUITE="bookworm"
         DEBIAN_MIRROR="http://deb.debian.org/debian"
         ARCH="arm64"
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
         
-        echo "Building ${IMAGE_NAME} (${IMAGE_SIZE}) with Debian ${DEBIAN_SUITE} ${ARCH}"
+        echo "Building SoulBox rootfs with Debian ${DEBIAN_SUITE} ${ARCH}"
         
         # Create build directory
-        mkdir -p build artifacts
+        mkdir -p build artifacts rootfs boot
         cd build
         
-        echo "=== Creating Image File ==="
-        fallocate -l ${IMAGE_SIZE} ${IMAGE_NAME}
-        echo "Image file created: $(ls -lh ${IMAGE_NAME})"
-        
-        echo "=== Checking Loop Device Availability ==="
-        # Try to find an available loop device
-        LOOP_DEV=$(sudo losetup --find)
-        echo "Available loop device: ${LOOP_DEV}"
-        
-        # Create loop device mapping with better error handling
-        echo "=== Setting up Loop Device ==="
-        sudo losetup ${LOOP_DEV} ${IMAGE_NAME}
-        echo "Loop device set up: ${LOOP_DEV}"
-        
-        # Verify the loop device is working
-        sudo losetup -a | grep ${LOOP_DEV} || (echo "ERROR: Loop device not properly set up" && exit 1)
-        
-        echo "=== Partitioning Image ==="
-        # Use more conservative partitioning
-        sudo parted ${LOOP_DEV} --script -- \
-          mklabel gpt \
-          mkpart primary fat32 1MiB 257MiB \
-          mkpart primary ext4 257MiB -1s \
-          set 1 boot on
-        
-        # Give the system time to create partitions and force kernel to re-read
-        sleep 3
-        sudo partprobe ${LOOP_DEV} 2>/dev/null || echo "partprobe completed with warnings"
-        sudo udevadm settle || echo "udevadm settle completed"
-        
-        # Wait for partition devices to appear
-        for i in {1..10}; do
-          if [ -b "${LOOP_DEV}p1" ] && [ -b "${LOOP_DEV}p2" ]; then
-            echo "Partition devices created successfully"
-            break
-          fi
-          echo "Waiting for partition devices (attempt $i/10)..."
-          sleep 2
-        done
-        
-        # Verify partitions exist
-        if [ ! -b "${LOOP_DEV}p1" ] || [ ! -b "${LOOP_DEV}p2" ]; then
-          echo "ERROR: Partition devices not created"
-          ls -la ${LOOP_DEV}*
-          sudo losetup -a
-          exit 1
-        fi
-        
-        echo "=== Formatting Partitions ==="
-        sudo mkfs.vfat -F 32 -n "SOULBOOT" ${LOOP_DEV}p1
-        sudo mkfs.ext4 -F -L "soulbox" ${LOOP_DEV}p2
-        
-        echo "=== Mounting Partitions ==="
-        mkdir -p rootfs boot
-        sudo mount ${LOOP_DEV}p2 rootfs
-        sudo mount ${LOOP_DEV}p1 boot
-        
         echo "=== Installing Base System ==="
-        # Use timeout to prevent hanging
-        timeout 1800 sudo debootstrap \
+        # Build rootfs directly without loop devices
+        sudo debootstrap \
           --arch=${ARCH} \
-          --include=systemd,udev,kmod,ifupdown,iproute2,iputils-ping,wget,ca-certificates,openssh-server,curl,apt-transport-https,gnupg,lsb-release \
-          ${DEBIAN_SUITE} rootfs ${DEBIAN_MIRROR}
+          --include=systemd,udev,kmod,ifupdown,iproute2,iputils-ping,wget,ca-certificates,openssh-server,curl,apt-transport-https,gnupg,lsb-release,sudo,nano,htop,rsync \
+          ${DEBIAN_SUITE} ../rootfs ${DEBIAN_MIRROR}
         
         echo "=== Configuring System ==="
         
         # Copy qemu static for chroot operations
-        sudo cp /usr/bin/qemu-aarch64-static rootfs/usr/bin/
+        sudo cp /usr/bin/qemu-aarch64-static ../rootfs/usr/bin/
         
         # Configure basic system
-        echo "soulbox" | sudo tee rootfs/etc/hostname
+        echo "soulbox" | sudo tee ../rootfs/etc/hostname
+        
+        # Configure hosts file
+        sudo tee ../rootfs/etc/hosts << HOSTSEOF
+        127.0.0.1    localhost
+        127.0.1.1    soulbox
+        ::1          localhost ip6-localhost ip6-loopback
+        ff02::1      ip6-allnodes
+        ff02::2      ip6-allrouters
+        HOSTSEOF
         
         # Configure network
-        sudo tee rootfs/etc/network/interfaces << NETEOF
+        sudo tee ../rootfs/etc/network/interfaces << NETEOF
         auto lo
         iface lo inet loopback
         
@@ -186,73 +120,152 @@ jobs:
         NETEOF
         
         # Configure APT sources
-        sudo tee rootfs/etc/apt/sources.list << APTEOF
+        sudo tee ../rootfs/etc/apt/sources.list << APTEOF
         deb ${DEBIAN_MIRROR} ${DEBIAN_SUITE} main contrib non-free non-free-firmware
         deb http://security.debian.org/debian-security ${DEBIAN_SUITE}-security main contrib non-free non-free-firmware
         deb ${DEBIAN_MIRROR} ${DEBIAN_SUITE}-updates main contrib non-free non-free-firmware
         APTEOF
         
         # Configure fstab
-        sudo tee rootfs/etc/fstab << FSTABEOF
+        sudo tee ../rootfs/etc/fstab << FSTABEOF
         proc            /proc           proc    defaults          0       0
         /dev/mmcblk0p2  /               ext4    defaults,noatime  0       1
         /dev/mmcblk0p1  /boot/firmware  vfat    defaults          0       2
+        tmpfs           /tmp            tmpfs   defaults,noatime  0       0
         FSTABEOF
         
         # Create boot directory
-        sudo mkdir -p rootfs/boot/firmware
+        sudo mkdir -p ../rootfs/boot/firmware
         
-        echo "=== Cleaning up Mount Points ==="
-        sudo umount boot rootfs || echo "Unmount completed with warnings"
-        sudo losetup -d ${LOOP_DEV} || echo "Loop device detached with warnings"
+        # Set up basic user and SSH
+        sudo chroot ../rootfs /bin/bash -c "
+          export DEBIAN_FRONTEND=noninteractive
+          
+          # Enable SSH
+          systemctl enable ssh
+          
+          # Create soulbox user
+          useradd -m -s /bin/bash -G sudo soulbox
+          echo 'soulbox:soulbox' | chpasswd
+          echo 'root:soulbox' | chpasswd
+          
+          # Configure SSH to allow password authentication temporarily
+          sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+          
+          # Set timezone to UTC
+          ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+          
+          # Generate locales
+          echo 'en_US.UTF-8 UTF-8' >> /etc/locale.gen
+          locale-gen
+          
+          # Clean up
+          apt-get clean
+          rm -rf /var/lib/apt/lists/*
+        "
         
-        echo "=== Build Complete ==="
-        ls -lh ${IMAGE_NAME}
+        # Remove qemu static
+        sudo rm ../rootfs/usr/bin/qemu-aarch64-static
         
-        # Move image to artifacts
-        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-        FINAL_NAME="soulbox-${TIMESTAMP}.img"
-        mv ${IMAGE_NAME} ../artifacts/${FINAL_NAME}
+        echo "=== Creating Filesystem Archives ==="
+        cd ../rootfs
+        
+        # Create compressed rootfs archive
+        sudo tar -czf ../artifacts/soulbox-rootfs-${TIMESTAMP}.tar.gz .
+        
+        # Create boot filesystem (minimal for now)
+        cd ../boot
+        # Create a simple boot configuration
+        echo "# SoulBox Boot Configuration" | sudo tee config.txt
+        echo "# This will be populated with actual Pi firmware files" | sudo tee >> config.txt
+        sudo tar -czf ../artifacts/soulbox-boot-${TIMESTAMP}.tar.gz .
         
         cd ../artifacts
         
-        # Create checksums and build info
-        sha256sum ${FINAL_NAME} > ${FINAL_NAME}.sha256
+        # Create checksums
+        sha256sum *.tar.gz > checksums.sha256
         
+        # Create detailed build info and instructions
         cat > build-info.txt << INFOEOF
-        SoulBox Raspberry Pi OS Image
+        SoulBox ARM64 Root Filesystem Build
         Build Date: $(date -u)
         Git Commit: ${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo 'unknown')}
-        Image Size: $(du -h ${FINAL_NAME} | cut -f1)
         Architecture: ARM64 (aarch64)
         Debian Release: ${DEBIAN_SUITE}
         
-        Flash Instructions:
-        1. Download the .img file
-        2. Use Raspberry Pi Imager, balenaEtcher, or dd command
-        3. Flash to SD card (8GB+ recommended)
-        4. Insert into Raspberry Pi 4 or 5 and power on
-        5. Default login: root (no password initially)
+        FILES INCLUDED:
+        - soulbox-rootfs-${TIMESTAMP}.tar.gz: Complete Debian ARM64 root filesystem
+        - soulbox-boot-${TIMESTAMP}.tar.gz: Basic boot filesystem template
+        - checksums.sha256: SHA256 verification checksums
+        - build-info.txt: This documentation file
         
-        Verification:
-        - Check SHA256: sha256sum -c ${FINAL_NAME}.sha256
+        CREATING SD CARD IMAGE MANUALLY:
         
-        Features Included:
+        Since loop devices aren't available in CI, here's how to create the final image:
+        
+        1. Download all artifacts from this build
+        2. On a Linux system with loop device support:
+        
+        # Create 4GB image
+        fallocate -l 4G soulbox.img
+        
+        # Set up loop device
+        LOOP_DEV=\$(sudo losetup --find --show soulbox.img)
+        
+        # Partition
+        sudo parted \$LOOP_DEV --script mklabel gpt
+        sudo parted \$LOOP_DEV --script mkpart primary fat32 1MiB 257MiB
+        sudo parted \$LOOP_DEV --script mkpart primary ext4 257MiB 100%
+        sudo parted \$LOOP_DEV --script set 1 boot on
+        
+        # Format
+        sudo mkfs.vfat -F 32 -n "SOULBOOT" \${LOOP_DEV}p1
+        sudo mkfs.ext4 -F -L "soulbox" \${LOOP_DEV}p2
+        
+        # Mount and extract
+        mkdir -p mnt/boot mnt/root
+        sudo mount \${LOOP_DEV}p1 mnt/boot
+        sudo mount \${LOOP_DEV}p2 mnt/root
+        
+        sudo tar -xzf soulbox-rootfs-${TIMESTAMP}.tar.gz -C mnt/root
+        sudo tar -xzf soulbox-boot-${TIMESTAMP}.tar.gz -C mnt/boot
+        
+        # Add Raspberry Pi firmware (download from official Pi repo)
+        # wget https://github.com/raspberrypi/firmware/archive/refs/heads/master.zip
+        # Extract boot files to mnt/boot/
+        
+        # Cleanup
+        sudo umount mnt/boot mnt/root
+        sudo losetup -d \$LOOP_DEV
+        
+        # Your soulbox.img is now ready!
+        
+        DEFAULT CREDENTIALS:
+        - Username: soulbox, Password: soulbox
+        - Username: root, Password: soulbox
+        - SSH enabled on port 22
+        
+        FEATURES INCLUDED:
         - Complete Debian Bookworm ARM64 base system
         - SSH server enabled
         - Network configuration (DHCP)
-        - Essential system tools and utilities
-        - Ready for SoulBox application deployment
+        - Essential system tools (nano, htop, rsync, curl, wget)
+        - User account with sudo privileges
+        - Proper timezone and locale configuration
+        
+        VERIFICATION:
+        sha256sum -c checksums.sha256
         INFOEOF
         
-        echo "✅ SoulBox image built successfully!"
+        echo "✅ SoulBox rootfs built successfully!"
         ls -la
 
-    - name: Upload SoulBox SD Card Image
+    - name: Upload SoulBox Filesystem Components
       uses: actions/upload-artifact@v3
       if: always()
       with:
-        name: soulbox-sd-image
+        name: soulbox-filesystem-components
         path: artifacts/
         retention-days: 30
 
@@ -269,11 +282,15 @@ jobs:
     - name: Build Summary
       if: success()
       run: |
-        echo "🎉 SoulBox SD Card Image Build Complete!"
+        echo "🎉 SoulBox ARM64 Filesystem Build Complete!"
         echo ""
-        echo "📦 Artifacts created:"
+        echo "📦 Components created:"
         ls -la artifacts/
         echo ""
-        echo "📥 Download from the 'Artifacts' section above"
-        echo "💾 Flash to SD card using Raspberry Pi Imager or balenaEtcher"
-        echo "🚀 Boot on Raspberry Pi 4 or 5"
+        echo "⚠️  NOTE: Due to runner limitations, this creates filesystem components"
+        echo "instead of a complete disk image. Follow the instructions in"
+        echo "build-info.txt to create the final SD card image."
+        echo ""
+        echo "📥 Download artifacts and use the manual assembly instructions"
+        echo "💾 Final image will be flashable to SD card for Pi 4/5"
+        echo "🚀 Default login: soulbox/soulbox or root/soulbox"
