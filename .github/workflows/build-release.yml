@@ -12,8 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - name: Manual repository checkout
+      run: |
+        echo "=== Manual Git Checkout ==="
+        cd /tmp
+        git clone http://192.168.176.113:3000/reaper/soulbox.git soulbox-build
+        cd soulbox-build
+        echo "Repository cloned successfully"
+        echo "Current directory: $(pwd)"
+        echo "Repository contents:"
+        ls -la
+        # Copy to workspace
+        cp -r . $GITHUB_WORKSPACE/
+        cd $GITHUB_WORKSPACE
+        echo "Files in workspace:"
+        ls -la
       
     - name: Free up disk space
       run: |
