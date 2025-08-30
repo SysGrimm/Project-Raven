@@ -5,6 +5,7 @@ echo "Building SoulBox with Boot Splash, Logo, OpenELEC-style Kodi and Tailscale
 echo "========================================================================="
 
 # Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 SOULBOX_IMAGE="soulbox-splash-${TIMESTAMP}.img"
 WORK_DIR="/tmp/soulbox-splash-${TIMESTAMP}"
@@ -48,8 +49,13 @@ touch boot/ssh
 # Copy logo to multiple locations for boot splash
 mkdir -p root/usr/share/pixmaps/soulbox
 mkdir -p root/opt/soulbox/assets
-cp /root/soulbox/soulbox-logo.png root/usr/share/pixmaps/soulbox/logo.png
-cp /root/soulbox/soulbox-logo.png root/opt/soulbox/assets/logo.png
+if [[ -f "$SCRIPT_DIR/soulbox-logo.png" ]]; then
+    cp "$SCRIPT_DIR/soulbox-logo.png" root/usr/share/pixmaps/soulbox/logo.png
+    cp "$SCRIPT_DIR/soulbox-logo.png" root/opt/soulbox/assets/logo.png
+    echo "  ✓ Copied SoulBox logo for splash screen"
+else
+    echo "  ⚠ Warning: soulbox-logo.png not found, splash screen will show ASCII art only"
+fi
 
 # Install software and configure system
 chroot root /bin/bash << 'CHROOTEOF'
@@ -355,7 +361,7 @@ LOOP_DEV=""
 mv "$BASE_IMAGE" "$SOULBOX_IMAGE"
 sha256sum "$SOULBOX_IMAGE" > "${SOULBOX_IMAGE}.sha256"
 
-FINAL_PATH="/root/soulbox/${SOULBOX_IMAGE}"
+FINAL_PATH="$SCRIPT_DIR/${SOULBOX_IMAGE}"
 mv "$SOULBOX_IMAGE" "$FINAL_PATH"
 mv "${SOULBOX_IMAGE}.sha256" "${FINAL_PATH}.sha256"
 
