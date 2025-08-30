@@ -132,8 +132,21 @@ mount_pi_os_image() {
     
     log_info "Setting up loop device for Pi OS image..."
     
+    # Check if we can create loop devices (not available in some containers)
+    if ! sudo losetup --find >/dev/null 2>&1; then
+        log_error "Loop devices not available - running in restricted container environment"
+        log_error "Cannot proceed with image modification approach"
+        log_info "This build method requires privileged container access or native Linux host"
+        exit 1
+    fi
+    
     # Find available loop device
     LOOP_DEV=$(sudo losetup --find --show "$image_path")
+    if [ $? -ne 0 ]; then
+        log_error "Failed to create loop device - container may lack privileges"
+        exit 1
+    fi
+    
     log_info "Using loop device: $LOOP_DEV"
     
     # Wait for device to be ready and probe partitions

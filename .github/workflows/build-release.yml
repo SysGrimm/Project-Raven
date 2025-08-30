@@ -10,6 +10,8 @@ on:
 jobs:
   build-components:
     runs-on: ubuntu-latest
+    # NOTE: This job requires privileged container access for loop devices
+    # If loop devices are not available, the build will fail gracefully
     
     steps:
     - name: Manual repository checkout
