@@ -38,7 +38,8 @@ jobs:
           e2fsprogs \
           wget \
           curl \
-          systemd-container
+          systemd-container \
+          util-linux
         echo "Dependencies installed successfully"
     
     - name: Set up ARM64 emulation
@@ -66,6 +67,24 @@ jobs:
         echo "Disk space after cleanup:"
         df -h
     
+    - name: Check system capabilities
+      run: |
+        echo "=== System Diagnostics ==="
+        echo "Available loop devices:"
+        ls -la /dev/loop* || echo "No loop devices found"
+        echo ""
+        echo "Loop device status:"
+        sudo losetup -a || echo "No loop devices in use"
+        echo ""
+        echo "Kernel modules:"
+        lsmod | grep loop || echo "Loop module not loaded"
+        echo ""
+        echo "Loading loop module if needed:"
+        sudo modprobe loop || echo "Loop module already loaded or not available"
+        echo ""
+        echo "After loading:"
+        ls -la /dev/loop* || echo "Still no loop devices"
+    
     - name: Build SoulBox ARM64 Image
       run: |
         echo "=== Building SoulBox ARM64 Image ==="
@@ -89,20 +108,49 @@ jobs:
         fallocate -l ${IMAGE_SIZE} ${IMAGE_NAME}
         echo "Image file created: $(ls -lh ${IMAGE_NAME})"
         
+        echo "=== Checking Loop Device Availability ==="
+        # Try to find an available loop device
+        LOOP_DEV=$(sudo losetup --find)
+        echo "Available loop device: ${LOOP_DEV}"
+        
+        # Create loop device mapping with better error handling
         echo "=== Setting up Loop Device ==="
-        LOOP_DEV=$(sudo losetup --find --show ${IMAGE_NAME})
-        echo "Loop device: ${LOOP_DEV}"
+        sudo losetup ${LOOP_DEV} ${IMAGE_NAME}
+        echo "Loop device set up: ${LOOP_DEV}"
+        
+        # Verify the loop device is working
+        sudo losetup -a | grep ${LOOP_DEV} || (echo "ERROR: Loop device not properly set up" && exit 1)
         
         echo "=== Partitioning Image ==="
-        sudo parted ${LOOP_DEV} --script \
+        # Use more conservative partitioning
+        sudo parted ${LOOP_DEV} --script -- \
           mklabel gpt \
           mkpart primary fat32 1MiB 257MiB \
-          mkpart primary ext4 257MiB 100% \
+          mkpart primary ext4 257MiB -1s \
           set 1 boot on
         
-        # Give the system time to create partitions
-        sleep 2
-        sudo partprobe ${LOOP_DEV} || echo "partprobe completed"
+        # Give the system time to create partitions and force kernel to re-read
+        sleep 3
+        sudo partprobe ${LOOP_DEV} 2>/dev/null || echo "partprobe completed with warnings"
+        sudo udevadm settle || echo "udevadm settle completed"
+        
+        # Wait for partition devices to appear
+        for i in {1..10}; do
+          if [ -b "${LOOP_DEV}p1" ] && [ -b "${LOOP_DEV}p2" ]; then
+            echo "Partition devices created successfully"
+            break
+          fi
+          echo "Waiting for partition devices (attempt $i/10)..."
+          sleep 2
+        done
+        
+        # Verify partitions exist
+        if [ ! -b "${LOOP_DEV}p1" ] || [ ! -b "${LOOP_DEV}p2" ]; then
+          echo "ERROR: Partition devices not created"
+          ls -la ${LOOP_DEV}*
+          sudo losetup -a
+          exit 1
+        fi
         
         echo "=== Formatting Partitions ==="
         sudo mkfs.vfat -F 32 -n "SOULBOOT" ${LOOP_DEV}p1
@@ -114,7 +162,8 @@ jobs:
         sudo mount ${LOOP_DEV}p1 boot
         
         echo "=== Installing Base System ==="
-        sudo debootstrap \
+        # Use timeout to prevent hanging
+        timeout 1800 sudo debootstrap \
           --arch=${ARCH} \
           --include=systemd,udev,kmod,ifupdown,iproute2,iputils-ping,wget,ca-certificates,openssh-server,curl,apt-transport-https,gnupg,lsb-release \
           ${DEBIAN_SUITE} rootfs ${DEBIAN_MIRROR}
@@ -154,8 +203,8 @@ jobs:
         sudo mkdir -p rootfs/boot/firmware
         
         echo "=== Cleaning up Mount Points ==="
-        sudo umount boot rootfs || echo "Unmount completed"
-        sudo losetup -d ${LOOP_DEV} || echo "Loop device detached"
+        sudo umount boot rootfs || echo "Unmount completed with warnings"
+        sudo losetup -d ${LOOP_DEV} || echo "Loop device detached with warnings"
         
         echo "=== Build Complete ==="
         ls -lh ${IMAGE_NAME}
