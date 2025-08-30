@@ -29,43 +29,27 @@ jobs:
         echo "=== Installing Dependencies ==="
         sudo apt-get update -q
         sudo apt-get install -y --no-install-recommends \
-          debootstrap \
-          qemu-user-static \
-          binfmt-support \
           parted \
           kpartx \
           dosfstools \
           e2fsprogs \
           wget \
           curl \
-          systemd-container \
+          xz-utils \
           util-linux \
           mount
         echo "Dependencies installed successfully"
     
-    - name: Set up ARM64 emulation
+    - name: Verify build tools
       run: |
-        echo "=== Setting up ARM64 Emulation ==="
-        # Check if qemu-aarch64-static is available
-        if [ -f /usr/bin/qemu-aarch64-static ]; then
-            echo "qemu-aarch64-static found"
-        else
-            echo "ERROR: qemu-aarch64-static not found"
-            exit 1
-        fi
-        
-        # Use update-binfmts instead of manual registration
-        echo "Registering ARM64 emulation via update-binfmts..."
-        sudo update-binfmts --enable qemu-aarch64 || echo "Using existing registration"
-        
-        # Alternative: try manual registration if update-binfmts fails
-        if ! sudo update-binfmts --display qemu-aarch64 >/dev/null 2>&1; then
-            echo "Manual binfmt registration as fallback..."
-            echo ':qemu-aarch64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-user-static:F' | sudo tee /proc/sys/fs/binfmt_misc/register >/dev/null 2>&1 || echo "Registration attempted"
-        fi
-        
-        echo "ARM64 emulation setup complete - will be tested during debootstrap"
-        echo "ARM64 emulation configured successfully"
+        echo "=== Verifying Build Tools ==="
+        # Check essential tools for image modification
+        which curl && echo "curl: OK" || echo "curl: MISSING"
+        which xz && echo "xz: OK" || echo "xz: MISSING" 
+        which losetup && echo "losetup: OK" || echo "losetup: MISSING"
+        which mount && echo "mount: OK" || echo "mount: MISSING"
+        which parted && echo "parted: OK" || echo "parted: MISSING"
+        echo "Build tools verification complete"
         
     - name: Free up disk space
       run: |
@@ -99,14 +83,14 @@ jobs:
         if [ -f "soulbox-v"*".img" ]; then
             cp soulbox-v*.img artifacts/
             cp soulbox-v*.img.sha256 artifacts/
-            echo "✅ SoulBox image created successfully!"
+            echo "SoulBox image created successfully!"
             ls -lh artifacts/
         else
-            echo "❌ Build failed - no image file found"
+            echo "Build failed - no image file found"
             exit 1
         fi
         
-        echo "🔥 SoulBox build complete - ready to flash and deploy! 🔥"
+        echo "SoulBox build complete - ready to flash and deploy!"
 
     - name: Upload SoulBox Image
       uses: actions/upload-artifact@v3
@@ -129,31 +113,31 @@ jobs:
     - name: Build Summary
       if: success()
       run: |
-        echo "🔥 SoulBox Will-o'-Wisp Media Center Build Complete! 🔥"
-        echo "====================================================="
+        echo "SoulBox Will-o'-Wisp Media Center Build Complete!"
+        echo "================================================"
         echo ""
         echo "Image created:"
         ls -la artifacts/
         echo ""
-        echo "✨ Features included:"
-        echo "   🎬 Kodi Media Center (auto-start with splash)"
-        echo "   🌐 Tailscale VPN integration"
-        echo "   ⚡ Raspberry Pi 5 optimizations"
-        echo "   🔧 Complete systemd service configuration"
-        echo "   🔐 SSH enabled with default credentials"
-        echo "   🏠 Pre-configured media directories"
-        echo "   🎨 Will-o'-wisp branding and theming"
+        echo "Features included:"
+        echo "   - Kodi Media Center (auto-start with splash)"
+        echo "   - Tailscale VPN integration"
+        echo "   - Raspberry Pi 5 optimizations"
+        echo "   - Complete systemd service configuration"
+        echo "   - SSH enabled with default credentials"
+        echo "   - Pre-configured media directories"
+        echo "   - Will-o'-wisp branding and theming"
         echo ""
-        echo "🚀 Ready to deploy:"
+        echo "Ready to deploy:"
         echo "   1. Download the .img file from artifacts"
         echo "   2. Flash to SD card (8GB+ recommended)"
         echo "   3. Boot on Raspberry Pi 5"
         echo "   4. First boot will complete setup automatically"
         echo ""
-        echo "📋 Default credentials:"
+        echo "Default credentials:"
         echo "   - soulbox:soulbox (recommended user)"
         echo "   - pi:soulbox (compatibility)"
         echo "   - root:soulbox (admin access)"
         echo ""
-        echo "🔥 The blue flame burns bright and awaits deployment! 🔥"
+        echo "The blue flame burns bright and awaits deployment!"
 
