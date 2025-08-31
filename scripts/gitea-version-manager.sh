@@ -6,7 +6,13 @@
 set -e
 
 # Configuration
-GITEA_SERVER="https://gitea.osiris-adelie.ts.net"
+# Use Tailscale domain if available, fallback to IP for CI/CD environments
+if nslookup gitea.osiris-adelie.ts.net >/dev/null 2>&1; then
+    GITEA_SERVER="https://gitea.osiris-adelie.ts.net"
+else
+    # Fallback to Tailscale IP for CI/CD runners
+    GITEA_SERVER="https://100.87.109.59:3000"
+fi
 GITEA_OWNER="reaper"
 GITEA_REPO="soulbox"
 GITEA_API_URL="${GITEA_SERVER}/api/v1/repos/${GITEA_OWNER}/${GITEA_REPO}"

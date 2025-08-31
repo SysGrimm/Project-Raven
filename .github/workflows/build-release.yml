@@ -26,7 +26,8 @@ jobs:
       run: |
         echo "=== Manual Git Checkout ==="
         cd /tmp
-        git clone https://gitea.osiris-adelie.ts.net/reaper/soulbox.git soulbox-build
+        # Use Tailscale IP for CI/CD runners (domain resolution not available)
+        git clone https://100.87.109.59:3000/reaper/soulbox.git soulbox-build
         cd soulbox-build
         echo "Repository cloned successfully"
         cp -r . $GITHUB_WORKSPACE/
