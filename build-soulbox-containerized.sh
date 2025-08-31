@@ -1599,9 +1599,32 @@ copy_and_customize_filesystems() {
     fi
     
     if [[ -n "$populatefs_cmd" ]]; then
-        log_info "Executing: $populatefs_cmd -U -d $staging_dir $temp_dir/root-new.ext4"
+        # Try different populatefs syntax - shell script vs binary have different options
+        local populate_success=false
+        
+        # Method 1: Try standard populatefs binary syntax
+        log_info "Attempting populatefs (binary syntax): $populatefs_cmd -U -d $staging_dir $temp_dir/root-new.ext4"
         if "$populatefs_cmd" -U -d "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERROR" 2>&1; then
-            log_success "Filesystem populated using populatefs"
+            populate_success=true
+            log_success "✓ Populatefs succeeded with binary syntax"
+        else
+            log_warning "Binary syntax failed, trying shell script syntax..."
+            
+            # Method 2: Try shell script syntax (populate-extfs.sh)
+            log_info "Attempting populatefs (shell script syntax): $populatefs_cmd $temp_dir/root-new.ext4 $staging_dir"
+            if "$populatefs_cmd" "$temp_dir/root-new.ext4" "$staging_dir" >"$SAVE_ERROR" 2>&1; then
+                populate_success=true
+                log_success "✓ Populatefs succeeded with shell script syntax"
+            else
+                log_error "Both populatefs syntaxes failed"
+                if [[ -s "$SAVE_ERROR" ]]; then
+                    log_error "Populatefs error output:"
+                    cat "$SAVE_ERROR"
+                fi
+            fi
+        fi
+        
+        if [[ "$populate_success" == "true" ]]; then
             # Verify the populated filesystem
             local populated_items=$(e2ls "$temp_dir/root-new.ext4:/" 2>/dev/null | wc -l || echo "0")
             log_success "Populatefs completed - $populated_items items in root filesystem"
@@ -1615,20 +1638,20 @@ copy_and_customize_filesystems() {
             
             log_success "Staging-style filesystem population complete!"
             return 0
-        else
-            log_error "Populatefs failed - falling back to e2tools method"
-            if [[ -s "$SAVE_ERROR" ]]; then
-                log_error "Populatefs error output:"
-                cat "$SAVE_ERROR"
-            fi
         fi
-    else
-        log_info "populatefs not available - using e2tools fallback"
     fi
     
-    # Fallback to e2tools method if populatefs failed or not available
-    log_info "Using e2tools fallback for filesystem population..."
-    populate_filesystem_with_e2tools "$temp_dir" "$staging_dir"
+    # REMOVED: e2tools fallback - it causes filesystem corruption
+    log_error "CRITICAL: populatefs is required but failed or not available"
+    log_error "E2tools fallback has been removed due to systematic corruption issues"
+    log_error "Please ensure populatefs is properly built and available"
+    
+    if [[ -s "$SAVE_ERROR" ]]; then
+        log_error "Last error output:"
+        cat "$SAVE_ERROR"
+    fi
+    
+    return 1
 }
 
 # E2tools fallback function for filesystem population
