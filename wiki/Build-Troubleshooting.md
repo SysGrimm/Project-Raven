@@ -205,6 +205,87 @@ cat /mnt/soulbox-boot/cmdline.txt
 sudo umount /mnt/soulbox-boot
 ```
 
+### Pi 5 Boot Progression: Missing System Files
+
+**Symptoms** (After successful root filesystem mounting):
+```
+resizefs 1.47.0 (5-Feb-2023)
+Resizing the filesystem on /dev/mmcblk0p2 to 7793664 (4k) blocks.
+The filesystem on /dev/mmcblk0p2 is now 7793664 (4k) blocks long.
+
+e2fsck 1.47.0 (5-Feb-2023)
+soulbox-root: clean, 11/1027840 files, 119654/7793664 blocks
+findmnt: can't read /root/etc/fstab: No such file or directory
+mount: mounting /dev on /root/dev failed: No such file or directory
+run-init: can't execute '/usr/lib/raspberrypi-sys-mods/firstboot': No such file or directory
+run-init: can't execute '/etc/init': No such file or directory  
+run-init: can't execute '/bin/sh': No such file or directory
+run-init: can't execute '/sbin/init': No such file or directory
+No init found. Try passing init= bootarg.
+
+BusyBox v1.35.0 (Debian 1:1.35.0-4+b3) built-in shell (ash)
+Enter 'help' for a list of built-in commands.
+
+(initramfs) _
+```
+
+**Root Cause**: The root filesystem was created and mounted successfully, but essential system files and directory structure from the base Pi OS were not properly extracted/populated during the build process.
+
+**This indicates**:
+- ✅ Bootloader loading works (Pi 5 compatible)
+- ✅ Kernel loading works 
+- ✅ Root filesystem mounting works (cmdline.txt fix successful)
+- ❌ System file population failed during build
+
+**Debug Commands from initramfs shell**:
+```bash
+# Check if root filesystem is mounted
+df -h
+mount | grep mmcblk0p2
+
+# Check what files exist in root filesystem
+ls -la /root/
+ls -la /root/bin/
+ls -la /root/sbin/
+ls -la /root/etc/
+
+# Check filesystem label (should show soulbox-root)
+blkid /dev/mmcblk0p2
+
+# Check available space
+du -sh /root/
+```
+
+**Build-Time Root Cause Analysis**:
+This failure pattern indicates one of these build issues:
+1. **populatefs failed silently** - filesystem created but not populated
+2. **e2tools extraction incomplete** - only partial system files copied
+3. **Base Pi OS extraction failed** - staging directory was empty/incomplete
+4. **Loop mount/debugfs extraction failed** - couldn't read base Pi OS image
+
+**Build-Time Debug Commands**:
+```bash
+# Check if staging directory was populated during build
+find $staging_dir -type f | wc -l  # Should be > 10000 files
+ls -la $staging_dir/bin/
+ls -la $staging_dir/sbin/
+ls -la $staging_dir/etc/
+
+# Verify base Pi OS image integrity
+parted -s $base_image print
+file $base_image
+
+# Test filesystem population success
+tune2fs -l $root_filesystem | grep "Block count"
+e2ls $root_filesystem:/ | wc -l  # Should show many files
+```
+
+**Solution Priority**:
+1. **Verify populatefs/e2tools functionality** in build environment
+2. **Check base Pi OS extraction methods** (loop mount → debugfs → e2tools fallback)
+3. **Validate staging directory population** before filesystem creation
+4. **Add build-time filesystem verification** to catch empty filesystems
+
 ### Build #82 Pattern: Container Disk Space Exhaustion
 
 **Symptoms**:
