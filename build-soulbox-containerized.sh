@@ -481,22 +481,44 @@ build_soulbox_image() {
 
 # Function to copy and customize filesystems
 copy_and_customize_filesystems() {
+    # Temporarily disable set -e for better error handling
+    set +e
+    
     local temp_dir="$1"
     local pi_boot="$WORK_DIR/filesystems/pi-boot.fat"
     local pi_root="$WORK_DIR/filesystems/pi-root.ext4"
     local assets_dir="$WORK_DIR/soulbox-assets"
     
+    log_info "=== Starting filesystem copying phase ==="
+    log_info "Temp dir: $temp_dir"
+    log_info "Pi boot: $pi_boot"
+    log_info "Pi root: $pi_root"
+    log_info "Assets: $assets_dir"
+    
     log_info "Copying Pi OS content and adding SoulBox customizations..."
     
     # Verify input files exist
+    log_info "Checking input files..."
     if [[ ! -f "$pi_boot" ]]; then
         log_error "Boot partition file missing: $pi_boot"
+        set -e
         return 1
     fi
+    log_success "Boot partition file found: $(ls -lh "$pi_boot" | awk '{print $5}')"
+    
     if [[ ! -f "$pi_root" ]]; then
         log_error "Root partition file missing: $pi_root"
+        set -e
         return 1
     fi
+    log_success "Root partition file found: $(ls -lh "$pi_root" | awk '{print $5}')"
+    
+    if [[ ! -d "$assets_dir" ]]; then
+        log_error "Assets directory missing: $assets_dir"
+        set -e
+        return 1
+    fi
+    log_success "Assets directory found"
     
     # Copy Pi OS boot content
     log_info "Processing boot partition..."
