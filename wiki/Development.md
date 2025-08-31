@@ -15,7 +15,7 @@ This page covers the development workflow, CI/CD integration, local development 
 #### Repository Setup
 ```bash
 # Clone the repository
-git clone https://192.168.176.113:3000/yourusername/soulbox.git
+git clone https://gitea.osiris-adelie.ts.net/reaper/soulbox.git
 cd soulbox
 
 # Check repository structure
@@ -289,7 +289,7 @@ git tag -a v1.0.0 -m "Release v1.0.0"
 git push origin v1.0.0
 
 # Or use Gitea API
-curl -X POST "https://192.168.176.113:3000/api/v1/repos/yourusername/soulbox/releases" \
+curl -X POST "https://gitea.osiris-adelie.ts.net/api/v1/repos/reaper/soulbox/releases" \
   -H "Authorization: token YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

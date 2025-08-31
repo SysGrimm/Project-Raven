@@ -45,7 +45,7 @@ Common issues, solutions, validation commands, and debugging techniques for both
 
 ## Quick Links
 
-- **📥 [Download Latest Release](https://192.168.176.113:3000/yourusername/soulbox/releases/latest)** - Ready-to-flash SD card images
+- **📥 [Download Latest Release](https://gitea.osiris-adelie.ts.net/reaper/soulbox/releases/latest)** - Ready-to-flash SD card images
 - **🔨 [Build from Source](Build-System)** - Container-friendly build instructions
 - **📋 [System Requirements](Features#system-requirements)** - Hardware and software requirements
 - **🚨 [Troubleshooting](Troubleshooting)** - Common issues and solutions

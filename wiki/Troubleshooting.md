@@ -210,7 +210,7 @@ export VERSION="v$(date +%Y%m%d-%H%M%S)"
 ./build-soulbox-containerized.sh
 
 # 3. Fix Gitea API access
-curl -I https://192.168.176.113:3000/api/v1/repos/yourusername/soulbox/releases
+curl -I https://gitea.osiris-adelie.ts.net/api/v1/repos/reaper/soulbox/releases
 ```
 
 ## Runtime Issues
@@ -664,7 +664,7 @@ cat /etc/soulbox-version 2>/dev/null || echo "Unknown version"
 
 ### Community Support
 
-- **Gitea Issues**: [Report bugs and feature requests](https://192.168.176.113:3000/yourusername/soulbox/issues)
+- **Gitea Issues**: [Report bugs and feature requests](https://gitea.osiris-adelie.ts.net/reaper/soulbox/issues)
 - **Wiki**: Check other wiki pages for detailed information
 - **Logs**: Always include relevant log files with issue reports
 

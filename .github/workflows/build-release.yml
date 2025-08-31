@@ -26,7 +26,7 @@ jobs:
       run: |
         echo "=== Manual Git Checkout ==="
         cd /tmp
-        git clone http://192.168.176.113:3000/reaper/soulbox.git soulbox-build
+        git clone https://gitea.osiris-adelie.ts.net/reaper/soulbox.git soulbox-build
         cd soulbox-build
         echo "Repository cloned successfully"
         cp -r . $GITHUB_WORKSPACE/
@@ -238,7 +238,7 @@ jobs:
                 # Create Gitea release with image files
                 if ./scripts/gitea-version-manager.sh create-release "$VERSION" "$IMAGE_FILE" "$CHECKSUM_FILE"; then
                     echo "✅ Gitea release created successfully!"
-                    echo "🔗 Release URL: http://192.168.176.113:3000/reaper/soulbox/releases/tag/$VERSION"
+                    echo "🔗 Release URL: https://gitea.osiris-adelie.ts.net/reaper/soulbox/releases/tag/$VERSION"
                 else
                     echo "⚠️  Failed to create Gitea release, but build succeeded"
                 fi

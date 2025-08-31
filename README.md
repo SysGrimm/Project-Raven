@@ -50,7 +50,7 @@ SoulBox is a **ready-to-use media center operating system** built specifically f
 #### Battle-Tested Build Commands
 ```bash
 # Clone the repository
-git clone https://192.168.176.113:3000/reaper/soulbox.git
+git clone https://gitea.osiris-adelie.ts.net/reaper/soulbox.git
 cd soulbox
 
 # Run the container-friendly build (PRODUCTION PROVEN!)
@@ -177,15 +177,15 @@ Every push triggers:
 
 ## 📖 Documentation
 
-Comprehensive documentation is available in the **[SoulBox Wiki](https://192.168.176.113:3000/yourusername/soulbox/wiki)**:
+Comprehensive documentation is available in the **[SoulBox Wiki](https://gitea.osiris-adelie.ts.net/reaper/soulbox/wiki)**:
 
-- **[🏠 Home](https://192.168.176.113:3000/yourusername/soulbox/wiki/Home)**: Overview and navigation
-- **[🏗️ Architecture](https://192.168.176.113:3000/yourusername/soulbox/wiki/Architecture)**: System design and technology stack
-- **[🔧 Build System](https://192.168.176.113:3000/yourusername/soulbox/wiki/Build-System)**: Container-friendly build process
-- **[🚀 Deployment Guide](https://192.168.176.113:3000/yourusername/soulbox/wiki/Deployment-Guide)**: Installation and configuration
-- **[🎯 Features](https://192.168.176.113:3000/yourusername/soulbox/wiki/Features)**: Complete feature overview
-- **[👨‍💻 Development](https://192.168.176.113:3000/yourusername/soulbox/wiki/Development)**: Contributing and development workflow
-- **[🛠️ Troubleshooting](https://192.168.176.113:3000/yourusername/soulbox/wiki/Troubleshooting)**: Common issues and solutions
+- **[🏠 Home](https://gitea.osiris-adelie.ts.net/reaper/soulbox/wiki/Home)**: Overview and navigation
+- **[🏗️ Architecture](https://gitea.osiris-adelie.ts.net/reaper/soulbox/wiki/Architecture)**: System design and technology stack
+- **[🔧 Build System](https://gitea.osiris-adelie.ts.net/reaper/soulbox/wiki/Build-System)**: Container-friendly build process
+- **[🚀 Deployment Guide](https://gitea.osiris-adelie.ts.net/reaper/soulbox/wiki/Deployment-Guide)**: Installation and configuration
+- **[🎯 Features](https://gitea.osiris-adelie.ts.net/reaper/soulbox/wiki/Features)**: Complete feature overview
+- **[👨‍💻 Development](https://gitea.osiris-adelie.ts.net/reaper/soulbox/wiki/Development)**: Contributing and development workflow
+- **[🛠️ Troubleshooting](https://gitea.osiris-adelie.ts.net/reaper/soulbox/wiki/Troubleshooting)**: Common issues and solutions
 
 ## 📄 License
 
@@ -196,10 +196,10 @@ This project is open source. See LICENSE file for details.
 - [Raspberry Pi Foundation](https://www.raspberrypi.org/) for excellent ARM hardware
 - [Debian Project](https://www.debian.org/) for the solid base system  
 - [Docker](https://www.docker.com/) for containerization technology
-- [Gitea Actions](https://192.168.176.113:3000/features/actions) for CI/CD automation
+- [Gitea Actions](https://gitea.osiris-adelie.ts.net/features/actions) for CI/CD automation
 
 ---
 
-**Build Status**: ![Build Status](https://192.168.176.113:3000/yourusername/soulbox/workflows/Build%20SoulBox%20SD%20Card%20Image/badge.svg)
+**Build Status**: ![Build Status](https://gitea.osiris-adelie.ts.net/reaper/soulbox/workflows/Build%20SoulBox%20SD%20Card%20Image/badge.svg)
 
 Ready to flash and boot! 🔥

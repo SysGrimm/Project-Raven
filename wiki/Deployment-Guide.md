@@ -8,7 +8,7 @@ This guide covers everything you need to know about deploying SoulBox images, fr
 
 The fastest way to get SoulBox running is using our pre-built images:
 
-1. **📥 [Download Latest Release](https://192.168.176.113:3000/yourusername/soulbox/releases/latest)**
+1. **📥 [Download Latest Release](https://gitea.osiris-adelie.ts.net/reaper/soulbox/releases/latest)**
 2. **Flash to SD Card** using balenaEtcher or Raspberry Pi Imager
 3. **Insert & Boot** on your Raspberry Pi 5
 4. **Wait for Setup** - First boot takes ~10 minutes for package installation
@@ -20,7 +20,7 @@ For developers or custom builds:
 
 ```bash
 # Clone repository
-git clone https://192.168.176.113:3000/yourusername/soulbox.git
+git clone https://gitea.osiris-adelie.ts.net/reaper/soulbox.git
 cd soulbox
 
 # Run the container-friendly build
@@ -35,7 +35,7 @@ chmod +x build-soulbox-containerized.sh
 ### Step 1: Download Images
 
 #### From Gitea Releases
-- Navigate to the [Releases page](https://192.168.176.113:3000/yourusername/soulbox/releases)
+- Navigate to the [Releases page](https://gitea.osiris-adelie.ts.net/reaper/soulbox/releases)
 - Download the latest `.img` file or compressed `.tar.gz`
 - Verify integrity using provided SHA256 checksums
 

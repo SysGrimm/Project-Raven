@@ -9,7 +9,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WIKI_DIR="$PROJECT_ROOT/wiki"
 
 # Configuration
-GITEA_HOST="${GITEA_HOST:-https://192.168.176.113:3000}"
+GITEA_HOST="${GITEA_HOST:-https://gitea.osiris-adelie.ts.net}"
 REPO_OWNER="${REPO_OWNER:-yourusername}"
 REPO_NAME="${REPO_NAME:-soulbox}"
 WIKI_REPO_URL="$GITEA_HOST/$REPO_OWNER/$REPO_NAME.wiki.git"

@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-GITEA_SERVER="http://192.168.176.113:3000"
+GITEA_SERVER="https://gitea.osiris-adelie.ts.net"
 GITEA_OWNER="reaper"
 GITEA_REPO="soulbox"
 GITEA_API_URL="${GITEA_SERVER}/api/v1/repos/${GITEA_OWNER}/${GITEA_REPO}"

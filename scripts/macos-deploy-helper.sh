@@ -99,7 +99,7 @@ EOF
 setup_commands() {
     log_step "Raspberry Pi Setup Commands"
     
-    local gitea_url="http://192.168.176.113:3000/reaper/soulbox.git"
+    local gitea_url="https://gitea.osiris-adelie.ts.net/reaper/soulbox.git"
     
     cat << EOF
 
