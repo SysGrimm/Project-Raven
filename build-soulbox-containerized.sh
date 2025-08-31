@@ -1343,6 +1343,32 @@ extract_with_debugfs() {
     fi
 }
 
+# Helper function to read symlink target using debugfs
+handle_debugfs_symlink() {
+    local filesystem="$1"
+    local symlink_path="$2"
+    
+    # Use debugfs to read the symlink target
+    local symlink_output
+    symlink_output=$(echo "dump $symlink_path -" | debugfs "$filesystem" 2>/dev/null)
+    
+    if [[ $? -eq 0 && -n "$symlink_output" ]]; then
+        # Clean up the output (remove any null terminators or extra whitespace)
+        echo "$symlink_output" | tr -d '\0' | xargs
+    else
+        # Alternative method: use ls -l and parse the symlink arrow
+        local ls_output
+        ls_output=$(echo "ls -l $symlink_path" | debugfs "$filesystem" 2>/dev/null | grep -v "debugfs:")
+        
+        if [[ "$ls_output" =~ -\>[[:space:]]*([^[:space:]]+) ]]; then
+            echo "${BASH_REMATCH[1]}"
+        else
+            # Final fallback: extract from detailed stat info
+            echo ""
+        fi
+    fi
+}
+
 # Helper function for recursive debugfs extraction
 extract_with_debugfs_recursive() {
     local filesystem="$1"
@@ -1388,6 +1414,7 @@ extract_with_debugfs_recursive() {
     
     local files_extracted=0
     local dirs_processed=0
+    local symlinks_processed=0
     
     # Parse debugfs output and extract files/directories
     while read -r line; do
@@ -1414,8 +1441,49 @@ extract_with_debugfs_recursive() {
             if extract_with_debugfs_recursive "$filesystem" "$staging_dir" "$full_fs_path" $((current_depth + 1)); then
                 dirs_processed=$((dirs_processed + 1))
             fi
+        elif [[ "${perms:0:1}" == "l" || "$perms" == "120777" ]]; then
+            # It's a symlink - handle specially
+            log_info "Processing symlink: $name -> $(handle_debugfs_symlink "$filesystem" "$full_fs_path")"
+            
+            local symlink_target
+            symlink_target=$(handle_debugfs_symlink "$filesystem" "$full_fs_path")
+            
+            if [[ -n "$symlink_target" ]]; then
+                # Create the symlink in staging
+                ln -sf "$symlink_target" "$full_staging_path" 2>/dev/null || log_warning "Failed to create symlink $full_fs_path -> $symlink_target"
+                
+                # If the symlink points to a directory, also extract its contents
+                local target_full_path
+                if [[ "$symlink_target" =~ ^/ ]]; then
+                    # Absolute path
+                    target_full_path="$symlink_target"
+                else
+                    # Relative path - resolve relative to symlink's parent directory
+                    local parent_dir=$(dirname "$full_fs_path")
+                    if [[ "$parent_dir" == "/" ]]; then
+                        target_full_path="/$symlink_target"
+                    else
+                        target_full_path="$parent_dir/$symlink_target"
+                    fi
+                fi
+                
+                # Check if the target is a directory and extract it
+                local target_check_output
+                target_check_output=$(echo "ls -l $target_full_path" | debugfs "$filesystem" 2>/dev/null | head -1)
+                if [[ "$target_check_output" =~ ^[[:space:]]*[0-9]+[[:space:]]+40755 ]]; then
+                    log_info "Symlink target $target_full_path is a directory - extracting contents"
+                    if extract_with_debugfs_recursive "$filesystem" "$staging_dir" "$target_full_path" $((current_depth + 1)); then
+                        symlinks_processed=$((symlinks_processed + 1))
+                    fi
+                else
+                    log_info "Symlink target $target_full_path is not a directory or doesn't exist"
+                    symlinks_processed=$((symlinks_processed + 1))
+                fi
+            else
+                log_warning "Failed to read symlink target for $full_fs_path"
+            fi
         else
-            # It's a file - extract it
+            # It's a regular file - extract it
             local dump_output
             dump_output=$(echo "dump $full_fs_path $full_staging_path" | debugfs "$filesystem" 2>&1)
             local dump_exit_code=$?
@@ -1435,7 +1503,7 @@ extract_with_debugfs_recursive() {
     
     # Log extraction summary for root level
     if [[ "$fs_path" == "/" ]]; then
-        log_info "Root extraction summary: $files_extracted files, $dirs_processed directories processed"
+        log_info "Root extraction summary: $files_extracted files, $dirs_processed directories, $symlinks_processed symlinks processed"
     fi
     
     return 0
