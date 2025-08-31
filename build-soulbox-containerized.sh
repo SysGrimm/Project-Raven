@@ -458,6 +458,48 @@ build_soulbox_image() {
     mke2fs -F -q -t ext4 -L "soulbox-root" "$temp_dir/root-new.ext4"
     
     # Copy Pi OS content and add SoulBox customizations
+    log_info "=== PRE-FUNCTION DIAGNOSTICS ==="
+    log_info "About to call copy_and_customize_filesystems with temp_dir: $temp_dir"
+    log_info "Checking prerequisites before function call..."
+    
+    # Verify all required components exist before calling the function
+    if [[ ! -d "$temp_dir" ]]; then
+        log_error "Temp directory missing: $temp_dir"
+        return 1
+    fi
+    log_success "Temp directory exists: $temp_dir"
+    
+    if [[ ! -f "$temp_dir/boot-new.fat" ]]; then
+        log_error "Boot filesystem image missing: $temp_dir/boot-new.fat"
+        return 1
+    fi
+    log_success "Boot filesystem ready: $(ls -lh "$temp_dir/boot-new.fat" | awk '{print $5}')"
+    
+    if [[ ! -f "$temp_dir/root-new.ext4" ]]; then
+        log_error "Root filesystem image missing: $temp_dir/root-new.ext4"
+        return 1
+    fi
+    log_success "Root filesystem ready: $(ls -lh "$temp_dir/root-new.ext4" | awk '{print $5}')"
+    
+    if [[ ! -f "$WORK_DIR/filesystems/pi-boot.fat" ]]; then
+        log_error "Source boot partition missing: $WORK_DIR/filesystems/pi-boot.fat"
+        return 1
+    fi
+    log_success "Source boot partition ready: $(ls -lh "$WORK_DIR/filesystems/pi-boot.fat" | awk '{print $5}')"
+    
+    if [[ ! -f "$WORK_DIR/filesystems/pi-root.ext4" ]]; then
+        log_error "Source root partition missing: $WORK_DIR/filesystems/pi-root.ext4"
+        return 1
+    fi
+    log_success "Source root partition ready: $(ls -lh "$WORK_DIR/filesystems/pi-root.ext4" | awk '{print $5}')"
+    
+    if [[ ! -d "$WORK_DIR/soulbox-assets" ]]; then
+        log_error "SoulBox assets missing: $WORK_DIR/soulbox-assets"
+        return 1
+    fi
+    log_success "SoulBox assets ready"
+    
+    log_info "All prerequisites verified - calling filesystem copy function..."
     copy_and_customize_filesystems "$temp_dir"
     
     # Merge filesystems into final image
