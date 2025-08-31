@@ -791,6 +791,7 @@ copy_and_customize_filesystems() {
     )
     
     local extracted_files=0
+    local failed_files=()
     for critical_file in "${critical_files[@]}"; do
         local target_dir="$temp_dir/root-content$(dirname "$critical_file")"
         mkdir -p "$target_dir"
@@ -798,9 +799,25 @@ copy_and_customize_filesystems() {
             extracted_files=$((extracted_files + 1))
         else
             log_warning "Failed to extract critical file: $critical_file"
+            failed_files+=("$critical_file")
+            
+            # Special handling for /bin/sh - it might be a symlink in Pi OS
+            if [[ "$critical_file" == "/bin/sh" ]]; then
+                log_info "Attempting alternative /bin/sh extraction methods..."
+                # Try copying bash as sh fallback
+                if e2cp "$pi_root:/bin/bash" "$temp_dir/root-content$critical_file" 2>/dev/null; then
+                    log_info "Copied /bin/bash as /bin/sh fallback"
+                    extracted_files=$((extracted_files + 1))
+                else
+                    log_warning "Both /bin/sh and /bin/bash extraction failed"
+                fi
+            fi
         fi
     done
     log_success "Extracted $extracted_files critical Pi OS files"
+    if [[ ${#failed_files[@]} -gt 0 ]]; then
+        log_warning "Failed to extract ${#failed_files[@]} files: ${failed_files[*]}"
+    fi
     
     # Create essential system files (fallback if extraction failed)
     log_info "Ensuring essential system files exist..."
@@ -831,6 +848,22 @@ proc            /proc           proc    defaults          0       0
 LABEL=SOULBOX  /boot/firmware  vfat    defaults          0       2
 LABEL=soulbox-root /               ext4    defaults,noatime  0       1
 EOF
+    fi
+    
+    # Ensure critical shell binaries exist
+    if [[ ! -f "$temp_dir/root-content/bin/sh" ]]; then
+        log_info "Creating /bin/sh fallback (copying bash)"
+        if [[ -f "$temp_dir/root-content/bin/bash" ]]; then
+            cp "$temp_dir/root-content/bin/bash" "$temp_dir/root-content/bin/sh"
+        else
+            log_warning "No bash available for /bin/sh fallback - creating minimal script"
+            cat > "$temp_dir/root-content/bin/sh" << 'EOF'
+#!/bin/dash
+# Minimal sh fallback for SoulBox - will be replaced during first boot
+exec "$@"
+EOF
+            chmod +x "$temp_dir/root-content/bin/sh"
+        fi
     fi
     
     # Create home directories
