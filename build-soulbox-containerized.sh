@@ -100,9 +100,9 @@ show_error() {
     exit 1
 }
 
-# Function to install populatefs
+# Function to install and configure populatefs
 install_populatefs() {
-    log_info "Attempting to install populatefs..."
+    log_info "Attempting to install and configure populatefs..."
     
     # Check if we have package manager access
     if ! command -v apt-get >/dev/null 2>&1; then
@@ -110,42 +110,152 @@ install_populatefs() {
         return 1
     fi
     
-    # Try to install e2fsprogs-extra (contains populatefs)
-    if apt-get update -qq && apt-get install -y e2fsprogs-extra 2>/dev/null; then
-        if command -v populatefs >/dev/null 2>&1; then
-            log_success "Successfully installed populatefs"
-            return 0
+    # Update package list first
+    log_info "Updating package list..."
+    if ! apt-get update -qq 2>/dev/null; then
+        log_warning "Failed to update package list"
+    fi
+    
+    # Install all required dependencies for populatefs
+    log_info "Installing e2fsprogs-extra and dependencies..."
+    local packages=("e2fsprogs" "e2fsprogs-extra" "util-linux")
+    local install_success=false
+    
+    for pkg in "${packages[@]}"; do
+        if apt-get install -y "$pkg" 2>/dev/null; then
+            log_info "✓ Installed $pkg"
+            install_success=true
         else
-            log_warning "e2fsprogs-extra installed but populatefs not found"
-            return 1
+            log_warning "✗ Failed to install $pkg"
         fi
+    done
+    
+    if [[ "$install_success" != "true" ]]; then
+        log_error "Failed to install any required packages"
+        return 1
+    fi
+    
+    # Check if populatefs is now available
+    if command -v populatefs >/dev/null 2>&1; then
+        log_success "populatefs available in PATH"
+    elif [[ -x "/usr/local/bin/populatefs" ]]; then
+        log_info "populatefs found in /usr/local/bin"
+        export PATH="/usr/local/bin:$PATH"
     else
-        log_warning "Failed to install e2fsprogs-extra package"
+        log_warning "populatefs still not found after installation"
+        return 1
+    fi
+    
+    # CRITICAL FIX: Patch populatefs for container compatibility
+    # Based on wiki Build #79-80 pattern - fix hardcoded debugfs paths
+    fix_populatefs_paths
+    
+    # Verify populatefs functionality
+    if test_populatefs_functionality; then
+        log_success "populatefs installation and configuration successful"
+        return 0
+    else
+        log_error "populatefs installation succeeded but functionality test failed"
         return 1
     fi
 }
 
-# Function to install e2tools
-install_e2tools() {
-    log_info "Attempting to install e2tools..."
+# Function to fix populatefs paths for container compatibility
+fix_populatefs_paths() {
+    log_info "Applying container compatibility fixes to populatefs..."
     
-    # Check if we have package manager access
-    if ! command -v apt-get >/dev/null 2>&1; then
-        log_warning "apt-get not available - cannot install e2tools"
+    local populatefs_path=""
+    if command -v populatefs >/dev/null 2>&1; then
+        populatefs_path=$(command -v populatefs)
+    elif [[ -x "/usr/local/bin/populatefs" ]]; then
+        populatefs_path="/usr/local/bin/populatefs"
+    else
+        log_warning "Cannot find populatefs to fix"
         return 1
     fi
     
-    # Try to install e2tools
-    if apt-get install -y e2tools 2>/dev/null; then
-        if command -v e2cp >/dev/null 2>&1 && command -v e2ls >/dev/null 2>&1; then
-            log_success "Successfully installed e2tools"
-            return 0
-        else
-            log_warning "e2tools package installed but commands not found"
-            return 1
+    log_info "Fixing populatefs at: $populatefs_path"
+    
+    # Check if it's a shell script that needs fixing
+    if file "$populatefs_path" 2>/dev/null | grep -q "shell script"; then
+        log_info "Detected shell script - applying path fixes"
+        
+        # Backup original
+        cp "$populatefs_path" "${populatefs_path}.backup" 2>/dev/null || true
+        
+        # Apply the critical fix from wiki Build #79-80
+        # Fix: $CONTRIB_DIR/../debugfs/debugfs -> debugfs
+        if grep -q "\$CONTRIB_DIR" "$populatefs_path" 2>/dev/null; then
+            log_info "Applying CONTRIB_DIR path fix"
+            sed -i 's|\$CONTRIB_DIR/\.\./debugfs/debugfs|debugfs|g' "$populatefs_path"
         fi
+        
+        # Additional fixes for other common hardcoded paths
+        if grep -q "\$BIN_DIR" "$populatefs_path" 2>/dev/null; then
+            log_info "Applying BIN_DIR path fix"
+            sed -i 's|\$BIN_DIR/\.\./debugfs/debugfs|debugfs|g' "$populatefs_path"
+        fi
+        
+        # Make sure script uses system commands in PATH
+        sed -i 's|/usr/local/bin/\.\./../\([^/]*\)|\1|g' "$populatefs_path" 2>/dev/null || true
+        
+        log_success "Applied container compatibility fixes to populatefs"
+        return 0
     else
-        log_warning "Failed to install e2tools package"
+        log_info "Binary populatefs - no path fixes needed"
+        return 0
+    fi
+}
+
+# Function to test populatefs functionality
+test_populatefs_functionality() {
+    log_info "Testing populatefs functionality..."
+    
+    # Create test environment
+    local test_dir="/tmp/populatefs-test-$$"
+    local test_ext4="$test_dir/test.ext4"
+    local test_staging="$test_dir/staging"
+    
+    mkdir -p "$test_staging/test-subdir"
+    echo "test content" > "$test_staging/test-file"
+    echo "subdirectory test" > "$test_staging/test-subdir/sub-file"
+    
+    # Create test filesystem
+    dd if=/dev/zero of="$test_ext4" bs=1M count=10 2>/dev/null
+    mke2fs -F -q -t ext4 "$test_ext4" >/dev/null 2>&1
+    
+    local test_success=false
+    
+    # Test populatefs with different syntaxes
+    local populatefs_cmd=""
+    if command -v populatefs >/dev/null 2>&1; then
+        populatefs_cmd="populatefs"
+    elif [[ -x "/usr/local/bin/populatefs" ]]; then
+        populatefs_cmd="/usr/local/bin/populatefs"
+    fi
+    
+    if [[ -n "$populatefs_cmd" ]]; then
+        # Test LibreELEC syntax first
+        if "$populatefs_cmd" "$test_ext4" "$test_staging" >/dev/null 2>&1; then
+            test_success=true
+            log_info "✓ LibreELEC syntax works"
+        # Test binary syntax
+        elif "$populatefs_cmd" -U -d "$test_staging" "$test_ext4" >/dev/null 2>&1; then
+            test_success=true
+            log_info "✓ Binary syntax works"
+        else
+            log_warning "Both populatefs syntaxes failed in test"
+        fi
+    fi
+    
+    # Cleanup
+    rm -rf "$test_dir" 2>/dev/null || true
+    
+    if [[ "$test_success" == "true" ]]; then
+        log_success "populatefs functionality test passed"
+        return 0
+    else
+        log_error "populatefs functionality test failed"
         return 1
     fi
 }
@@ -154,8 +264,19 @@ install_e2tools() {
 install_missing_system_tools() {
     log_info "Installing missing system tools for container environment..."
     
-    # Tools that are often missing in minimal containers
-    local system_tools=("udev" "systemd" "dbus")
+    # Check if we have package manager access
+    if ! command -v apt-get >/dev/null 2>&1; then
+        log_warning "apt-get not available - cannot install system tools"
+        return 1
+    fi
+    
+    # Update package list first
+    if ! apt-get update -qq 2>/dev/null; then
+        log_warning "Failed to update package list"
+    fi
+    
+    # Tools that are often missing in minimal containers and affect populatefs
+    local system_tools=("udev" "systemd" "dbus" "util-linux")
     local installed_count=0
     
     for tool in "${system_tools[@]}"; do
@@ -163,9 +284,21 @@ install_missing_system_tools() {
             installed_count=$((installed_count + 1))
             log_info "✓ Installed $tool"
         else
-            log_warning "✗ Failed to install $tool"
+            log_warning "✗ Failed to install $tool (may affect populatefs)"
         fi
     done
+    
+    # Install udevadm specifically (was missing in build log)
+    if ! command -v udevadm >/dev/null 2>&1; then
+        if apt-get install -y udev systemd 2>/dev/null; then
+            log_info "✓ Installed udevadm"
+            installed_count=$((installed_count + 1))
+        else
+            log_warning "✗ Failed to install udevadm (may cause warnings)"
+        fi
+    else
+        log_info "✓ udevadm already available"
+    fi
     
     if [[ $installed_count -gt 0 ]]; then
         log_success "Installed $installed_count system tools"
@@ -200,27 +333,21 @@ check_required_tools() {
     command -v tune2fs >/dev/null 2>&1 || missing_tools+=(e2fsprogs)
     command -v e2fsck >/dev/null 2>&1 || missing_tools+=(e2fsprogs)
     
-    # Check for populatefs (preferred) or e2tools (fallback)
+    # Check for populatefs (required - no fallbacks)
     local has_populatefs=false
-    local has_e2tools=false
     
     if command -v populatefs >/dev/null 2>&1; then
         has_populatefs=true
-        log_success "Found populatefs (preferred method)"
+        log_success "Found populatefs (required method)"
     elif [[ -x "/usr/local/bin/populatefs" ]]; then
         has_populatefs=true
-        log_success "Found populatefs in /usr/local/bin (preferred method)"
+        log_success "Found populatefs in /usr/local/bin (required method)"
         # Ensure /usr/local/bin is in PATH for this session
         export PATH="/usr/local/bin:$PATH"
     fi
     
-    if command -v e2cp >/dev/null 2>&1 && command -v e2ls >/dev/null 2>&1; then
-        has_e2tools=true
-        log_info "Found e2tools (fallback method available)"
-    fi
-    
-    if [[ "$has_populatefs" == "false" && "$has_e2tools" == "false" ]]; then
-        log_warning "Neither populatefs nor e2tools found!"
+    if [[ "$has_populatefs" == "false" ]]; then
+        log_warning "populatefs not found - required for build!"
         log_info "Attempting to install populatefs..."
         
         # Try to install populatefs automatically
@@ -228,16 +355,10 @@ check_required_tools() {
             has_populatefs=true
             log_success "Successfully installed populatefs"
         else
-            log_warning "Could not install populatefs, checking for e2tools..."
-            if install_e2tools; then
-                has_e2tools=true
-                log_success "Successfully installed e2tools"
-            else
-                missing_tools+=("populatefs OR e2tools")
-                log_error "Failed to install either populatefs or e2tools"
-                log_info "Manual installation: apt-get install e2fsprogs-extra (for populatefs)"
-                log_info "Or: apt-get install e2tools (for fallback)"
-            fi
+            missing_tools+=("populatefs")
+            log_error "Failed to install populatefs - build cannot continue"
+            log_info "Manual installation: apt-get install e2fsprogs-extra"
+            log_info "populatefs is required for reliable filesystem population"
         fi
     fi
     
@@ -1580,99 +1701,8 @@ extract_with_debugfs_recursive() {
     return 0
 }
 
-# Method 3: e2tools extraction (last resort - existing method)
-extract_with_e2tools() {
-    local source_img="$1"
-    local staging_dir="$2"
-    
-    log_info "=== USING E2TOOLS EXTRACTION (LAST RESORT) ==="
-    log_warning "Using e2tools - this method may have compatibility issues"
-    
-    extract_pi_os_content_with_e2tools "$source_img" "$staging_dir"
-    return $?
-}
-
-# Extract Pi OS content using improved e2tools (fallback when populatefs not available for extraction)
-extract_pi_os_content_with_e2tools() {
-    local source_img="$1"
-    local staging_dir="$2"
-    
-    # Core Pi OS directories for extraction
-    local core_dirs=(
-        "/bin" "/sbin" "/lib" "/usr/bin" "/usr/sbin" "/usr/lib"
-        "/etc" "/var/lib/dpkg" "/var/lib/apt" "/boot"
-    )
-    
-    local total_extracted=0
-    local total_failed=0
-    
-    for sys_dir in "${core_dirs[@]}"; do
-        log_info "Staging Pi OS directory: $sys_dir"
-        local target_dir="$staging_dir$sys_dir"
-        mkdir -p "$(dirname "$target_dir")"
-        
-        if extract_directory_contents "$source_img" "$sys_dir" "$target_dir" 2000; then
-            total_extracted=$((total_extracted + 1))
-            log_success "Staged: $sys_dir"
-            
-            # Special handling for kernel modules validation
-            if [[ "$sys_dir" == "/lib" ]]; then
-                validate_kernel_modules_extraction "$target_dir/modules" || log_warning "Kernel module staging may be incomplete"
-            fi
-        else
-            log_warning "Failed to stage: $sys_dir (trying critical files)"
-            total_failed=$((total_failed + 1))
-            
-            # Critical file fallback for key directories
-            if [[ "$sys_dir" == "/bin" ]]; then
-                extract_critical_bin_files "$source_img" "$staging_dir"
-            elif [[ "$sys_dir" == "/lib" ]]; then
-                extract_critical_lib_files "$source_img" "$staging_dir"
-            fi
-        fi
-    done
-    
-    log_info "Pi OS staging summary: $total_extracted succeeded, $total_failed failed"
-}
-
-# Extract critical /bin files when directory extraction fails
-extract_critical_bin_files() {
-    local source_img="$1"
-    local staging_dir="$2"
-    
-    mkdir -p "$staging_dir/bin"
-    local bin_files=("bash" "sh" "ls" "cp" "mv" "rm" "mount" "umount" "cat" "grep" "sed" "awk" "chmod" "chown")
-    
-    for bin_file in "${bin_files[@]}"; do
-        if e2cp "$source_img:/bin/$bin_file" "$staging_dir/bin/$bin_file" 2>/dev/null; then
-            log_info "✓ Critical binary: /bin/$bin_file"
-        fi
-    done
-}
-
-# Extract critical /lib files when directory extraction fails
-extract_critical_lib_files() {
-    local source_img="$1"
-    local staging_dir="$2"
-    
-    mkdir -p "$staging_dir/lib"
-    
-    # Try alternative kernel module extraction to staging
-    log_info "Attempting alternative kernel module staging..."
-    if extract_kernel_modules_alternative "$source_img" "$staging_dir/lib/modules"; then
-        log_success "✓ Kernel modules staged via alternative method"
-    else
-        log_error "✗ All kernel module staging methods failed"
-    fi
-    
-    # Essential library files
-    local lib_files=("ld-linux-aarch64.so.1")
-    for lib_file in "${lib_files[@]}"; do
-        if e2cp "$source_img:/lib/$lib_file" "$staging_dir/lib/$lib_file" 2>/dev/null; then
-            log_info "✓ Critical library: /lib/$lib_file"
-        fi
-    done
-}
+# Note: e2tools extraction methods removed - now using loop mount → debugfs chain
+# This ensures reliable extraction without the corruption issues that plagued e2tools
 
 # Function to copy and customize filesystems
 copy_and_customize_filesystems() {
@@ -1972,29 +2002,125 @@ EOF
     fi
     
     if [[ -n "$populatefs_cmd" ]]; then
-        # Try different populatefs syntax - shell script vs binary have different options
+        # Enhanced populatefs execution with comprehensive debugging
         local populate_success=false
         
-        # Method 1: Try standard populatefs binary syntax
-        log_info "Attempting populatefs (binary syntax): $populatefs_cmd -U -d $staging_dir $temp_dir/root-new.ext4"
-        if "$populatefs_cmd" -U -d "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERROR" 2>&1; then
-            populate_success=true
-            log_success "✓ Populatefs succeeded with binary syntax"
+        # Verify populatefs tool before attempting to use it
+        log_info "Analyzing populatefs tool: $populatefs_cmd"
+        if [[ -x "$populatefs_cmd" ]]; then
+            log_info "✓ populatefs executable verified"
+        elif command -v "$populatefs_cmd" >/dev/null 2>&1; then
+            log_info "✓ populatefs found in PATH"
         else
-            log_warning "Binary syntax failed, trying shell script syntax..."
-            
-            # Method 2: Try shell script syntax (populate-extfs.sh)
-            log_info "Attempting populatefs (shell script syntax): $populatefs_cmd $temp_dir/root-new.ext4 $staging_dir"
+            log_error "populatefs command not executable: $populatefs_cmd"
+            export PATH="$original_path"
+            return 1
+        fi
+        
+        # Check if it's a script or binary
+        local populatefs_type="unknown"
+        if file "$(command -v "$populatefs_cmd" 2>/dev/null || echo "$populatefs_cmd")" 2>/dev/null | grep -q "shell script"; then
+            populatefs_type="script"
+        elif file "$(command -v "$populatefs_cmd" 2>/dev/null || echo "$populatefs_cmd")" 2>/dev/null | grep -q "ELF.*executable"; then
+            populatefs_type="binary"
+        fi
+        log_info "Detected populatefs type: $populatefs_type"
+        
+        # Pre-execution validation
+        log_info "Pre-execution validation:"
+        log_info "  - Staging directory: $staging_dir ($(find "$staging_dir" -type f 2>/dev/null | wc -l) files)"
+        log_info "  - Target filesystem: $temp_dir/root-new.ext4 ($(ls -lh "$temp_dir/root-new.ext4" | awk '{print $5}'))"
+        
+        # Verify staging directory has content
+        local staging_files=$(find "$staging_dir" -type f 2>/dev/null | wc -l)
+        if [[ $staging_files -lt 100 ]]; then
+            log_error "Staging directory has very few files ($staging_files) - population will likely fail"
+            log_error "This indicates that base OS extraction failed"
+            export PATH="$original_path"
+            return 1
+        fi
+        
+        # Try different populatefs syntax based on type and common patterns
+        
+        # Method 1: Standard LibreELEC populatefs syntax (filesystem source_dir)
+        if [[ "$populate_success" != "true" ]]; then
+            log_info "Method 1 - LibreELEC syntax: $populatefs_cmd $temp_dir/root-new.ext4 $staging_dir"
             if "$populatefs_cmd" "$temp_dir/root-new.ext4" "$staging_dir" >"$SAVE_ERROR" 2>&1; then
                 populate_success=true
-                log_success "✓ Populatefs succeeded with shell script syntax"
+                log_success "✓ Populatefs succeeded with LibreELEC syntax (method 1)"
             else
-                log_error "Both populatefs syntaxes failed"
+                log_warning "LibreELEC syntax failed, trying alternative syntaxes..."
                 if [[ -s "$SAVE_ERROR" ]]; then
-                    log_error "Populatefs error output:"
-                    cat "$SAVE_ERROR"
+                    log_info "Method 1 error output:"
+                    head -5 "$SAVE_ERROR" | sed 's/^/    /' || true
                 fi
             fi
+        fi
+        
+        # Method 2: Binary syntax with -U -d flags (source_dir filesystem)
+        if [[ "$populate_success" != "true" ]]; then
+            log_info "Method 2 - Binary syntax with flags: $populatefs_cmd -U -d $staging_dir $temp_dir/root-new.ext4"
+            if "$populatefs_cmd" -U -d "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERROR" 2>&1; then
+                populate_success=true
+                log_success "✓ Populatefs succeeded with binary syntax (method 2)"
+            else
+                log_warning "Binary syntax with -U -d failed..."
+                if [[ -s "$SAVE_ERROR" ]]; then
+                    log_info "Method 2 error output:"
+                    head -5 "$SAVE_ERROR" | sed 's/^/    /' || true
+                fi
+            fi
+        fi
+        
+        # Method 3: Alternative LibreELEC syntax with -d flag (filesystem source_dir)
+        if [[ "$populate_success" != "true" ]]; then
+            log_info "Method 3 - Alternative syntax: $populatefs_cmd -d $temp_dir/root-new.ext4 $staging_dir"
+            if "$populatefs_cmd" -d "$temp_dir/root-new.ext4" "$staging_dir" >"$SAVE_ERROR" 2>&1; then
+                populate_success=true
+                log_success "✓ Populatefs succeeded with alternative syntax (method 3)"
+            else
+                log_warning "Alternative syntax failed..."
+                if [[ -s "$SAVE_ERROR" ]]; then
+                    log_info "Method 3 error output:"
+                    head -5 "$SAVE_ERROR" | sed 's/^/    /' || true
+                fi
+            fi
+        fi
+        
+        # Method 4: Help-based syntax detection
+        if [[ "$populate_success" != "true" ]]; then
+            log_info "Method 4 - Attempting to detect syntax from help output"
+            local help_output
+            help_output=$("$populatefs_cmd" --help 2>&1 || "$populatefs_cmd" -h 2>&1 || echo "No help available")
+            log_info "Help output preview:"
+            echo "$help_output" | head -3 | sed 's/^/    /' || true
+            
+            # Try syntax based on help patterns
+            if echo "$help_output" | grep -q "\-U.*\-d"; then
+                log_info "Help suggests -U -d syntax, trying: $populatefs_cmd -U -d $temp_dir/root-new.ext4 $staging_dir"
+                if "$populatefs_cmd" -U -d "$temp_dir/root-new.ext4" "$staging_dir" >"$SAVE_ERROR" 2>&1; then
+                    populate_success=true
+                    log_success "✓ Populatefs succeeded with help-guided syntax (method 4)"
+                fi
+            fi
+        fi
+        
+        # If all methods failed, show comprehensive error information
+        if [[ "$populate_success" != "true" ]]; then
+            log_error "All populatefs syntaxes failed. Comprehensive error analysis:"
+            log_error "Tool info: $populatefs_cmd (type: $populatefs_type)"
+            log_error "Tool version info:"
+            "$populatefs_cmd" --version 2>&1 | head -2 | sed 's/^/    /' || echo "    No version info available"
+            
+            if [[ -s "$SAVE_ERROR" ]]; then
+                log_error "Last error output (full):"
+                cat "$SAVE_ERROR" | sed 's/^/    /'
+            fi
+            
+            # Check if it might be a different tool with the same name
+            log_error "Tool analysis:"
+            which "$populatefs_cmd" 2>/dev/null | sed 's/^/    Tool path: /' || echo "    Tool not in PATH"
+            file "$(command -v "$populatefs_cmd" 2>/dev/null || echo "$populatefs_cmd")" 2>/dev/null | sed 's/^/    Tool type: /' || echo "    Cannot analyze tool"
         fi
         
         if [[ "$populate_success" == "true" ]]; then
@@ -2069,10 +2195,10 @@ EOF
     # Restore original PATH before error exit
     export PATH="$original_path"
     
-    # REMOVED: e2tools fallback - it causes filesystem corruption
-    log_error "CRITICAL: populatefs is required but failed or not available"
-    log_error "E2tools fallback has been removed due to systematic corruption issues"
-    log_error "Please ensure populatefs is properly built and available"
+    log_error "CRITICAL: populatefs failed - no fallback methods available"
+    log_error "The build system now requires populatefs for reliable operation"
+    log_error "E2tools fallback has been removed due to corruption issues"
+    log_error "Please ensure populatefs is properly installed and configured"
     
     if [[ -s "$SAVE_ERROR" ]]; then
         log_error "Last error output:"
@@ -2082,301 +2208,8 @@ EOF
     return 1
 }
 
-# E2tools fallback function for filesystem population
-populate_filesystem_with_e2tools() {
-    local temp_dir="$1"
-    local staging_dir="$2"
-    
-    log_info "=== E2TOOLS FALLBACK FILESYSTEM POPULATION ==="
-    
-    # Create directories first - using a different approach due to e2tools limitations
-    local dir_count=0
-    local file_count=0
-    local failed_ops=0
-    
-    log_info "Creating essential directories in ext4 filesystem..."
-    # Create critical directories individually without -p flag (e2mkdir doesn't support -p reliably)
-    local essential_dirs=("bin" "boot" "dev" "etc" "home" "lib" "media" "mnt" "opt" "proc" "root" "run" "sbin" "srv" "sys" "tmp" "usr" "var")
-    for dir in "${essential_dirs[@]}"; do
-        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
-            dir_count=$((dir_count + 1))
-        else
-            log_warning "Failed to create essential directory: /$dir"
-            failed_ops=$((failed_ops + 1))
-        fi
-    done
-    
-    # Create nested directories one level at a time
-    local nested_dirs=("boot/firmware" "etc/systemd" "etc/apt" "etc/ssh" "home/soulbox" "home/pi" "opt/soulbox" "usr/bin" "usr/lib" "usr/local" "usr/share" "var/log" "var/tmp" "var/cache")
-    for dir in "${nested_dirs[@]}"; do
-        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
-            dir_count=$((dir_count + 1))
-        else
-            log_warning "Failed to create nested directory: /$dir"
-            failed_ops=$((failed_ops + 1))
-        fi
-    done
-    
-    # Create SoulBox specific directories
-    local soulbox_dirs=("home/soulbox/Videos" "home/soulbox/Music" "home/soulbox/Pictures" "home/soulbox/Downloads" "home/soulbox/.kodi" "home/soulbox/.kodi/userdata" "opt/soulbox/assets" "opt/soulbox/scripts" "opt/soulbox/logs" "etc/systemd/system" "etc/systemd/system/multi-user.target.wants")
-    for dir in "${soulbox_dirs[@]}"; do
-        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
-            dir_count=$((dir_count + 1))
-        else
-            log_warning "Failed to create SoulBox directory: /$dir"
-            failed_ops=$((failed_ops + 1))
-        fi
-    done
-    
-    log_success "Created $dir_count directories (failed: $failed_ops)"
-    
-    # Copy files from staging directory
-    log_info "Copying files from staging directory to ext4 filesystem..."
-    failed_ops=0
-    if [[ -d "$staging_dir" ]]; then
-        while IFS= read -r -d '' file; do
-            rel_path="${file#$staging_dir}"
-            if [[ -n "$rel_path" && "$rel_path" != "/.please_resize_me" ]]; then
-                if e2cp "$file" "$temp_dir/root-new.ext4:$rel_path" 2>/dev/null; then
-                    file_count=$((file_count + 1))
-                else
-                    # Only log warnings for important files
-                    if [[ "$rel_path" == "/lib/modules/"* || "$rel_path" == "/bin/"* || "$rel_path" == "/sbin/"* ]]; then
-                        log_warning "Failed to copy important file: $rel_path"
-                    fi
-                    failed_ops=$((failed_ops + 1))
-                fi
-            fi
-        done < <(find "$staging_dir" -type f -print0)
-        log_success "Copied $file_count files from staging (failed: $failed_ops)"
-    else
-        log_warning "Staging directory not found - using minimal content"
-    fi
-    
-    # Handle symbolic links workaround - create them in first-boot script
-    log_info "Processing symbolic links from staging..."
-    local link_count=0
-    local symlink_commands=""
-    if [[ -d "$staging_dir" ]]; then
-        while IFS= read -r -d '' link; do
-            rel_path="${link#$staging_dir}"
-            target=$(readlink "$link" 2>/dev/null || echo "")
-            if [[ -n "$target" && -n "$rel_path" ]]; then
-                log_info "Creating symlink workaround for: $rel_path -> $target"
-                # Add command to create symlink during first boot
-                symlink_commands+="ln -sf '$target' '$rel_path'\n"
-                link_count=$((link_count + 1))
-            fi
-        done < <(find "$staging_dir" -type l -print0 2>/dev/null)
-        
-        if [[ $link_count -gt 0 ]]; then
-            log_info "Creating symlink restoration script for $link_count links"
-            # Create a script to restore symlinks on first boot
-            mkdir -p "$staging_dir/opt/soulbox"
-            cat > "$staging_dir/opt/soulbox/restore-symlinks.sh" << EOF
-#!/bin/bash
-# SoulBox Symlink Restoration Script
-set -e
-
-echo "Restoring symbolic links..."
-${symlink_commands}
-echo "Symbolic links restored successfully"
-EOF
-            chmod +x "$staging_dir/opt/soulbox/restore-symlinks.sh"
-            
-            # Copy the symlink script to filesystem
-            e2cp "$staging_dir/opt/soulbox/restore-symlinks.sh" "$temp_dir/root-new.ext4:/opt/soulbox/restore-symlinks.sh" 2>/dev/null
-        fi
-    fi
-    
-    # Final verification
-    log_info "Verifying populated filesystem..."
-    if e2ls "$temp_dir/root-new.ext4:/" >/dev/null 2>&1; then
-        local root_items=$(e2ls "$temp_dir/root-new.ext4:/" 2>/dev/null | wc -l || echo "0")
-        log_success "E2tools fallback completed - $root_items items in root filesystem"
-    else
-        log_error "E2tools filesystem verification failed"
-        return 1
-    fi
-    
-    # Create essential system files (fallback if extraction failed)
-    log_info "Ensuring essential system files exist..."
-    if [[ ! -f "$temp_dir/root-content/etc/passwd" ]]; then
-        cat > "$temp_dir/root-content/etc/passwd" << 'EOF'
-root:x:0:0:root:/root:/bin/bash
-pi:x:1000:1000:Raspberry Pi User,,,:/home/pi:/bin/bash
-EOF
-    fi
-    
-    if [[ ! -f "$temp_dir/root-content/etc/group" ]]; then
-        cat > "$temp_dir/root-content/etc/group" << 'EOF'
-root:x:0:
-pi:x:1000:
-EOF
-    fi
-    
-    if [[ ! -f "$temp_dir/root-content/etc/shadow" ]]; then
-        cat > "$temp_dir/root-content/etc/shadow" << 'EOF'
-root:*:19000:0:99999:7:::
-pi:*:19000:0:99999:7:::
-EOF
-    fi
-    
-    if [[ ! -f "$temp_dir/root-content/etc/fstab" ]]; then
-        cat > "$temp_dir/root-content/etc/fstab" << 'EOF'
-proc            /proc           proc    defaults          0       0
-LABEL=SOULBOX  /boot/firmware  vfat    defaults          0       2
-LABEL=soulbox-root /               ext4    defaults,noatime  0       1
-EOF
-    fi
-    
-    # Ensure critical shell binaries exist
-    if [[ ! -f "$temp_dir/root-content/bin/sh" ]]; then
-        log_info "Creating /bin/sh fallback (copying bash)"
-        if [[ -f "$temp_dir/root-content/bin/bash" ]]; then
-            cp "$temp_dir/root-content/bin/bash" "$temp_dir/root-content/bin/sh"
-        else
-            log_warning "No bash available for /bin/sh fallback - creating minimal script"
-            cat > "$temp_dir/root-content/bin/sh" << 'EOF'
-#!/bin/dash
-# Minimal sh fallback for SoulBox - will be replaced during first boot
-exec "$@"
-EOF
-            chmod +x "$temp_dir/root-content/bin/sh"
-        fi
-    fi
-    
-    # Create home directories
-    mkdir -p "$temp_dir/root-content/home/pi"
-    mkdir -p "$temp_dir/root-content/root"
-    
-    log_success "Essential system files verified"
-    
-    # Verify filesystem before populating
-    if [[ ! -f "$temp_dir/root-new.ext4" ]]; then
-        log_error "Root filesystem image missing: $temp_dir/root-new.ext4"
-        return 1
-    fi
-    
-    # Test e2tools functionality
-    log_info "Testing e2tools functionality..."
-    if e2ls "$temp_dir/root-new.ext4:" >/dev/null 2>&1; then
-        log_success "e2tools can access the filesystem"
-    else
-        log_error "e2tools cannot access the filesystem - this will cause failure"
-        return 1
-    fi
-    
-    # Populate the ext4 filesystem using e2cp
-    log_info "Populating root filesystem with e2tools..."
-    
-    # Create directories first - using a different approach due to e2tools limitations
-    local dir_count=0
-    local file_count=0
-    local failed_ops=0
-    
-    log_info "Creating essential directories in ext4 filesystem..."
-    # Create critical directories individually without -p flag (e2mkdir doesn't support -p reliably)
-    local essential_dirs=("bin" "boot" "dev" "etc" "home" "lib" "media" "mnt" "opt" "proc" "root" "run" "sbin" "srv" "sys" "tmp" "usr" "var")
-    for dir in "${essential_dirs[@]}"; do
-        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
-            dir_count=$((dir_count + 1))
-        else
-            log_warning "Failed to create essential directory: /$dir"
-            failed_ops=$((failed_ops + 1))
-        fi
-    done
-    
-    # Create nested directories one level at a time
-    local nested_dirs=("boot/firmware" "etc/systemd" "etc/apt" "etc/ssh" "home/soulbox" "home/pi" "opt/soulbox" "usr/bin" "usr/lib" "usr/local" "usr/share" "var/log" "var/tmp" "var/cache")
-    for dir in "${nested_dirs[@]}"; do
-        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
-            dir_count=$((dir_count + 1))
-        else
-            log_warning "Failed to create nested directory: /$dir"
-            failed_ops=$((failed_ops + 1))
-        fi
-    done
-    
-    # Create SoulBox specific directories
-    local soulbox_dirs=("home/soulbox/Videos" "home/soulbox/Music" "home/soulbox/Pictures" "home/soulbox/Downloads" "home/soulbox/.kodi" "home/soulbox/.kodi/userdata" "opt/soulbox/assets" "opt/soulbox/scripts" "opt/soulbox/logs" "etc/systemd/system" "etc/systemd/system/multi-user.target.wants")
-    for dir in "${soulbox_dirs[@]}"; do
-        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
-            dir_count=$((dir_count + 1))
-        else
-            log_warning "Failed to create SoulBox directory: /$dir"
-            failed_ops=$((failed_ops + 1))
-        fi
-    done
-    
-    log_success "Created $dir_count directories (failed: $failed_ops)"
-    
-    # Copy files
-    log_info "Copying files to ext4 filesystem..."
-    failed_ops=0
-    while IFS= read -r -d '' file; do
-        rel_path="${file#$temp_dir/root-content}"
-        if [[ -n "$rel_path" ]]; then
-            if e2cp "$file" "$temp_dir/root-new.ext4:$rel_path" 2>/dev/null; then
-                file_count=$((file_count + 1))
-            else
-                log_warning "Failed to copy: $rel_path"
-                failed_ops=$((failed_ops + 1))
-            fi
-        fi
-    done < <(find "$temp_dir/root-content" -type f -print0)
-    
-    log_success "Copied $file_count files (failed: $failed_ops)"
-    
-    # Handle symbolic links workaround - create them in first-boot script
-    log_info "Processing symbolic links..."
-    local link_count=0
-    local symlink_commands=""
-    while IFS= read -r -d '' link; do
-        rel_path="${link#$temp_dir/root-content}"
-        target=$(readlink "$link")
-        log_info "Creating symlink workaround for: $rel_path -> $target"
-        # Add command to create symlink during first boot
-        symlink_commands+="ln -sf '$target' '$rel_path'\n"
-        link_count=$((link_count + 1))
-    done < <(find "$temp_dir/root-content" -type l -print0)
-    
-    if [[ $link_count -gt 0 ]]; then
-        log_info "Creating symlink restoration script for $link_count links"
-        # Create a script to restore symlinks on first boot
-        cat > "$temp_dir/root-content/opt/soulbox/restore-symlinks.sh" << EOF
-#!/bin/bash
-# SoulBox Symlink Restoration Script
-set -e
-
-echo "Restoring symbolic links..."
-${symlink_commands}
-echo "Symbolic links restored successfully"
-EOF
-        chmod +x "$temp_dir/root-content/opt/soulbox/restore-symlinks.sh"
-        
-        # Update first-boot script to run symlink restoration
-        sed -i '/echo "$(date): Starting SoulBox first boot setup..."/a\
-# Restore symbolic links that e2tools could not create\
-if [[ -f "/opt/soulbox/restore-symlinks.sh" ]]; then\
-    echo "Restoring symbolic links..."\
-    /opt/soulbox/restore-symlinks.sh\
-    rm -f /opt/soulbox/restore-symlinks.sh\
-fi' "$temp_dir/root-content/opt/soulbox/first-boot-setup.sh"
-    fi
-    
-    # Final verification
-    log_info "Verifying populated filesystem..."
-    if e2ls "$temp_dir/root-new.ext4:/" >/dev/null 2>&1; then
-        local root_items=$(e2ls "$temp_dir/root-new.ext4:/" 2>/dev/null | wc -l || echo "0")
-        log_success "Filesystem populated successfully - $root_items items in root"
-    else
-        log_error "Filesystem verification failed"
-        return 1
-    fi
-    
-    log_success "Filesystem customization complete"
-}
+# Note: e2tools functions removed - build system now requires populatefs for reliability
+# This ensures consistent, corruption-free filesystem population
 
 # Function for cleanup
 cleanup() {
