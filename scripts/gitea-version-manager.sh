@@ -254,10 +254,11 @@ upload_release_asset() {
     if [[ -n "$GITEA_TOKEN" ]]; then
         log_info "Uploading to: $upload_url"
         local response
+        # Use proper multipart form data without conflicting Content-Type header
         response=$(curl -s -X POST "$upload_url" \
             -H "Authorization: token $GITEA_TOKEN" \
-            -H "Content-Type: application/octet-stream" \
-            -F "attachment=@${file_path};filename=${filename}" 2>&1)
+            -F "attachment=@${file_path}" \
+            -F "name=${filename}" 2>&1)
         local exit_code=$?
         
         if [[ $exit_code -eq 0 ]]; then
