@@ -1421,8 +1421,8 @@ extract_with_debugfs_recursive() {
         [[ -z "$line" ]] && continue
         
         # Parse debugfs ls -l output format
-        # Format: permissions links owner group size month day time/year name
-        local perms=$(echo "$line" | awk '{print $1}')
+        # Format: inode permissions links owner group size month day time/year name
+        local perms=$(echo "$line" | awk '{print $2}')
         local name=$(echo "$line" | awk '{print $NF}')
         
         [[ "$name" == "." || "$name" == ".." ]] && continue
