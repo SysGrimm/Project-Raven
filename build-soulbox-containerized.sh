@@ -1509,15 +1509,29 @@ extract_with_debugfs_recursive() {
                 fi
                 
                 # Check if the target is a directory and extract it
+                log_info "Checking if symlink target '$target_full_path' is a directory..."
                 local target_check_output
-                target_check_output=$(echo "ls -l $target_full_path" | debugfs "$filesystem" 2>/dev/null | head -1)
-                if [[ "$target_check_output" =~ ^[[:space:]]*[0-9]+[[:space:]]+40755 ]]; then
-                    log_info "Symlink target $target_full_path is a directory - extracting contents"
+                target_check_output=$(echo "stat $target_full_path" | debugfs "$filesystem" 2>/dev/null)
+                
+                # Debug the stat output to understand what we get
+                log_info "DEBUG: stat output for target '$target_full_path': '$target_check_output'"
+                
+                # Check if it's a directory by looking for "Type: directory" in stat output
+                if [[ "$target_check_output" =~ Type:[[:space:]]*directory ]]; then
+                    log_info "✓ Symlink target '$target_full_path' is a directory - extracting contents"
+                    
+                    # Create the target directory in staging if it doesn't exist
+                    mkdir -p "$staging_dir$target_full_path"
+                    
+                    # Extract the target directory contents recursively
                     if extract_with_debugfs_recursive "$filesystem" "$staging_dir" "$target_full_path" $((current_depth + 1)); then
+                        log_info "✓ Successfully extracted contents of symlink target: $target_full_path"
                         symlinks_processed=$((symlinks_processed + 1))
+                    else
+                        log_warning "✗ Failed to extract contents of symlink target: $target_full_path"
                     fi
                 else
-                    log_info "Symlink target $target_full_path is not a directory or doesn't exist"
+                    log_info "Symlink target '$target_full_path' is not a directory or doesn't exist"
                     symlinks_processed=$((symlinks_processed + 1))
                 fi
             else
