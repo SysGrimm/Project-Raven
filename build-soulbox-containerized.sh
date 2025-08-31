@@ -1348,32 +1348,66 @@ handle_debugfs_symlink() {
     local filesystem="$1"
     local symlink_path="$2"
     
-    # Use debugfs ls -l to get symlink info (dump doesn't work for symlinks)
-    local ls_output
-    ls_output=$(echo "ls -l $symlink_path" | debugfs "$filesystem" 2>/dev/null | grep -v "debugfs:" | head -1)
+    # Debug: Try multiple debugfs approaches to read symlink
+    local ls_output stat_output
     
+    # Method 1: Use debugfs ls -l (should work for symlinks in directory listings)
+    ls_output=$(echo "ls -l $symlink_path" | debugfs "$filesystem" 2>&1)
+    
+    # Method 2: Use debugfs stat command (more detailed info)
+    stat_output=$(echo "stat $symlink_path" | debugfs "$filesystem" 2>&1)
+    
+    # Debug output to understand what we're getting
+    log_info "DEBUG: ls_output for $symlink_path: '$ls_output'"
+    log_info "DEBUG: stat_output for $symlink_path: '$stat_output'"
+    
+    # Try to extract target from ls output first
     if [[ -n "$ls_output" ]]; then
-        # Parse the ls -l output to extract symlink target after the ->
-        # Format: inode perms links owner group size date time name -> target
-        if [[ "$ls_output" =~ -\>[[:space:]]*([^[:space:]].*)$ ]]; then
-            # Extract and clean the target path
+        local clean_ls=$(echo "$ls_output" | grep -v "debugfs:" | head -1)
+        if [[ -n "$clean_ls" && "$clean_ls" =~ -\>[[:space:]]*([^[:space:]].*)$ ]]; then
             local target="${BASH_REMATCH[1]}"
-            # Remove any trailing whitespace or special characters
             echo "$target" | sed 's/[[:space:]]*$//' | tr -d '\0'
-        else
-            # Alternative parsing: try to find -> pattern anywhere in the line
-            if [[ "$ls_output" =~ -\>.*([^[:space:]]+) ]]; then
-                local target=$(echo "$ls_output" | sed 's/.*->[[:space:]]*//' | awk '{print $1}')
-                echo "$target" | tr -d '\0'
-            else
-                log_warning "Could not parse symlink target from: $ls_output"
-                echo ""
-            fi
+            return
         fi
-    else
-        log_warning "Could not get symlink info for $symlink_path"
-        echo ""
     fi
+    
+    # Try to extract target from stat output
+    if [[ -n "$stat_output" ]]; then
+        # Look for "Fast link dest:" line in stat output
+        if [[ "$stat_output" =~ Fast[[:space:]]+link[[:space:]]+dest:[[:space:]]*(.+) ]]; then
+            local target="${BASH_REMATCH[1]}"
+            echo "$target" | sed 's/[[:space:]]*$//' | tr -d '\0'
+            return
+        fi
+        
+        # Alternative: look for symlink target in any line containing ->
+        local target_line=$(echo "$stat_output" | grep -E '->.*' | head -1)
+        if [[ -n "$target_line" && "$target_line" =~ -\>[[:space:]]*([^[:space:]].*)$ ]]; then
+            local target="${BASH_REMATCH[1]}"
+            echo "$target" | sed 's/[[:space:]]*$//' | tr -d '\0'
+            return
+        fi
+    fi
+    
+    # Method 3: Hardcoded fallback for common Pi OS symlinks
+    case "$symlink_path" in
+        "/bin")
+            echo "usr/bin"
+            return
+            ;;
+        "/lib")
+            echo "usr/lib"
+            return
+            ;;
+        "/sbin")
+            echo "usr/sbin"
+            return
+            ;;
+        *)
+            log_warning "Could not determine symlink target for $symlink_path"
+            echo ""
+            ;;
+    esac
 }
 
 # Helper function for recursive debugfs extraction
