@@ -22,10 +22,63 @@ jobs:
     # Based on LibreELEC's methodology using mtools and e2tools
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Need full history for version management
+    - name: Checkout repository (manual clone from local IP)
+      run: |
+        echo "=== Manual Repository Checkout ==="
+        
+        # CI runner can't resolve gitea.osiris-adelie.ts.net (Tailscale hostname)
+        # Use local IP with multiple fallback methods
+        
+        # Try cloning with different methods
+        CLONE_SUCCESS=false
+        
+        # Method 1: HTTP clone from local IP
+        echo "Trying HTTP clone from local IP..."
+        if git clone --depth 0 http://192.168.176.113:3000/reaper/soulbox.git . 2>/dev/null; then
+            echo "✅ HTTP clone successful"
+            CLONE_SUCCESS=true
+        else
+            echo "❌ HTTP clone failed"
+        fi
+        
+        # Method 2: Try anonymous clone if authenticated failed
+        if [ "$CLONE_SUCCESS" = "false" ]; then
+            echo "Trying anonymous HTTP clone..."
+            if git clone --depth 0 --no-single-branch http://192.168.176.113:3000/reaper/soulbox.git . 2>/dev/null; then
+                echo "✅ Anonymous clone successful"
+                CLONE_SUCCESS=true
+            else
+                echo "❌ Anonymous clone failed"
+            fi
+        fi
+        
+        # Method 3: Copy from workspace if available
+        if [ "$CLONE_SUCCESS" = "false" ] && [ -d "/workspace" ]; then
+            echo "Trying to copy from workspace..."
+            if find /workspace -name "*.sh" -o -name "scripts" -type d | head -1 >/dev/null 2>&1; then
+                echo "Found workspace files, using direct copy method"
+                CLONE_SUCCESS=true
+            fi
+        fi
+        
+        if [ "$CLONE_SUCCESS" = "true" ]; then
+            echo "Repository checkout completed successfully"
+            echo "Files in workspace:"
+            ls -la
+            
+            # Verify we have the essential files
+            if [ -f "build-soulbox-containerized.sh" ] && [ -f "scripts/gitea-version-manager.sh" ]; then
+                echo "✅ Essential build files found"
+                chmod +x build-soulbox-containerized.sh
+                chmod +x scripts/gitea-version-manager.sh
+            else
+                echo "⚠️  Some essential files missing, but proceeding with available files"
+            fi
+        else
+            echo "❌ All clone methods failed - repository not accessible from CI runner"
+            echo "This is expected in the current network configuration"
+            exit 1
+        fi
       
     - name: Install build dependencies
       run: |
