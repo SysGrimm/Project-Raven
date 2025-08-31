@@ -42,8 +42,9 @@ query_gitea_releases() {
 
 # Function to get latest released version from Gitea
 get_latest_gitea_version() {
+    local silent_mode="$1"
     local releases_json
-    releases_json=$(query_gitea_releases)
+    releases_json=$(query_gitea_releases "$silent_mode")
     
     # Parse latest version from JSON response
     local latest_version
@@ -138,13 +139,16 @@ determine_increment_type() {
 # Function to get next version based on Gitea releases
 get_next_version() {
     local increment_type="$1"
+    local silent_mode="$2"
     local latest_version
     
     # Get latest version from Gitea first, fallback to git tags
-    latest_version=$(get_latest_gitea_version)
+    latest_version=$(get_latest_gitea_version "$silent_mode")
     
-    # Log to stderr to avoid interfering with version output
-    log_info "Current version: $latest_version" >&2
+    # Only log if not in silent mode
+    if [[ "$silent_mode" != "silent" ]]; then
+        log_info "Current version: $latest_version" >&2
+    fi
     
     # Auto-determine increment type if not specified
     if [[ -z "$increment_type" ]]; then
@@ -154,9 +158,11 @@ get_next_version() {
     local next_version
     next_version=$(increment_version "$latest_version" "$increment_type")
     
-    # Log to stderr to avoid interfering with version output
-    log_info "Increment type: $increment_type" >&2
-    log_info "Next version: $next_version" >&2
+    # Only log if not in silent mode
+    if [[ "$silent_mode" != "silent" ]]; then
+        log_info "Increment type: $increment_type" >&2
+        log_info "Next version: $next_version" >&2
+    fi
     
     # Only output the version to stdout (clean single line)
     echo "$next_version"
@@ -326,7 +332,7 @@ main() {
             get_next_version "$increment_type"
             ;;
         "auto")
-            get_next_version "$increment_type"
+            get_next_version "$increment_type" "silent"
             ;;
         "create-release")
             local version="$increment_type"  # version passed as second arg

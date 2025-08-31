@@ -73,14 +73,12 @@ jobs:
         # Get version using Gitea-based smart versioning
         if [ -f "scripts/gitea-version-manager.sh" ]; then
             echo "Using Gitea-based smart versioning..."
-            # Redirect stderr to see logs but get clean version from stdout
-            VERSION=$(./scripts/gitea-version-manager.sh auto 2>&1 >/tmp/version.out && cat /tmp/version.out || echo "v0.1.0")
-            # Remove any whitespace and newlines
-            VERSION=$(echo "$VERSION" | tr -d '\n\r' | xargs)
+            # Use auto mode which runs silently and only outputs version to stdout
+            VERSION=$(./scripts/gitea-version-manager.sh auto || echo "v0.1.0")
+            echo "Generated version: $VERSION"
         elif [ -f "scripts/version-manager.sh" ]; then
             echo "Using git tag fallback versioning..."
             VERSION=$(./scripts/version-manager.sh auto 2>/dev/null | tail -1 || echo "v0.1.0")
-            VERSION=$(echo "$VERSION" | tr -d '\n\r' | xargs)
         else
             VERSION="v0.1.0"
         fi
