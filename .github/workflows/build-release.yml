@@ -26,8 +26,8 @@ jobs:
       run: |
         echo "=== Manual Git Checkout ==="
         cd /tmp
-        # Test: Try public IP if port forwarding is set up (external port 3000 -> 192.168.176.113:3000)
-        git clone http://68.13.47.218:3000/reaper/soulbox.git soulbox-build
+        # Use local IP since runner is on same network
+        git clone http://192.168.176.113:3000/reaper/soulbox.git soulbox-build
         cd soulbox-build
         echo "Repository cloned successfully"
         cp -r . $GITHUB_WORKSPACE/
