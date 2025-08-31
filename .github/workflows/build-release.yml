@@ -36,12 +36,17 @@ jobs:
           e2tools \
           dosfstools \
           e2fsprogs \
-          e2fsprogs-dev \
+          libext2fs-dev \
+          libcom-err-dev \
+          libuuid1 \
+          uuid-dev \
           build-essential \
           autotools-dev \
           autoconf \
           automake \
           pkg-config \
+          gettext \
+          texinfo \
           wget \
           curl \
           xz-utils \
