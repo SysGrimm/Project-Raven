@@ -1587,7 +1587,7 @@ extract_with_debugfs_recursive() {
     local current_depth="${4:-0}"
     
     # Prevent infinite recursion and limit performance bottlenecks
-    if [[ $current_depth -gt 8 ]]; then
+    if [[ $current_depth -gt 12 ]]; then
         log_warning "Maximum recursion depth reached for $fs_path (performance optimization)"
         return 0
     fi
@@ -1650,12 +1650,12 @@ extract_with_debugfs_recursive() {
     while read -r line; do
         [[ -z "$line" ]] && continue
         
-        # Performance optimization: limit processing in deep directories
-        items_processed=$((items_processed + 1))
-        if [[ $current_depth -gt 3 && $items_processed -gt 100 ]]; then
-            log_info "Limiting extraction in deep directory $fs_path (performance optimization)"
-            break
-        fi
+    # Performance optimization: limit processing in deep directories
+    items_processed=$((items_processed + 1))
+    if [[ $current_depth -gt 5 && $items_processed -gt 500 ]]; then
+        log_info "Limiting extraction in deep directory $fs_path (performance optimization)"
+        break
+    fi
         
         # Parse debugfs ls -l output format
         local perms=$(echo "$line" | awk '{print $2}')
