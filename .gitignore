@@ -1,0 +1,35 @@
+# SoulBox Build System - Git Ignore Rules
+
+# Build artifacts
+build/
+*.img
+*.img.xz
+*.img.gz
+*.img.tar.gz
+*.sha256
+*.log
+
+# Temporary build files
+/containerized-build/
+/tmp/
+.tmp/
+
+# Security - Never commit secrets!
+tailscale-authkey.txt
+*.key
+*.secret
+*.token
+*-auth-*
+*-secret-*
+
+# Development artifacts
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Cache files
+.pi-os-cache
+*.cache

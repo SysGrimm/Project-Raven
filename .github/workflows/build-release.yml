@@ -67,6 +67,8 @@ jobs:
         df -h
     
     - name: Build SoulBox Media Center Image
+      env:
+        TSAUTH: ${{ secrets.TSAUTH }}
       run: |
         echo "=== Building SoulBox Will-o'-Wisp Media Center ==="
         set -e
@@ -87,6 +89,13 @@ jobs:
         
         echo "Building SoulBox $VERSION - Complete Media Center with Kodi & Tailscale"
         echo "Version source: Gitea releases API with automatic increment detection"
+        
+        # Configure Tailscale auth from secret (secure)
+        if [ -n "${TSAUTH:-}" ]; then
+            echo "Tailscale auth key configured from secrets"
+        else
+            echo "No Tailscale auth key provided - manual authentication will be required"
+        fi
         
         # Run container-friendly build (no loop devices needed)
         ./build-soulbox-containerized.sh --version "$VERSION" --clean

@@ -484,16 +484,20 @@ create_root_customizations() {
     mkdir -p "$root_dir/opt/soulbox"/{assets,scripts,logs}
     mkdir -p "$root_dir/home/soulbox"/{Videos,Music,Pictures,Downloads,.kodi/userdata}
     
-    # Create first boot setup script
-    cat > "$root_dir/opt/soulbox/first-boot-setup.sh" << 'EOF'
+    # Create first boot setup script with embedded TSAUTH
+    cat > "$root_dir/opt/soulbox/first-boot-setup.sh" << EOF
 #!/bin/bash
 
 # SoulBox First Boot Setup
 set -e
 
 LOG_FILE="/var/log/soulbox-setup.log"
-exec > >(tee -a $LOG_FILE) 2>&1
+exec > >(tee -a \$LOG_FILE) 2>&1
 
+echo "\$(date): Starting SoulBox first boot setup..."
+
+# Set Tailscale auth key from build-time environment (secure injection)
+export TSAUTH="${TSAUTH:-}"
 echo "$(date): Starting SoulBox first boot setup..."
 
 # Update package lists
@@ -558,6 +562,31 @@ Environment="MESA_LOADER_DRIVER_OVERRIDE=v3d"
 [Install]
 WantedBy=multi-user.target
 KODI_SERVICE
+
+# Configure Tailscale if auth key is available
+if [ -n "${TSAUTH:-}" ]; then
+    echo "Configuring Tailscale with provided auth key..."
+    
+    # Start Tailscale daemon
+    systemctl start tailscaled
+    
+    # Wait for daemon to be ready
+    for i in {1..10}; do
+        if tailscale status >/dev/null 2>&1; then
+            break
+        fi
+        sleep 2
+    done
+    
+    # Configure Tailscale with auth key
+    if tailscale up --auth-key="${TSAUTH}" --accept-routes --ssh; then
+        echo "✅ Tailscale configured successfully"
+    else
+        echo "⚠️ Tailscale configuration failed - manual setup required"
+    fi
+else
+    echo "No Tailscale auth key provided - manual authentication required after boot"
+fi
 
 # Enable services
 systemctl enable kodi-standalone.service
