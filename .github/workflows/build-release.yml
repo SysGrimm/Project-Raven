@@ -39,7 +39,9 @@ jobs:
           wget \
           curl \
           xz-utils \
-          coreutils
+          coreutils \
+          zip \
+          tar
         echo "Dependencies installed successfully"
     
     - name: Verify build tools
@@ -89,11 +91,15 @@ jobs:
         # Run container-friendly build (no loop devices needed)
         ./build-soulbox-containerized.sh --version "$VERSION" --clean
         
-        # Create artifacts directory and copy result
+        # Create artifacts directory and copy all formats
         mkdir -p artifacts
         if [ -f "soulbox-v"*".img" ]; then
-            cp soulbox-v*.img artifacts/
-            cp soulbox-v*.img.sha256 artifacts/
+            # Copy all image formats and checksums
+            cp soulbox-v*.img artifacts/ 2>/dev/null || true
+            cp soulbox-v*.img.zip artifacts/ 2>/dev/null || true
+            cp soulbox-v*.img.tar.gz artifacts/ 2>/dev/null || true
+            cp soulbox-v*.sha256 artifacts/ 2>/dev/null || true
+            
             echo "SoulBox image created successfully!"
             ls -lh artifacts/
             

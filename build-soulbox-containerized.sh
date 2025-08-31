@@ -95,6 +95,8 @@ check_required_tools() {
     command -v xz >/dev/null 2>&1 || missing_tools+=(xz-utils)
     command -v parted >/dev/null 2>&1 || missing_tools+=(parted)
     command -v dd >/dev/null 2>&1 || missing_tools+=(coreutils)
+    command -v zip >/dev/null 2>&1 || missing_tools+=(zip)
+    command -v tar >/dev/null 2>&1 || missing_tools+=(tar)
     
     # Check for filesystem tools
     command -v mcopy >/dev/null 2>&1 || missing_tools+=(mtools)
@@ -568,18 +570,37 @@ build_soulbox_image() {
     dd if="$temp_dir/boot-new.fat" of="$output_image" bs=1M seek=4 conv=notrunc 2>/dev/null
     dd if="$temp_dir/root-new.ext4" of="$output_image" bs=1M seek=$((boot_size + 4)) conv=notrunc 2>/dev/null
     
-    # Generate checksum
+    # Generate multiple formats for different use cases
     cd "$WORK_DIR/output"
-    sha256sum "$(basename "$output_image")" > "$(basename "$output_image").sha256"
+    local base_name="soulbox-v${version_num}"
     
-    log_success "SoulBox image created: $output_image"
-    log_info "Size: $(ls -lh "$output_image" | awk '{print $5}')"
+    # Generate checksums for raw image
+    sha256sum "$(basename "$output_image")" > "${base_name}.img.sha256"
     
-    # Copy to script directory for easy access
+    log_info "Creating compressed image formats..."
+    
+    # Create ZIP format (most compatible with Pi Imager)
+    log_info "Creating ZIP archive..."
+    zip -q "${base_name}.img.zip" "$(basename "$output_image")"
+    sha256sum "${base_name}.img.zip" > "${base_name}.img.zip.sha256"
+    
+    # Create TAR.GZ format (better compression, Linux-friendly)
+    log_info "Creating TAR.GZ archive..."
+    tar -czf "${base_name}.img.tar.gz" "$(basename "$output_image")"
+    sha256sum "${base_name}.img.tar.gz" > "${base_name}.img.tar.gz.sha256"
+    
+    log_success "SoulBox image created in multiple formats:"
+    log_info "Raw IMG: $(ls -lh "$output_image" | awk '{print $5}')"
+    log_info "ZIP: $(ls -lh "${base_name}.img.zip" | awk '{print $5}')"
+    log_info "TAR.GZ: $(ls -lh "${base_name}.img.tar.gz" | awk '{print $5}')"
+    
+    # Copy all formats to script directory for easy access
     cp "$output_image" "$SCRIPT_DIR/"
-    cp "${output_image}.sha256" "$SCRIPT_DIR/"
+    cp "${base_name}.img.zip" "$SCRIPT_DIR/"
+    cp "${base_name}.img.tar.gz" "$SCRIPT_DIR/"
+    cp *.sha256 "$SCRIPT_DIR/"
     
-    log_success "Image copied to: $SCRIPT_DIR/$(basename "$output_image")"
+    log_success "All formats copied to: $SCRIPT_DIR/"
 }
 
 # Function to copy and customize filesystems
@@ -729,9 +750,22 @@ copy_and_customize_filesystems() {
     # Extract critical files from the original Pi OS root filesystem
     log_info "Extracting essential Pi OS files from root partition..."
     local critical_files=(
-        "/etc/passwd" "/etc/group" "/etc/shadow" "/etc/fstab" "/etc/hostname" "/etc/hosts"
-        "/etc/resolv.conf" "/etc/apt/sources.list" "/etc/ssh/sshd_config"
-        "/bin/bash" "/bin/sh" "/usr/bin/systemctl" "/usr/bin/apt" "/usr/bin/dpkg"
+        # System authentication and users
+        "/etc/passwd" "/etc/group" "/etc/shadow" "/etc/gshadow"
+        # System configuration
+        "/etc/fstab" "/etc/hostname" "/etc/hosts" "/etc/resolv.conf"
+        # APT package management
+        "/etc/apt/sources.list" "/etc/apt/trusted.gpg.d" "/etc/apt/preferences"
+        "/var/lib/dpkg/status" "/var/lib/apt/lists"
+        # SSH configuration
+        "/etc/ssh/sshd_config" "/etc/ssh/ssh_config"
+        # Essential binaries
+        "/bin/bash" "/bin/sh" "/bin/ls" "/bin/cp" "/bin/mv" "/bin/rm"
+        "/usr/bin/systemctl" "/usr/bin/apt" "/usr/bin/dpkg" "/usr/bin/wget" "/usr/bin/curl"
+        # System libraries (critical ones)
+        "/lib/systemd/systemd" "/usr/lib/systemd/systemd-logind"
+        # Network configuration
+        "/etc/dhcpcd.conf" "/etc/wpa_supplicant/wpa_supplicant.conf"
     )
     
     local extracted_files=0
@@ -859,18 +893,41 @@ EOF
     
     log_success "Copied $file_count files (failed: $failed_ops)"
     
-    # Handle symbolic links (limited support)
+    # Handle symbolic links workaround - create them in first-boot script
     log_info "Processing symbolic links..."
     local link_count=0
+    local symlink_commands=""
     while IFS= read -r -d '' link; do
         rel_path="${link#$temp_dir/root-content}"
         target=$(readlink "$link")
-        log_warning "Skipping symlink: $rel_path -> $target (e2tools limitation)"
+        log_info "Creating symlink workaround for: $rel_path -> $target"
+        # Add command to create symlink during first boot
+        symlink_commands+="ln -sf '$target' '$rel_path'\n"
         link_count=$((link_count + 1))
     done < <(find "$temp_dir/root-content" -type l -print0)
     
     if [[ $link_count -gt 0 ]]; then
-        log_warning "Skipped $link_count symbolic links due to e2tools limitations"
+        log_info "Creating symlink restoration script for $link_count links"
+        # Create a script to restore symlinks on first boot
+        cat > "$temp_dir/root-content/opt/soulbox/restore-symlinks.sh" << EOF
+#!/bin/bash
+# SoulBox Symlink Restoration Script
+set -e
+
+echo "Restoring symbolic links..."
+${symlink_commands}
+echo "Symbolic links restored successfully"
+EOF
+        chmod +x "$temp_dir/root-content/opt/soulbox/restore-symlinks.sh"
+        
+        # Update first-boot script to run symlink restoration
+        sed -i '/echo "$(date): Starting SoulBox first boot setup..."/a \
+# Restore symbolic links that e2tools couldn'\'t create\
+if [[ -f "/opt/soulbox/restore-symlinks.sh" ]]; then\
+    echo "Restoring symbolic links..."\
+    /opt/soulbox/restore-symlinks.sh\
+    rm -f /opt/soulbox/restore-symlinks.sh\
+fi' "$temp_dir/root-content/opt/soulbox/first-boot-setup.sh"
     fi
     
     # Final verification
