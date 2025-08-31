@@ -688,21 +688,25 @@ build_soulbox_image() {
     
     mkdir -p "$temp_dir"
     
-    # Image size calculations (in MB) - Balanced approach for container space constraints
-    # Container available space: ~1.6GB, need to balance base OS completeness with space limits
-    local boot_size=100   # 100MB sufficient for base boot files
-    local root_size=900   # 900MB - compromise between functionality and container space limits
-    local total_size=$((boot_size + root_size + 25))  # 25MB padding
+    # Image size calculations (in MB) - Conservative sizing for container space constraints
+    # Container available space: ~1.6GB total, but need buffer for temp files, extraction, etc.
+    # After analysis: build #81 failed at ~662MB, so limit to 600MB root for safety
+    local boot_size=80    # 80MB sufficient for base boot files
+    local root_size=600   # 600MB - conservative size that fits container limits
+    local total_size=$((boot_size + root_size + 20))  # 20MB padding
     
     log_info "Image size planning: Boot=${boot_size}MB, Root=${root_size}MB, Total=${total_size}MB"
     
-    # Check available disk space
+    # Check available disk space with safety buffer
+    # Need space for: source image (~2.7GB), extracted filesystems (~2.5GB), 
+    #                 temp files (~600MB), final image (total_size), staging (~500MB)
     local available_space=$(df /workspace --output=avail | tail -1)
-    local required_space=$((total_size * 1024))  # Convert to KB
-    log_info "Disk space check: Available=${available_space}KB, Required=${required_space}KB"
+    local required_space=$((total_size * 2 * 1024))  # 2x final image size for safety buffer
+    log_info "Disk space check: Available=${available_space}KB, Required=${required_space}KB (with safety buffer)"
     
     if [[ $available_space -lt $required_space ]]; then
         log_error "Insufficient disk space! Available: ${available_space}KB, Required: ${required_space}KB"
+        log_error "Container needs at least $((required_space / 1024))MB free space for safe operation"
         return 1
     fi
     log_success "Sufficient disk space available"
