@@ -448,8 +448,8 @@ download_base_image() {
         for url in "${urls[@]}"; do
             log_info "Download attempt $attempt with URL: $url"
             
-            # Download with resume support and progress
-            if curl -L -C - --retry 3 --retry-delay 5 -o "${BASE_IMAGE_NAME}.xz" "$url"; then
+            # Download with timeout and connection limits to prevent hanging
+            if timeout 600 curl -L -C - --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 1800 -o "${BASE_IMAGE_NAME}.xz" "$url"; then
                 log_success "Download completed"
                 download_success=true
                 break 2
