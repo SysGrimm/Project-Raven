@@ -27,7 +27,8 @@ jobs:
         echo "=== Manual Git Checkout ==="
         cd /tmp
         # Use Tailscale IP for CI/CD runners (domain resolution not available)
-        git clone https://100.87.109.59:3000/reaper/soulbox.git soulbox-build
+        # Use HTTP to avoid SSL certificate issues with IP addresses
+        git clone http://100.87.109.59:3000/reaper/soulbox.git soulbox-build
         cd soulbox-build
         echo "Repository cloned successfully"
         cp -r . $GITHUB_WORKSPACE/

@@ -10,8 +10,8 @@ set -e
 if nslookup gitea.osiris-adelie.ts.net >/dev/null 2>&1; then
     GITEA_SERVER="https://gitea.osiris-adelie.ts.net"
 else
-    # Fallback to Tailscale IP for CI/CD runners
-    GITEA_SERVER="https://100.87.109.59:3000"
+    # Fallback to Tailscale IP for CI/CD runners (use HTTP to avoid SSL cert issues)
+    GITEA_SERVER="http://100.87.109.59:3000"
 fi
 GITEA_OWNER="reaper"
 GITEA_REPO="soulbox"
