@@ -1365,7 +1365,7 @@ handle_debugfs_symlink() {
     if [[ -n "$stat_output" ]]; then
         # Look for "Fast link dest:" line in stat output
         local fast_link_line=$(echo "$stat_output" | grep "Fast link dest:" | head -1)
-        if [[ -n "$fast_link_line" && "$fast_link_line" =~ Fast[[:space:]]+link[[:space:]]+dest:[[:space:]]*"([^"]+)" ]]; then
+        if [[ -n "$fast_link_line" && "$fast_link_line" =~ Fast[[:space:]]+link[[:space:]]+dest:[[:space:]]*\"([^\"]+)\" ]]; then
             local target="${BASH_REMATCH[1]}"
             echo "$target"
             return
