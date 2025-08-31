@@ -432,30 +432,77 @@ build_soulbox_image() {
     
     mkdir -p "$temp_dir"
     
-    # Image size calculations (in MB)
-    local boot_size=512
-    local root_size=4096
-    local total_size=$((boot_size + root_size + 100))  # 100MB padding
+    # Image size calculations (in MB) - Use smaller sizes for container compatibility
+    local boot_size=256  # Reduced from 512MB
+    local root_size=2048  # Reduced from 4096MB
+    local total_size=$((boot_size + root_size + 50))  # 50MB padding
+    
+    log_info "Image size planning: Boot=${boot_size}MB, Root=${root_size}MB, Total=${total_size}MB"
+    
+    # Check available disk space
+    local available_space=$(df /workspace --output=avail | tail -1)
+    local required_space=$((total_size * 1024))  # Convert to KB
+    log_info "Disk space check: Available=${available_space}KB, Required=${required_space}KB"
+    
+    if [[ $available_space -lt $required_space ]]; then
+        log_error "Insufficient disk space! Available: ${available_space}KB, Required: ${required_space}KB"
+        return 1
+    fi
+    log_success "Sufficient disk space available"
     
     # Create blank image
     log_info "Creating blank image (${total_size}MB)..."
-    dd if=/dev/zero of="$output_image" bs=1M count=0 seek="$total_size" 2>/dev/null
+    if ! dd if=/dev/zero of="$output_image" bs=1M count=0 seek="$total_size" 2>/dev/null; then
+        log_error "Failed to create blank image file"
+        return 1
+    fi
+    log_success "Blank image created: $(ls -lh "$output_image" | awk '{print $5}')"
     
     # Create partition table
     log_info "Creating partition table..."
-    parted -s "$output_image" mklabel msdos
-    parted -s "$output_image" mkpart primary fat32 1MiB $((boot_size + 1))MiB
-    parted -s "$output_image" mkpart primary ext4 $((boot_size + 1))MiB $((boot_size + root_size + 1))MiB
-    parted -s "$output_image" set 1 boot on
+    if ! parted -s "$output_image" mklabel msdos; then
+        log_error "Failed to create partition table"
+        return 1
+    fi
+    if ! parted -s "$output_image" mkpart primary fat32 1MiB $((boot_size + 1))MiB; then
+        log_error "Failed to create boot partition"
+        return 1
+    fi
+    if ! parted -s "$output_image" mkpart primary ext4 $((boot_size + 1))MiB $((boot_size + root_size + 1))MiB; then
+        log_error "Failed to create root partition"
+        return 1
+    fi
+    if ! parted -s "$output_image" set 1 boot on; then
+        log_error "Failed to set boot flag"
+        return 1
+    fi
+    log_success "Partition table created successfully"
     
     # Create filesystem images
-    log_info "Creating boot filesystem..."
-    dd if=/dev/zero of="$temp_dir/boot-new.fat" bs=1M count="$boot_size" 2>/dev/null
-    mformat -i "$temp_dir/boot-new.fat" -v "SOULBOX" -F ::
+    log_info "Creating boot filesystem (${boot_size}MB)..."
+    if ! dd if=/dev/zero of="$temp_dir/boot-new.fat" bs=1M count="$boot_size" 2>/dev/null; then
+        log_error "Failed to create boot filesystem image"
+        return 1
+    fi
+    if ! mformat -i "$temp_dir/boot-new.fat" -v "SOULBOX" -F ::; then
+        log_error "Failed to format boot filesystem"
+        return 1
+    fi
+    log_success "Boot filesystem created: $(ls -lh "$temp_dir/boot-new.fat" | awk '{print $5}')"
     
-    log_info "Creating root filesystem..."
-    dd if=/dev/zero of="$temp_dir/root-new.ext4" bs=1M count="$root_size" 2>/dev/null
-    mke2fs -F -q -t ext4 -L "soulbox-root" "$temp_dir/root-new.ext4"
+    log_info "Creating root filesystem (${root_size}MB)..."
+    if ! dd if=/dev/zero of="$temp_dir/root-new.ext4" bs=1M count="$root_size" 2>/dev/null; then
+        log_error "Failed to create root filesystem image"
+        return 1
+    fi
+    log_success "Root filesystem image created: $(ls -lh "$temp_dir/root-new.ext4" | awk '{print $5}')"
+    
+    log_info "Formatting root filesystem with ext4..."
+    if ! mke2fs -F -q -t ext4 -L "soulbox-root" "$temp_dir/root-new.ext4" 2>&1; then
+        log_error "mke2fs failed to format root filesystem"
+        return 1
+    fi
+    log_success "Root filesystem formatted successfully"
     
     # Copy Pi OS content and add SoulBox customizations
     log_info "=== PRE-FUNCTION DIAGNOSTICS ==="
