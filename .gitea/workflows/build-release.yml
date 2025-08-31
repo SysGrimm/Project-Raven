@@ -99,75 +99,75 @@ jobs:
             # Create minimal version manager script  
             echo "Creating minimal version manager..."
             mkdir -p scripts
-            cat > scripts/gitea-version-manager.sh << 'EOF'
-#!/bin/bash
-
-# Minimal Gitea version manager for CI testing
-# This will attempt real API calls but gracefully handle failures
-
-set -e
-
-# Configuration with local IP fallback
-if nslookup gitea.osiris-adelie.ts.net >/dev/null 2>&1; then
-    GITEA_SERVER="https://gitea.osiris-adelie.ts.net"
-else
-    GITEA_SERVER="http://192.168.176.113:3000"
-fi
-GITEA_OWNER="reaper"
-GITEA_REPO="soulbox"
-GITEA_API_URL="${GITEA_SERVER}/api/v1/repos/${GITEA_OWNER}/${GITEA_REPO}"
-GITEA_TOKEN="${GITOKEN:-}"
-
-log_info() { echo "[INFO] $1"; }
-log_success() { echo "[SUCCESS] $1"; }
-log_warning() { echo "[WARNING] $1"; }
-log_error() { echo "[ERROR] $1"; }
-
-case "$1" in
-    "auto")
-        # Generate version based on timestamp
-        echo "v0.2.$(date +%s)"
-        ;;
-    "create-release")
-        VERSION="$2"
-        IMAGE_FILE="$3"
-        CHECKSUM_FILE="$4"
+            cat > scripts/gitea-version-manager.sh << 'VERSIONSCRIPT'
+        #!/bin/bash
         
-        log_info "Attempting to create Gitea release: $VERSION"
-        log_info "Server: $GITEA_SERVER"
+        # Minimal Gitea version manager for CI testing
+        # This will attempt real API calls but gracefully handle failures
         
-        # Try to create release via API
-        if [[ -n "$GITEA_TOKEN" ]] && command -v curl >/dev/null 2>&1; then
-            RELEASE_DATA='{"tag_name":"'$VERSION'","name":"SoulBox Will-o'-Wisp '$VERSION'","body":"Automated release from CI build\n\nFeatures:\n- Kodi Media Center\n- Tailscale VPN\n- Raspberry Pi 5 optimizations","draft":false,"prerelease":false}'
-            
-            RESPONSE=$(curl -s -X POST "${GITEA_API_URL}/releases" \
-                -H "Authorization: token $GITEA_TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "$RELEASE_DATA" 2>/dev/null || echo '{"message":"API call failed"}')
-            
-            if echo "$RESPONSE" | grep -q '"id"'; then
-                log_success "✅ Gitea release created successfully!"
-                log_success "🔗 Release URL: $GITEA_SERVER/$GITEA_OWNER/$GITEA_REPO/releases/tag/$VERSION"
-                exit 0
-            else
-                log_warning "Failed to create Gitea release via API"
-                log_info "Response: $RESPONSE"
-                exit 1
-            fi
+        set -e
+        
+        # Configuration with local IP fallback
+        if nslookup gitea.osiris-adelie.ts.net >/dev/null 2>&1; then
+            GITEA_SERVER="https://gitea.osiris-adelie.ts.net"
         else
-            log_warning "No Gitea token or curl not available - cannot create release"
-            log_info "Would create release: $VERSION"
-            log_info "Image: $IMAGE_FILE"
-            log_info "Checksum: $CHECKSUM_FILE"
-            exit 1
+            GITEA_SERVER="http://192.168.176.113:3000"
         fi
-        ;;
-    *)
-        echo "Minimal Gitea Version Manager - Usage: $0 {auto|create-release VERSION IMAGE_FILE CHECKSUM_FILE}"
-        exit 1
-        ;;
-esac
-EOF
+        GITEA_OWNER="reaper"
+        GITEA_REPO="soulbox"
+        GITEA_API_URL="\${GITEA_SERVER}/api/v1/repos/\${GITEA_OWNER}/\${GITEA_REPO}"
+        GITEA_TOKEN="\${GITOKEN:-}"
+        
+        log_info() { echo "[INFO] \$1"; }
+        log_success() { echo "[SUCCESS] \$1"; }
+        log_warning() { echo "[WARNING] \$1"; }
+        log_error() { echo "[ERROR] \$1"; }
+        
+        case "\$1" in
+            "auto")
+                # Generate version based on timestamp
+                echo "v0.2.\$(date +%s)"
+                ;;
+            "create-release")
+                VERSION="\$2"
+                IMAGE_FILE="\$3"
+                CHECKSUM_FILE="\$4"
+                
+                log_info "Attempting to create Gitea release: \$VERSION"
+                log_info "Server: \$GITEA_SERVER"
+                
+                # Try to create release via API
+                if [[ -n "\$GITEA_TOKEN" ]] && command -v curl >/dev/null 2>&1; then
+                    RELEASE_DATA='{"tag_name":"'\$VERSION'","name":"SoulBox Will-o'-Wisp '\$VERSION'","body":"Automated release from CI build\\n\\nFeatures:\\n- Kodi Media Center\\n- Tailscale VPN\\n- Raspberry Pi 5 optimizations","draft":false,"prerelease":false}'
+                    
+                    RESPONSE=\$(curl -s -X POST "\${GITEA_API_URL}/releases" \\
+                        -H "Authorization: token \$GITEA_TOKEN" \\
+                        -H "Content-Type: application/json" \\
+                        -d "\$RELEASE_DATA" 2>/dev/null || echo '{"message":"API call failed"}')
+                    
+                    if echo "\$RESPONSE" | grep -q '"id"'; then
+                        log_success "✅ Gitea release created successfully!"
+                        log_success "🔗 Release URL: \$GITEA_SERVER/\$GITEA_OWNER/\$GITEA_REPO/releases/tag/\$VERSION"
+                        exit 0
+                    else
+                        log_warning "Failed to create Gitea release via API"
+                        log_info "Response: \$RESPONSE"
+                        exit 1
+                    fi
+                else
+                    log_warning "No Gitea token or curl not available - cannot create release"
+                    log_info "Would create release: \$VERSION"
+                    log_info "Image: \$IMAGE_FILE"
+                    log_info "Checksum: \$CHECKSUM_FILE"
+                    exit 1
+                fi
+                ;;
+            *)
+                echo "Minimal Gitea Version Manager - Usage: \$0 {auto|create-release VERSION IMAGE_FILE CHECKSUM_FILE}"
+                exit 1
+                ;;
+        esac
+        VERSIONSCRIPT
             
             chmod +x scripts/gitea-version-manager.sh
             
