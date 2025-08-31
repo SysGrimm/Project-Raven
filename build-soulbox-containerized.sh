@@ -1357,34 +1357,33 @@ handle_debugfs_symlink() {
     # Method 2: Use debugfs stat command (more detailed info)
     stat_output=$(echo "stat $symlink_path" | debugfs "$filesystem" 2>&1)
     
-    # Debug output to understand what we're getting
-    log_info "DEBUG: ls_output for $symlink_path: '$ls_output'"
-    log_info "DEBUG: stat_output for $symlink_path: '$stat_output'"
+    # Clean debug output to stderr (avoid color code pollution)
+    echo "[DEBUG] ls_output for $symlink_path: '$ls_output'" >&2
+    echo "[DEBUG] stat_output for $symlink_path: '$stat_output'" >&2
     
-    # Try to extract target from ls output first
-    if [[ -n "$ls_output" ]]; then
-        local clean_ls=$(echo "$ls_output" | grep -v "debugfs:" | head -1)
-        if [[ -n "$clean_ls" && "$clean_ls" =~ -\>[[:space:]]*([^[:space:]].*)$ ]]; then
+    # Try to extract target from stat output first (most reliable)
+    if [[ -n "$stat_output" ]]; then
+        # Look for "Fast link dest:" line in stat output
+        local fast_link_line=$(echo "$stat_output" | grep "Fast link dest:" | head -1)
+        if [[ -n "$fast_link_line" && "$fast_link_line" =~ Fast[[:space:]]+link[[:space:]]+dest:[[:space:]]*"([^"]+)" ]]; then
             local target="${BASH_REMATCH[1]}"
-            echo "$target" | sed 's/[[:space:]]*$//' | tr -d '\0'
+            echo "$target"
+            return
+        elif [[ -n "$fast_link_line" && "$fast_link_line" =~ Fast[[:space:]]+link[[:space:]]+dest:[[:space:]]*([^[:space:]]+) ]]; then
+            local target="${BASH_REMATCH[1]}"
+            # Remove any trailing quotes or whitespace
+            target=$(echo "$target" | sed 's/^"//;s/"$//;s/[[:space:]]*$//')
+            echo "$target"
             return
         fi
     fi
     
-    # Try to extract target from stat output
-    if [[ -n "$stat_output" ]]; then
-        # Look for "Fast link dest:" line in stat output
-        if [[ "$stat_output" =~ Fast[[:space:]]+link[[:space:]]+dest:[[:space:]]*(.+) ]]; then
+    # Try to extract target from ls output as backup
+    if [[ -n "$ls_output" ]]; then
+        local clean_ls=$(echo "$ls_output" | grep -v "debugfs:" | head -1)
+        if [[ -n "$clean_ls" && "$clean_ls" =~ -\>[[:space:]]*([^[:space:]].*)$ ]]; then
             local target="${BASH_REMATCH[1]}"
-            echo "$target" | sed 's/[[:space:]]*$//' | tr -d '\0'
-            return
-        fi
-        
-        # Alternative: look for symlink target in any line containing ->
-        local target_line=$(echo "$stat_output" | grep -E '->.*' | head -1)
-        if [[ -n "$target_line" && "$target_line" =~ -\>[[:space:]]*([^[:space:]].*)$ ]]; then
-            local target="${BASH_REMATCH[1]}"
-            echo "$target" | sed 's/[[:space:]]*$//' | tr -d '\0'
+            echo "$target" | sed 's/[[:space:]]*$//'
             return
         fi
     fi
@@ -1514,10 +1513,11 @@ extract_with_debugfs_recursive() {
                 
                 # Clean debug output (avoid log corruption)
                 echo "[DEBUG] Checking symlink target: $target_full_path" >&2
-                echo "[DEBUG] Target stat result: $(echo "$target_check_output" | grep "Type:" | head -1)" >&2
+                local type_line=$(echo "$target_check_output" | grep "Type:" | head -1)
+                echo "[DEBUG] Target stat result: $type_line" >&2
                 
                 # Check if it's a directory by looking for "Type: directory" in stat output
-                if [[ "$target_check_output" =~ Type:[[:space:]]*directory ]]; then
+                if [[ "$type_line" =~ Type:[[:space:]]*directory ]]; then
                     echo "[DEBUG] ✓ Target '$target_full_path' is a directory - will extract contents" >&2
                     
                     # Create the target directory in staging if it doesn't exist
