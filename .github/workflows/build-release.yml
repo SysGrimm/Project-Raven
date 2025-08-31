@@ -10,8 +10,8 @@ on:
 jobs:
   build-components:
     runs-on: ubuntu-latest
-    # NOTE: This job requires privileged container access for loop devices
-    # If loop devices are not available, the build will fail gracefully
+    # NOTE: This job uses container-friendly build approach (no loop devices needed)
+    # Based on LibreELEC's methodology using mtools and e2tools
     
     steps:
     - name: Manual repository checkout
@@ -32,25 +32,27 @@ jobs:
         sudo apt-get update -q
         sudo apt-get install -y --no-install-recommends \
           parted \
-          kpartx \
+          mtools \
+          e2tools \
           dosfstools \
           e2fsprogs \
           wget \
           curl \
           xz-utils \
-          util-linux \
-          mount
+          coreutils
         echo "Dependencies installed successfully"
     
     - name: Verify build tools
       run: |
         echo "=== Verifying Build Tools ==="
-        # Check essential tools for image modification
+        # Check essential tools for container-friendly image building
         which curl && echo "curl: OK" || echo "curl: MISSING"
         which xz && echo "xz: OK" || echo "xz: MISSING" 
-        which losetup && echo "losetup: OK" || echo "losetup: MISSING"
-        which mount && echo "mount: OK" || echo "mount: MISSING"
         which parted && echo "parted: OK" || echo "parted: MISSING"
+        which mcopy && echo "mtools: OK" || echo "mtools: MISSING"
+        which e2cp && echo "e2tools: OK" || echo "e2tools: MISSING"
+        which mke2fs && echo "e2fsprogs: OK" || echo "e2fsprogs: MISSING"
+        which dd && echo "dd: OK" || echo "dd: MISSING"
         echo "Build tools verification complete"
         
     - name: Free up disk space
@@ -77,8 +79,8 @@ jobs:
         
         echo "Building SoulBox $VERSION - Complete Media Center with Kodi & Tailscale"
         
-        # Run primary image build using image modification
-        ./build-soulbox-image-mod.sh --version "$VERSION" --clean
+        # Run container-friendly build (no loop devices needed)
+        ./build-soulbox-containerized.sh --version "$VERSION" --clean
         
         # Create artifacts directory and copy result
         mkdir -p artifacts
