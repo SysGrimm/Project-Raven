@@ -36,6 +36,12 @@ jobs:
           e2tools \
           dosfstools \
           e2fsprogs \
+          e2fsprogs-dev \
+          build-essential \
+          autotools-dev \
+          autoconf \
+          automake \
+          pkg-config \
           wget \
           curl \
           xz-utils \
@@ -43,6 +49,45 @@ jobs:
           zip \
           tar
         echo "Dependencies installed successfully"
+    
+    - name: Build populatefs from source
+      run: |
+        echo "=== Building populatefs from e2fsprogs source ==="
+        
+        # Create build directory
+        mkdir -p /tmp/populatefs-build
+        cd /tmp/populatefs-build
+        
+        # Download e2fsprogs source (contains populatefs)
+        wget -q https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.0/e2fsprogs-1.47.0.tar.xz
+        tar -xf e2fsprogs-1.47.0.tar.xz
+        cd e2fsprogs-1.47.0
+        
+        # Configure build
+        echo "Configuring e2fsprogs build..."
+        ./configure --prefix=/usr/local --enable-populatefs 2>&1 | head -20
+        
+        # Build only populatefs (much faster than full e2fsprogs)
+        echo "Building populatefs..."
+        make -j$(nproc) -C contrib/populatefs
+        
+        # Install populatefs binary
+        sudo cp contrib/populatefs/populatefs /usr/local/bin/
+        sudo chmod +x /usr/local/bin/populatefs
+        
+        # Verify installation
+        if /usr/local/bin/populatefs --help >/dev/null 2>&1; then
+            echo "✅ populatefs built and installed successfully"
+            /usr/local/bin/populatefs --version || echo "populatefs version check failed"
+        else
+            echo "❌ populatefs build failed"
+            exit 1
+        fi
+        
+        # Cleanup
+        cd /
+        rm -rf /tmp/populatefs-build
+        echo "populatefs build complete"
     
     - name: Verify build tools
       run: |
@@ -52,7 +97,7 @@ jobs:
         which xz && echo "xz: OK" || echo "xz: MISSING" 
         which parted && echo "parted: OK" || echo "parted: MISSING"
         which mcopy && echo "mtools: OK" || echo "mtools: MISSING"
-        which populatefs && echo "populatefs: OK (preferred)" || echo "populatefs: MISSING (will use e2tools fallback)"
+        which populatefs || which /usr/local/bin/populatefs && echo "populatefs: OK (preferred)" || echo "populatefs: MISSING (will use e2tools fallback)"
         which e2cp && echo "e2tools: OK" || echo "e2tools: MISSING"
         which mke2fs && echo "e2fsprogs: OK" || echo "e2fsprogs: MISSING"
         which dd && echo "dd: OK" || echo "dd: MISSING"

@@ -207,6 +207,11 @@ check_required_tools() {
     if command -v populatefs >/dev/null 2>&1; then
         has_populatefs=true
         log_success "Found populatefs (preferred method)"
+    elif [[ -x "/usr/local/bin/populatefs" ]]; then
+        has_populatefs=true
+        log_success "Found populatefs in /usr/local/bin (preferred method)"
+        # Ensure /usr/local/bin is in PATH for this session
+        export PATH="/usr/local/bin:$PATH"
     fi
     
     if command -v e2cp >/dev/null 2>&1 && command -v e2ls >/dev/null 2>&1; then
@@ -1584,9 +1589,18 @@ copy_and_customize_filesystems() {
     
     # Populate filesystem using staging method
     log_info "Populating filesystem using staging method..."
+    local populatefs_cmd=""
     if command -v populatefs >/dev/null 2>&1; then
-        log_info "Using populatefs (preferred method)"
-        if populatefs -U -d "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERROR" 2>&1; then
+        populatefs_cmd="populatefs"
+        log_info "Using populatefs from PATH (preferred method)"
+    elif [[ -x "/usr/local/bin/populatefs" ]]; then
+        populatefs_cmd="/usr/local/bin/populatefs"
+        log_info "Using populatefs from /usr/local/bin (preferred method)"
+    fi
+    
+    if [[ -n "$populatefs_cmd" ]]; then
+        log_info "Executing: $populatefs_cmd -U -d $staging_dir $temp_dir/root-new.ext4"
+        if "$populatefs_cmd" -U -d "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERROR" 2>&1; then
             log_success "Filesystem populated using populatefs"
             # Verify the populated filesystem
             local populated_items=$(e2ls "$temp_dir/root-new.ext4:/" 2>/dev/null | wc -l || echo "0")
