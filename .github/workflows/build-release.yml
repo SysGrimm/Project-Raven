@@ -70,14 +70,19 @@ jobs:
         set -e
         set -x
         
-        # Get version for build
-        if [ -f "scripts/version-manager.sh" ]; then
+        # Get version using Gitea-based smart versioning
+        if [ -f "scripts/gitea-version-manager.sh" ]; then
+            echo "Using Gitea-based smart versioning..."
+            VERSION=$(./scripts/gitea-version-manager.sh auto 2>/dev/null | tail -1 || echo "v0.1.0")
+        elif [ -f "scripts/version-manager.sh" ]; then
+            echo "Using git tag fallback versioning..."
             VERSION=$(./scripts/version-manager.sh auto 2>/dev/null | tail -1 || echo "v0.1.0")
         else
             VERSION="v0.1.0"
         fi
         
         echo "Building SoulBox $VERSION - Complete Media Center with Kodi & Tailscale"
+        echo "Version source: Gitea releases API with automatic increment detection"
         
         # Run container-friendly build (no loop devices needed)
         ./build-soulbox-containerized.sh --version "$VERSION" --clean
@@ -89,12 +94,48 @@ jobs:
             cp soulbox-v*.img.sha256 artifacts/
             echo "SoulBox image created successfully!"
             ls -lh artifacts/
+            
+            # Store version for next step
+            echo "$VERSION" > artifacts/version.txt
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
         else
             echo "Build failed - no image file found"
             exit 1
         fi
         
         echo "SoulBox build complete - ready to flash and deploy!"
+
+    - name: Create Gitea Release
+      if: success()
+      run: |
+        echo "=== Creating Gitea Release ==="
+        
+        # Check if we have the version and image files
+        if [ -f "artifacts/version.txt" ]; then
+            VERSION=$(cat artifacts/version.txt)
+            echo "Creating release for version: $VERSION"
+            
+            # Find the image and checksum files
+            IMAGE_FILE=$(find artifacts/ -name "soulbox-v*.img" | head -1)
+            CHECKSUM_FILE=$(find artifacts/ -name "soulbox-v*.img.sha256" | head -1)
+            
+            if [ -n "$IMAGE_FILE" ] && [ -n "$CHECKSUM_FILE" ]; then
+                echo "Image file: $IMAGE_FILE"
+                echo "Checksum file: $CHECKSUM_FILE"
+                
+                # Create Gitea release with image files
+                if ./scripts/gitea-version-manager.sh create-release "$VERSION" "$IMAGE_FILE" "$CHECKSUM_FILE"; then
+                    echo "✅ Gitea release created successfully!"
+                    echo "🔗 Release URL: http://192.168.176.113:3000/reaper/soulbox/releases/tag/$VERSION"
+                else
+                    echo "⚠️  Failed to create Gitea release, but build succeeded"
+                fi
+            else
+                echo "⚠️  Image or checksum files not found for release creation"
+            fi
+        else
+            echo "⚠️  Version file not found, skipping release creation"
+        fi
 
     - name: Upload SoulBox Image
       uses: actions/upload-artifact@v3

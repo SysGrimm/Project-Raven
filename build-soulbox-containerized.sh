@@ -70,7 +70,12 @@ done
 
 # Set default version if not provided
 if [[ -z "$SOULBOX_VERSION" ]]; then
-    if [[ -f "scripts/version-manager.sh" ]]; then
+    if [[ -f "scripts/gitea-version-manager.sh" ]]; then
+        log_info "Getting next version from Gitea releases..."
+        SOULBOX_VERSION=$(./scripts/gitea-version-manager.sh auto 2>/dev/null || echo "v0.1.0")
+        log_success "Version determined: $SOULBOX_VERSION"
+    elif [[ -f "scripts/version-manager.sh" ]]; then
+        log_info "Using git tag fallback versioning..."
         SOULBOX_VERSION=$(./scripts/version-manager.sh auto 2>/dev/null || echo "v0.1.0")
     else
         SOULBOX_VERSION="v0.1.0"

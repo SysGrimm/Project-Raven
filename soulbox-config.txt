@@ -1,0 +1,18 @@
+# SoulBox Configuration File
+# Generated on Sat Aug 30 10:19:01 CDT 2025
+#
+# This file is read by the SoulBox first-boot configuration script
+# Place this file in /boot/firmware/ on your SD card
+
+hostname=SoulBox
+
+# Additional configuration options:
+# hostname=my-soulbox               # Set device hostname
+# tailscale_auth_key=tskey-auth-... # Tailscale authentication key
+# tailscale_exit_node=100.64.0.1    # Use specific exit node
+# tailscale_advertise_routes=192.168.1.0/24,10.0.0.0/8  # Advertise routes
+
+# Network configuration will be handled automatically
+# SSH access will be enabled via Tailscale
+# Kodi will be accessible via local network and Tailscale
+
