@@ -488,72 +488,184 @@ copy_and_customize_filesystems() {
     
     log_info "Copying Pi OS content and adding SoulBox customizations..."
     
+    # Verify input files exist
+    if [[ ! -f "$pi_boot" ]]; then
+        log_error "Boot partition file missing: $pi_boot"
+        return 1
+    fi
+    if [[ ! -f "$pi_root" ]]; then
+        log_error "Root partition file missing: $pi_root"
+        return 1
+    fi
+    
     # Copy Pi OS boot content
     log_info "Processing boot partition..."
     mkdir -p "$temp_dir/boot-content"
     
     # Extract boot content using mtools
-    if ! mcopy -s -i "$pi_boot" :: "$temp_dir/boot-content/" 2>/dev/null; then
-        log_warning "Boot partition extraction failed, continuing with basic setup"
+    log_info "Extracting boot partition content..."
+    if mcopy -s -i "$pi_boot" :: "$temp_dir/boot-content/" 2>&1; then
+        log_success "Boot partition extracted successfully"
+        log_info "Boot files found: $(ls -la "$temp_dir/boot-content/" | wc -l) items"
+    else
+        log_warning "Boot partition extraction failed, creating minimal setup"
         # Create minimal boot files
         touch "$temp_dir/boot-content/config.txt"
         touch "$temp_dir/boot-content/cmdline.txt"
+        echo "# Minimal boot configuration" > "$temp_dir/boot-content/config.txt"
+        echo "console=serial0,115200 console=tty1 root=PARTUUID=ROOT_PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait" > "$temp_dir/boot-content/cmdline.txt"
     fi
     
     # Add SoulBox boot customizations
-    cat "$assets_dir/boot/soulbox-config.txt" >> "$temp_dir/boot-content/config.txt"
+    if [[ -f "$assets_dir/boot/soulbox-config.txt" ]]; then
+        log_info "Adding SoulBox boot configuration..."
+        cat "$assets_dir/boot/soulbox-config.txt" >> "$temp_dir/boot-content/config.txt"
+        log_success "Boot configuration added"
+    else
+        log_warning "SoulBox boot config not found: $assets_dir/boot/soulbox-config.txt"
+    fi
     
     # Copy back to new boot filesystem
     log_info "Populating new boot filesystem..."
-    if ! mcopy -s -i "$temp_dir/boot-new.fat" "$temp_dir/boot-content"/* :: 2>/dev/null; then
-        # If batch copy fails, try individual files
-        for file in "$temp_dir/boot-content"/*; do
-            if [[ -f "$file" ]]; then
-                mcopy -i "$temp_dir/boot-new.fat" "$file" :: 2>/dev/null || log_warning "Failed to copy $(basename "$file")"
+    local boot_copy_count=0
+    for file in "$temp_dir/boot-content"/*; do
+        if [[ -f "$file" ]]; then
+            if mcopy -i "$temp_dir/boot-new.fat" "$file" :: 2>&1; then
+                boot_copy_count=$((boot_copy_count + 1))
+            else
+                log_warning "Failed to copy $(basename "$file") to boot partition"
             fi
-        done
-    fi
+        fi
+    done
+    log_success "Boot filesystem populated with $boot_copy_count files"
     
     # Process root filesystem
     log_info "Processing root partition..."
     mkdir -p "$temp_dir/root-content"
     
     # Create essential Pi OS directory structure
-    mkdir -p "$temp_dir/root-content"/{bin,boot/firmware,dev,etc/{systemd/system,apt,ssh},home,lib,media,mnt,opt,proc,root,run,sbin,srv,sys,tmp,usr/{bin,lib,local,share},var/{log,tmp,cache}}
+    log_info "Creating directory structure..."
+    local dirs=("bin" "boot/firmware" "dev" "etc/systemd/system" "etc/apt" "etc/ssh" "home" "lib" "media" "mnt" "opt" "proc" "root" "run" "sbin" "srv" "sys" "tmp" "usr/bin" "usr/lib" "usr/local" "usr/share" "var/log" "var/tmp" "var/cache")
+    for dir in "${dirs[@]}"; do
+        mkdir -p "$temp_dir/root-content/$dir"
+    done
+    log_success "Directory structure created"
     
     # Copy SoulBox root customizations
-    cp -r "$assets_dir/root"/* "$temp_dir/root-content/" 2>/dev/null || log_warning "SoulBox assets copy failed"
+    if [[ -d "$assets_dir/root" ]]; then
+        log_info "Copying SoulBox assets..."
+        if cp -r "$assets_dir/root"/* "$temp_dir/root-content/" 2>&1; then
+            log_success "SoulBox assets copied successfully"
+        else
+            log_warning "Some SoulBox assets may not have copied properly"
+        fi
+    else
+        log_warning "SoulBox assets directory not found: $assets_dir/root"
+    fi
     
     # Create essential system files
-    echo "root:x:0:0:root:/root:/bin/bash" > "$temp_dir/root-content/etc/passwd"
-    echo "root:x:0:" > "$temp_dir/root-content/etc/group"
+    log_info "Creating essential system files..."
+    cat > "$temp_dir/root-content/etc/passwd" << 'EOF'
+root:x:0:0:root:/root:/bin/bash
+pi:x:1000:1000:Raspberry Pi User,,,:/home/pi:/bin/bash
+EOF
+    
+    cat > "$temp_dir/root-content/etc/group" << 'EOF'
+root:x:0:
+pi:x:1000:
+EOF
+    
+    cat > "$temp_dir/root-content/etc/shadow" << 'EOF'
+root:*:19000:0:99999:7:::
+pi:*:19000:0:99999:7:::
+EOF
+    
+    # Create home directories
+    mkdir -p "$temp_dir/root-content/home/pi"
+    mkdir -p "$temp_dir/root-content/root"
+    
+    log_success "Essential system files created"
+    
+    # Verify filesystem before populating
+    if [[ ! -f "$temp_dir/root-new.ext4" ]]; then
+        log_error "Root filesystem image missing: $temp_dir/root-new.ext4"
+        return 1
+    fi
+    
+    # Test e2tools functionality
+    log_info "Testing e2tools functionality..."
+    if e2ls "$temp_dir/root-new.ext4:" >/dev/null 2>&1; then
+        log_success "e2tools can access the filesystem"
+    else
+        log_error "e2tools cannot access the filesystem - this will cause failure"
+        return 1
+    fi
     
     # Populate the ext4 filesystem using e2cp
-    log_info "Populating root filesystem with e2cp..."
+    log_info "Populating root filesystem with e2tools..."
     
     # Create directories first
-    find "$temp_dir/root-content" -type d | while read dir; do
+    local dir_count=0
+    local file_count=0
+    local failed_ops=0
+    
+    log_info "Creating directories in ext4 filesystem..."
+    while IFS= read -r -d '' dir; do
         if [[ "$dir" != "$temp_dir/root-content" ]]; then
             rel_path="${dir#$temp_dir/root-content}"
-            e2mkdir -p "$temp_dir/root-new.ext4:$rel_path" 2>/dev/null || true
+            if [[ -n "$rel_path" && "$rel_path" != "/" ]]; then
+                if e2mkdir -p "$temp_dir/root-new.ext4:$rel_path" 2>/dev/null; then
+                    dir_count=$((dir_count + 1))
+                else
+                    log_warning "Failed to create directory: $rel_path"
+                    failed_ops=$((failed_ops + 1))
+                fi
+            fi
         fi
-    done
+    done < <(find "$temp_dir/root-content" -type d -print0)
+    
+    log_success "Created $dir_count directories (failed: $failed_ops)"
     
     # Copy files
-    find "$temp_dir/root-content" -type f | while read file; do
+    log_info "Copying files to ext4 filesystem..."
+    failed_ops=0
+    while IFS= read -r -d '' file; do
         rel_path="${file#$temp_dir/root-content}"
-        if ! e2cp "$file" "$temp_dir/root-new.ext4:$rel_path" 2>/dev/null; then
-            log_warning "Failed to copy: $rel_path"
+        if [[ -n "$rel_path" ]]; then
+            if e2cp "$file" "$temp_dir/root-new.ext4:$rel_path" 2>/dev/null; then
+                file_count=$((file_count + 1))
+            else
+                log_warning "Failed to copy: $rel_path"
+                failed_ops=$((failed_ops + 1))
+            fi
         fi
-    done
+    done < <(find "$temp_dir/root-content" -type f -print0)
     
-    # Copy symbolic links
-    find "$temp_dir/root-content" -type l | while read link; do
+    log_success "Copied $file_count files (failed: $failed_ops)"
+    
+    # Handle symbolic links (limited support)
+    log_info "Processing symbolic links..."
+    local link_count=0
+    while IFS= read -r -d '' link; do
         rel_path="${link#$temp_dir/root-content}"
         target=$(readlink "$link")
-        # e2tools doesn't handle symlinks well, so we skip them for now
-        log_warning "Skipping symlink: $rel_path -> $target"
-    done
+        log_warning "Skipping symlink: $rel_path -> $target (e2tools limitation)"
+        link_count=$((link_count + 1))
+    done < <(find "$temp_dir/root-content" -type l -print0)
+    
+    if [[ $link_count -gt 0 ]]; then
+        log_warning "Skipped $link_count symbolic links due to e2tools limitations"
+    fi
+    
+    # Final verification
+    log_info "Verifying populated filesystem..."
+    if e2ls "$temp_dir/root-new.ext4:/" >/dev/null 2>&1; then
+        local root_items=$(e2ls "$temp_dir/root-new.ext4:/" 2>/dev/null | wc -l || echo "0")
+        log_success "Filesystem populated successfully - $root_items items in root"
+    else
+        log_error "Filesystem verification failed"
+        return 1
+    fi
     
     log_success "Filesystem customization complete"
 }
