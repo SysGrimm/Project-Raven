@@ -2199,11 +2199,11 @@ EOF
         
         # Try different populatefs syntax based on type and common patterns
         
-        # Method 1: Standard LibreELEC populatefs syntax (filesystem source_dir)
+        # Method 1: Standard populate-extfs.sh syntax (source_dir filesystem)
         if [[ "$populate_success" != "true" ]]; then
-            log_info "Method 1 - LibreELEC syntax: $populatefs_cmd $temp_dir/root-new.ext4 $staging_dir"
+            log_info "Method 1 - populate-extfs.sh syntax: $populatefs_cmd $staging_dir $temp_dir/root-new.ext4"
             log_info "Populatefs debug: About to run populatefs with $staging_files staging files"
-            if "$populatefs_cmd" "$temp_dir/root-new.ext4" "$staging_dir" >"$SAVE_ERROR" 2>&1; then
+            if "$populatefs_cmd" "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERROR" 2>&1; then
                 log_info "Populatefs debug: Command returned success (exit code 0)"
                 if [[ -s "$SAVE_ERROR" ]]; then
                     log_info "Populatefs debug output:"

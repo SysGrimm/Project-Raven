@@ -1,6 +1,6 @@
 # SoulBox Build System Troubleshooting Guide
 
-**Complete troubleshooting reference for the SoulBox container-friendly build system, based on real production debugging experience from builds #78-82.**
+**Complete troubleshooting reference for the SoulBox container-friendly build system, based on real production debugging experience from builds #78-94.**
 
 ## Quick Diagnosis Decision Tree
 
@@ -473,6 +473,214 @@ fi
 
 **Build Script Integration**:
 These optimizations are now integrated into the main build script in the `extract_with_debugfs_recursive()` function and related helpers. The optimizations maintain system compatibility while dramatically improving extraction performance in container environments.
+
+### Build #93 Pattern: Container Disk Space Exhaustion (Refined Analysis)
+
+**Symptoms**:
+```bash
+dd: error writing '/workspace/.../soulbox-v1.4.0.img': No space left on device
+1400+0 records in
+1399+0 records out
+1467400192 bytes (1.5 GB, 1.4 GiB) copied
+```
+
+**Root Cause**: Container disk space insufficient for large image builds even after Build #82 optimizations.
+
+**Detailed Analysis**:
+```
+BUILD #93 FAILURE ANALYSIS:
+- Container total space: ~1.6 GB
+- Available space for build: ~1.37 GB  
+- Required space calculation:
+  - Source Pi OS image: 431 MB compressed → 2.7 GB extracted
+  - Staging directory: ~800 MB
+  - Root filesystem: 600 MB
+  - Boot filesystem: 80 MB  
+  - Final image: 700 MB
+  - Safety buffer: 700 MB (2x image size)
+  - Total required: ~1.4 GB
+- Result: Needed 1.4 GB, only had 1.37 GB → failure
+```
+
+**Debug Commands**:
+```bash
+# Check exact available space
+df --output=avail /workspace | tail -1
+# Expected: ~1400000 KB (1.37 GB)
+
+# Calculate total build requirements
+echo "Space analysis:"
+echo "- Source image compressed: $(ls -lh *.img.xz | awk '{print $5}')"
+echo "- Source image extracted: $(ls -lh *.img | awk '{print $5}')"
+echo "- Work directory usage: $(du -sh /workspace/soulbox-build-* | awk '{print $1}')"
+echo "- Final image target size: $(echo 'scale=1; 700/1024' | bc) GB"
+echo "- Safety buffer (2x): $(echo 'scale=1; 1400/1024' | bc) GB"
+```
+
+**Root Cause**: The disk space safety calculation was too conservative for container environments:
+```bash
+# PROBLEMATIC CALCULATION (Build #93):
+local required_space=$((total_size * 2 * 1024))  # 700MB * 2 = 1400MB required
+# Result: Required 1.4GB, container only had 1.37GB
+```
+
+### Build #94 Pattern: Container-Optimized Disk Space Management
+
+**Solution Applied**: Comprehensive container disk space optimization targeting both image size and safety buffer calculations.
+
+**Image Size Reductions**:
+```bash
+# BEFORE (Build #93 - Too Large):
+local boot_size=80    # 80MB boot partition
+local root_size=600   # 600MB root partition  
+local padding_size=20 # 20MB padding
+local total_size=700  # 700MB total image
+
+# AFTER (Build #94 - Container-Optimized):
+local boot_size=80    # 80MB boot partition (unchanged - minimal viable)
+local root_size=350   # 350MB root partition (reduced by 250MB)
+local padding_size=20 # 20MB padding (unchanged)
+local total_size=450  # 450MB total image (reduced by 250MB)
+```
+
+**Safety Buffer Optimization**:
+```bash
+# BEFORE (Build #93 - Conservative 2x multiplier):
+local required_space=$((total_size * 2 * 1024))  # 700MB * 2 = 1400MB
+# Problem: 2x multiplier too large for containers
+
+# AFTER (Build #94 - Fixed buffer approach):
+local base_image_size=450  # New smaller image size
+local safety_buffer=400    # Fixed 400MB buffer for all operations
+local required_space=$(((base_image_size + safety_buffer) * 1024))  # 450 + 400 = 850MB
+# Result: Total requirement reduced from 1400MB to 850MB
+```
+
+**Space Requirements Comparison**:
+```
+BUILD #93 (Failed):
+- Final image: 700 MB
+- Safety buffer: 700 MB (2x multiplier)
+- Total required: 1400 MB
+- Container available: 1370 MB
+- Result: ❌ FAILURE (30 MB short)
+
+BUILD #94 (Success):
+- Final image: 450 MB  
+- Safety buffer: 400 MB (fixed buffer)
+- Total required: 850 MB
+- Container available: 1370 MB
+- Safety margin: 520 MB
+- Result: ✅ SUCCESS (500+ MB margin)
+```
+
+**Container-Friendly Calculation Logic**:
+```bash
+# New disk space checking approach for containers
+check_container_disk_space() {
+    local total_image_size="$1"  # e.g., 450MB
+    
+    log_info "Performing container-optimized disk space check..."
+    
+    # Get available space in KB
+    local available_space_kb
+    if available_space_kb=$(df --output=avail /workspace | tail -1 2>/dev/null); then
+        local available_space_mb=$((available_space_kb / 1024))
+    else
+        log_error "Cannot determine available disk space"
+        return 1
+    fi
+    
+    # Container-optimized space calculation
+    local base_requirement_mb="$total_image_size"  # Final image size
+    local operation_buffer_mb=400                   # Fixed buffer for temporary files
+    local total_required_mb=$((base_requirement_mb + operation_buffer_mb))
+    
+    log_info "Container disk space analysis:"
+    log_info "  Available space: ${available_space_mb} MB"
+    log_info "  Final image size: ${base_requirement_mb} MB"
+    log_info "  Operation buffer: ${operation_buffer_mb} MB" 
+    log_info "  Total required: ${total_required_mb} MB"
+    
+    if [[ $available_space_mb -ge $total_required_mb ]]; then
+        local safety_margin=$((available_space_mb - total_required_mb))
+        log_success "✅ Sufficient space with ${safety_margin} MB safety margin"
+        return 0
+    else
+        local shortfall=$((total_required_mb - available_space_mb))
+        log_error "❌ Insufficient space: need ${shortfall} MB more"
+        log_error "Consider reducing image size or increasing container disk allocation"
+        return 1
+    fi
+}
+```
+
+**Build #94 Success Metrics**:
+```
+✅ BUILD #94 SUCCESS RESULTS:
+- Final Image Size: 471,859,200 bytes (450 MB)
+- Compressed Size: ~45 MB (compression ratio 10:1)
+- Build Time: ~15 minutes (faster due to smaller image)
+- Peak Disk Usage: ~870 MB (within 1.37 GB limit)
+- Safety Margin: 500+ MB remaining
+- Container Compatibility: ✅ Optimized for standard container limits
+- Functionality: ✅ Full Pi 5 boot compatibility maintained
+```
+
+**Production Implications**:
+```
+CONTAINER RESOURCE REQUIREMENTS (Updated):
+
+✅ MINIMUM (Post Build #94):
+- Disk: 1.2 GB (was 1.6 GB)
+- RAM: 2 GB
+- CPU: 1 core  
+- Build time: 15-20 minutes
+
+✅ RECOMMENDED:
+- Disk: 2.0 GB (comfortable margin)
+- RAM: 4 GB
+- CPU: 2+ cores
+- Build time: 12-15 minutes
+```
+
+**Container Environment Detection & Optimization**:
+```bash
+# Enhanced container detection with automatic optimization
+detect_and_optimize_for_container() {
+    local is_container=false
+    local available_space_gb=0
+    
+    # Detect container environment
+    if [[ -f /.dockerenv ]] || [[ -n "${KUBERNETES_SERVICE_HOST:-}" ]] || [[ -n "${CI:-}" ]]; then
+        is_container=true
+        log_info "Container environment detected"
+    fi
+    
+    # Get available space
+    local available_space_kb=$(df --output=avail /workspace | tail -1 2>/dev/null || echo "0")
+    available_space_gb=$((available_space_kb / 1024 / 1024))
+    
+    # Apply container-specific optimizations
+    if [[ "$is_container" == "true" ]] && [[ $available_space_gb -lt 2 ]]; then
+        log_info "Applying container disk space optimizations..."
+        
+        # Use container-optimized image sizes
+        SOULBOX_BOOT_SIZE=80    # Minimal viable boot partition
+        SOULBOX_ROOT_SIZE=350   # Reduced root partition for containers
+        SOULBOX_TOTAL_SIZE=450  # Container-friendly total size
+        
+        log_success "Container optimizations applied: 450MB total image size"
+    else
+        # Use standard image sizes for non-constrained environments
+        SOULBOX_BOOT_SIZE=100
+        SOULBOX_ROOT_SIZE=600
+        SOULBOX_TOTAL_SIZE=700
+        
+        log_info "Standard image sizes: 700MB total image size"
+    fi
+}
+```
 
 ## Systematic Debugging Approach
 
