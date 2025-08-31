@@ -33,16 +33,36 @@ jobs:
         cat > build-soulbox-containerized.sh << 'EOF'
         #!/bin/bash
         echo "SoulBox containerized build script (test version)"
-        echo "Version: ${1:-v0.1.0}"
+        
+        # Parse arguments properly
+        VERSION="v0.1.0"
+        while [[ $# -gt 0 ]]; do
+          case $1 in
+            --version)
+              VERSION="$2"
+              shift 2
+              ;;
+            --clean)
+              echo "Clean build requested"
+              shift
+              ;;
+            *)
+              echo "Unknown option: $1"
+              shift
+              ;;
+          esac
+        done
+        
+        echo "Version: $VERSION"
         echo "This is a test build to verify our populatefs-only architecture works"
         
         # Create a dummy image file to test the workflow
         mkdir -p build
-        echo "Test SoulBox image content" > "soulbox-${1:-v0.1.0}.img"
-        echo "$(date) - Test build completed" >> "soulbox-${1:-v0.1.0}.img"
+        echo "Test SoulBox image content" > "soulbox-$VERSION.img"
+        echo "$(date) - Test build completed" >> "soulbox-$VERSION.img"
         
         # Create checksum
-        sha256sum "soulbox-${1:-v0.1.0}.img" > "soulbox-${1:-v0.1.0}.img.sha256"
+        sha256sum "soulbox-$VERSION.img" > "soulbox-$VERSION.img.sha256"
         
         echo "Test build artifacts created:"
         ls -la soulbox-*
