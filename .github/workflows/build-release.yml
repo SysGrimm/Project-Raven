@@ -73,6 +73,12 @@ jobs:
             # Install the shell script version
             sudo cp contrib/populate-extfs.sh /usr/local/bin/populatefs
             sudo chmod +x /usr/local/bin/populatefs
+            
+            # Fix the hardcoded debugfs path to use system debugfs
+            echo "🔧 Patching populatefs to use system debugfs..."
+            sudo sed -i 's|\"\$BIN_DIR/../debugfs/debugfs\"|debugfs|g' /usr/local/bin/populatefs
+            sudo sed -i 's|\$BIN_DIR/../debugfs/debugfs|debugfs|g' /usr/local/bin/populatefs
+            
             echo "✅ populate-extfs.sh installed as populatefs"
         elif [[ -d "contrib/dir2fs" ]]; then
             echo "✅ Found dir2fs as alternative to populatefs"
