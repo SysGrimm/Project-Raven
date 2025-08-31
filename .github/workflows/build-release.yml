@@ -36,7 +36,6 @@ jobs:
           e2tools \
           dosfstools \
           e2fsprogs \
-          e2fsprogs-extra \
           wget \
           curl \
           xz-utils \
