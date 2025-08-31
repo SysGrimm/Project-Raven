@@ -299,23 +299,31 @@ jobs:
             echo "⚠️  Version file not found, skipping release creation"
         fi
 
-    - name: Upload SoulBox Image
-      uses: actions/upload-artifact@v3
+    - name: Archive Build Artifacts
       if: always()
-      with:
-        name: soulbox-wisp-image
-        path: artifacts/
-        retention-days: 30
-
-    - name: Upload Build Logs
-      uses: actions/upload-artifact@v3
-      if: failure()
-      with:
-        name: build-logs
-        path: |
-          *.log
-          build/
-        retention-days: 7
+      run: |
+        echo "=== Archiving Build Artifacts ==="
+        
+        if [ -d "artifacts" ]; then
+            echo "Artifacts found:"
+            ls -la artifacts/
+            
+            # Create archive for easy download
+            tar -czf soulbox-build-artifacts.tar.gz artifacts/
+            
+            echo "Archive created:"
+            ls -lh soulbox-build-artifacts.tar.gz
+            
+            echo "✅ Build artifacts archived successfully"
+        else
+            echo "⚠️  No artifacts directory found"
+        fi
+        
+        if [ -f "*.log" ] || [ -d "build" ]; then
+            echo "Creating logs archive..."
+            tar -czf soulbox-build-logs.tar.gz *.log build/ 2>/dev/null || true
+            echo "✅ Build logs archived"
+        fi
         
     - name: Build Summary
       if: success()
