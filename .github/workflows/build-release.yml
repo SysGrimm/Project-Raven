@@ -109,6 +109,8 @@ jobs:
 
     - name: Create Gitea Release
       if: success()
+      env:
+        GITOKEN: ${{ secrets.GITOKEN }}
       run: |
         echo "=== Creating Gitea Release ==="
         
