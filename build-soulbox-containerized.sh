@@ -1625,15 +1625,21 @@ copy_and_customize_filesystems() {
         fi
         
         if [[ "$populate_success" == "true" ]]; then
-            # Verify the populated filesystem
-            local populated_items=$(e2ls "$temp_dir/root-new.ext4:/" 2>/dev/null | wc -l || echo "0")
-            log_success "Populatefs completed - $populated_items items in root filesystem"
-            
-            # Validate kernel modules in the populated filesystem
-            if e2ls "$temp_dir/root-new.ext4:/lib/modules" >/dev/null 2>&1; then
-                log_success "✓ Kernel modules directory confirmed in populated filesystem"
+            # Verify the populated filesystem using tune2fs (more reliable than e2ls)
+            log_info "Verifying populated filesystem..."
+            if tune2fs -l "$temp_dir/root-new.ext4" >/dev/null 2>&1; then
+                local fs_info=$(tune2fs -l "$temp_dir/root-new.ext4" 2>/dev/null)
+                local block_count=$(echo "$fs_info" | grep "Block count:" | awk '{print $3}' || echo "0")
+                local free_blocks=$(echo "$fs_info" | grep "Free blocks:" | awk '{print $3}' || echo "0")
+                local used_blocks=$((block_count - free_blocks))
+                
+                if [[ $used_blocks -gt 1000 ]]; then
+                    log_success "Populatefs completed - filesystem has content (used blocks: $used_blocks)"
+                else
+                    log_warning "Filesystem appears mostly empty (used blocks: $used_blocks)"
+                fi
             else
-                log_warning "⚠ No /lib/modules directory found in populated filesystem"
+                log_warning "Could not verify filesystem with tune2fs"
             fi
             
             log_success "Staging-style filesystem population complete!"
