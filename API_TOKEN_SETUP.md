@@ -23,13 +23,13 @@ Since we're using Gitea's own runner, you can set the token as a secret:
 
 1. In your Gitea repository, go to **Settings** → **Secrets**
 2. Add a new secret:
-   - **Name**: `GITEA_TOKEN`
+   - **Name**: `GITOKEN`
    - **Value**: Your copied API token
 3. The workflow will automatically use this token
 
 #### For Local Testing
 ```bash
-export GITEA_TOKEN="your_token_here"
+export GITOKEN="your_token_here"
 ./scripts/gitea-version-manager.sh create-release v1.0.0 image.img image.sha256
 ```
 
@@ -50,8 +50,8 @@ export GITEA_TOKEN="your_token_here"
 
 Test the token manually:
 ```bash
-export GITEA_TOKEN="your_token"
-curl -H "Authorization: token $GITEA_TOKEN" \
+export GITOKEN="your_token"
+curl -H "Authorization: token $GITOKEN" \
      http://192.168.176.113:3000/api/v1/repos/reaper/soulbox/releases
 ```
 
@@ -67,7 +67,7 @@ You should see a JSON response with your releases.
 ## Troubleshooting
 
 ### "token is required" Error
-- The `GITEA_TOKEN` environment variable is not set
+- The `GITOKEN` environment variable is not set
 - Token may be expired or invalid
 - Check token permissions in Gitea settings
 

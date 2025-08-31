@@ -10,7 +10,7 @@ GITEA_SERVER="http://192.168.176.113:3000"
 GITEA_OWNER="reaper"
 GITEA_REPO="soulbox"
 GITEA_API_URL="${GITEA_SERVER}/api/v1/repos/${GITEA_OWNER}/${GITEA_REPO}"
-GITEA_TOKEN="${GITEA_TOKEN:-}"  # Set via environment variable
+GITEA_TOKEN="${GITOKEN:-}"  # Set via environment variable (GITOKEN secret)
 
 # Colors for output
 RED='\033[0;31m'
