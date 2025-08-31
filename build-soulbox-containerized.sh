@@ -921,8 +921,8 @@ EOF
         chmod +x "$temp_dir/root-content/opt/soulbox/restore-symlinks.sh"
         
         # Update first-boot script to run symlink restoration
-        sed -i '/echo "$(date): Starting SoulBox first boot setup..."/a \
-# Restore symbolic links that e2tools couldn'\'t create\
+        sed -i '/echo "$(date): Starting SoulBox first boot setup..."/a\
+# Restore symbolic links that e2tools could not create\
 if [[ -f "/opt/soulbox/restore-symlinks.sh" ]]; then\
     echo "Restoring symbolic links..."\
     /opt/soulbox/restore-symlinks.sh\
