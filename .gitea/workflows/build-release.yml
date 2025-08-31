@@ -22,94 +22,10 @@ jobs:
     # Based on LibreELEC's methodology using mtools and e2tools
     
     steps:
-    - name: Setup repository files for testing  
-      run: |
-        echo "=== Setting Up Repository Files ==="
-        
-        # For testing purposes, create the essential files needed for the build
-        # This bypasses the authentication issue and lets us test the build process
-        
-        echo "Creating build script..."
-        cat > build-soulbox-containerized.sh << 'EOF'
-        #!/bin/bash
-        echo "SoulBox containerized build script (test version)"
-        
-        # Parse arguments properly
-        VERSION="v0.1.0"
-        while [[ $# -gt 0 ]]; do
-          case $1 in
-            --version)
-              VERSION="$2"
-              shift 2
-              ;;
-            --clean)
-              echo "Clean build requested"
-              shift
-              ;;
-            *)
-              echo "Unknown option: $1"
-              shift
-              ;;
-          esac
-        done
-        
-        echo "Version: $VERSION"
-        echo "This is a test build to verify our populatefs-only architecture works"
-        
-        # Create a dummy image file to test the workflow
-        mkdir -p build
-        echo "Test SoulBox image content" > "soulbox-$VERSION.img"
-        echo "$(date) - Test build completed" >> "soulbox-$VERSION.img"
-        
-        # Create checksum
-        sha256sum "soulbox-$VERSION.img" > "soulbox-$VERSION.img.sha256"
-        
-        echo "Test build artifacts created:"
-        ls -la soulbox-*
-        EOF
-        
-        chmod +x build-soulbox-containerized.sh
-        
-        echo "Creating version manager script..."
-        mkdir -p scripts
-        cat > scripts/gitea-version-manager.sh << 'EOF'
-        #!/bin/bash
-        
-        # Test version manager script with proper argument handling
-        
-        case "$1" in
-            auto)
-                # Generate test version
-                echo "v0.2.$(date +%s)"
-                ;;
-            create-release)
-                # Simulate release creation (test mode)
-                VERSION="$2"
-                IMAGE_FILE="$3"
-                CHECKSUM_FILE="$4"
-                
-                echo "[TEST MODE] Would create release: $VERSION"
-                echo "[TEST MODE] Image file: $IMAGE_FILE"
-                echo "[TEST MODE] Checksum file: $CHECKSUM_FILE"
-                echo "[TEST MODE] Release creation simulated - no actual release created"
-                
-                # Return success for test workflow
-                exit 0
-                ;;
-            *)
-                echo "Test version manager - Usage: $0 {auto|create-release VERSION IMAGE_FILE CHECKSUM_FILE}"
-                echo "Current mode: TEST (no real releases created)"
-                exit 1
-                ;;
-        esac
-        EOF
-        
-        chmod +x scripts/gitea-version-manager.sh
-        
-        echo "Files in workspace:"
-        ls -la
-        
-        echo "✅ Repository files set up for testing"
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for version management
       
     - name: Install build dependencies
       run: |
