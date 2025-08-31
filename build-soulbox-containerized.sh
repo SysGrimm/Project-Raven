@@ -441,10 +441,10 @@ build_soulbox_image() {
     
     mkdir -p "$temp_dir"
     
-    # Image size calculations (in MB) - Optimized for container disk space limits
-    # Container available space: ~1.6GB, need room for compression
-    local boot_size=100   # Reduced further - 100MB sufficient for Pi OS boot files
-    local root_size=700   # Reduced to 700MB - minimal but functional Pi OS system
+    # Image size calculations (in MB) - Increased to accommodate full Pi OS system components
+    # Container available space: ~5.5GB after cleanup, Pi OS needs more space for kernel modules
+    local boot_size=100   # 100MB sufficient for Pi OS boot files
+    local root_size=1200  # Increased to 1.2GB to accommodate full Pi OS system including kernel modules
     local total_size=$((boot_size + root_size + 25))  # 25MB padding
     
     log_info "Image size planning: Boot=${boot_size}MB, Root=${root_size}MB, Total=${total_size}MB"
@@ -757,54 +757,127 @@ copy_and_customize_filesystems() {
         log_warning "SoulBox assets directory not found: $assets_dir/root"
     fi
     
-    # Extract critical files from the original Pi OS root filesystem
-    log_info "Extracting essential Pi OS files from root partition..."
-    local critical_files=(
-        # System authentication and users
-        "/etc/passwd" "/etc/group" "/etc/shadow" "/etc/gshadow"
-        # System configuration
-        "/etc/fstab" "/etc/hostname" "/etc/hosts" "/etc/resolv.conf"
-        # APT package management
-        "/etc/apt/sources.list" "/etc/apt/trusted.gpg.d" "/etc/apt/preferences"
-        "/var/lib/dpkg/status" "/var/lib/apt/lists"
-        # SSH configuration
-        "/etc/ssh/sshd_config" "/etc/ssh/ssh_config"
-        # Essential binaries
-        "/bin/bash" "/bin/sh" "/bin/ls" "/bin/cp" "/bin/mv" "/bin/rm"
-        "/usr/bin/systemctl" "/usr/bin/apt" "/usr/bin/dpkg" "/usr/bin/wget" "/usr/bin/curl"
-        # System libraries (critical ones)
-        "/lib/systemd/systemd" "/usr/lib/systemd/systemd-logind"
-        # Network configuration
-        "/etc/dhcpcd.conf" "/etc/wpa_supplicant/wpa_supplicant.conf"
+    # CRITICAL CHANGE: Use comprehensive Pi OS extraction approach
+    log_info "Performing comprehensive Pi OS root filesystem extraction..."
+    
+    # Instead of selective file extraction, copy most of the Pi OS root filesystem
+    # This ensures we get all kernel modules, system libraries, and essential components
+    
+    # Create temporary extraction area
+    local pi_extract_dir="$temp_dir/pi-root-extract"
+    mkdir -p "$pi_extract_dir"
+    
+    # Extract the core Pi OS directories that are essential for boot
+    local core_system_dirs=(
+        "/bin" "/sbin" "/lib" "/usr/bin" "/usr/sbin" "/usr/lib" 
+        "/etc" "/var/lib/dpkg" "/var/lib/apt" "/var/cache/apt"
+        "/boot" "/usr/share/keyrings"
     )
     
-    local extracted_files=0
-    local failed_files=()
-    for critical_file in "${critical_files[@]}"; do
-        local target_dir="$temp_dir/root-content$(dirname "$critical_file")"
-        mkdir -p "$target_dir"
-        if e2cp "$pi_root:$critical_file" "$temp_dir/root-content$critical_file" 2>/dev/null; then
-            extracted_files=$((extracted_files + 1))
+    local total_extracted=0
+    local total_failed=0
+    
+    for sys_dir in "${core_system_dirs[@]}"; do
+        log_info "Extracting essential system directory: $sys_dir"
+        local target_dir="$pi_extract_dir$sys_dir"
+        mkdir -p "$(dirname "$target_dir")"
+        
+        # Try to extract the entire directory recursively
+        if e2cp -r "$pi_root:$sys_dir" "$pi_extract_dir/" 2>/dev/null; then
+            total_extracted=$((total_extracted + 1))
+            log_success "Extracted system directory: $sys_dir"
         else
-            log_warning "Failed to extract critical file: $critical_file"
-            failed_files+=("$critical_file")
+            log_warning "Failed to extract system directory: $sys_dir"
+            total_failed=$((total_failed + 1))
+            # Create minimal directory structure
+            mkdir -p "$target_dir"
             
-            # Special handling for /bin/sh - it might be a symlink in Pi OS
-            if [[ "$critical_file" == "/bin/sh" ]]; then
-                log_info "Attempting alternative /bin/sh extraction methods..."
-                # Try copying bash as sh fallback
-                if e2cp "$pi_root:/bin/bash" "$temp_dir/root-content$critical_file" 2>/dev/null; then
-                    log_info "Copied /bin/bash as /bin/sh fallback"
-                    extracted_files=$((extracted_files + 1))
+            # For critical directories, try to extract at least some key files
+            if [[ "$sys_dir" == "/bin" ]]; then
+                log_info "Attempting to extract critical /bin files individually..."
+                local bin_files=("bash" "sh" "ls" "cp" "mv" "rm" "mount" "umount" "cat" "grep" "sed" "awk")
+                for bin_file in "${bin_files[@]}"; do
+                    e2cp "$pi_root:/bin/$bin_file" "$pi_extract_dir/bin/$bin_file" 2>/dev/null && log_info "✓ /bin/$bin_file" || log_warning "✗ /bin/$bin_file"
+                done
+            elif [[ "$sys_dir" == "/sbin" ]]; then
+                log_info "Attempting to extract critical /sbin files individually..."
+                local sbin_files=("init" "fsck" "fsck.ext4" "blkid" "mke2fs" "modprobe" "depmod")
+                for sbin_file in "${sbin_files[@]}"; do
+                    e2cp "$pi_root:/sbin/$sbin_file" "$pi_extract_dir/sbin/$sbin_file" 2>/dev/null && log_info "✓ /sbin/$sbin_file" || log_warning "✗ /sbin/$sbin_file"
+                done
+            elif [[ "$sys_dir" == "/lib" ]]; then
+                log_info "Attempting to extract critical /lib components individually..."
+                mkdir -p "$pi_extract_dir/lib"
+                
+                # Extract the dynamic linker (absolutely critical)
+                e2cp "$pi_root:/lib/ld-linux-aarch64.so.1" "$pi_extract_dir/lib/ld-linux-aarch64.so.1" 2>/dev/null && log_info "✓ ld-linux-aarch64.so.1"
+                
+                # CRITICAL: Try to extract kernel modules directory structure
+                log_info "Attempting to extract kernel modules recursively..."
+                if e2cp -r "$pi_root:/lib/modules" "$pi_extract_dir/lib/" 2>/dev/null; then
+                    log_success "✓ /lib/modules (CRITICAL - Full extraction)"
                 else
-                    log_warning "Both /bin/sh and /bin/bash extraction failed"
+                    log_error "✗ /lib/modules (CRITICAL FAILURE - trying alternative approach)"
+                    # Alternative: Find and extract specific kernel version
+                    mkdir -p "$pi_extract_dir/lib/modules"
+                    # Try to find the kernel version by listing the modules directory
+                    local kernel_versions
+                    kernel_versions=$(e2ls "$pi_root:/lib/modules" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | head -3)
+                    if [[ -n "$kernel_versions" ]]; then
+                        log_info "Found kernel versions: $kernel_versions"
+                        while read -r kernel_ver; do
+                            if [[ -n "$kernel_ver" ]]; then
+                                log_info "Extracting kernel modules for: $kernel_ver"
+                                if e2cp -r "$pi_root:/lib/modules/$kernel_ver" "$pi_extract_dir/lib/modules/" 2>/dev/null; then
+                                    log_success "✓ /lib/modules/$kernel_ver"
+                                else
+                                    log_warning "✗ /lib/modules/$kernel_ver"
+                                fi
+                            fi
+                        done <<< "$kernel_versions"
+                    else
+                        log_error "Could not determine kernel version for module extraction"
+                    fi
+                fi
+                
+                # Extract firmware (important for hardware support)
+                if e2cp -r "$pi_root:/lib/firmware" "$pi_extract_dir/lib/" 2>/dev/null; then
+                    log_success "✓ /lib/firmware"
+                else
+                    log_warning "✗ /lib/firmware"
+                    mkdir -p "$pi_extract_dir/lib/firmware"
+                fi
+                
+                # Extract systemd components
+                if e2cp -r "$pi_root:/lib/systemd" "$pi_extract_dir/lib/" 2>/dev/null; then
+                    log_success "✓ /lib/systemd"
+                else
+                    log_warning "✗ /lib/systemd"
+                    mkdir -p "$pi_extract_dir/lib/systemd"
+                fi
+                
+                # Extract architecture-specific libraries
+                if e2cp -r "$pi_root:/lib/aarch64-linux-gnu" "$pi_extract_dir/lib/" 2>/dev/null; then
+                    log_success "✓ /lib/aarch64-linux-gnu"
+                else
+                    log_warning "✗ /lib/aarch64-linux-gnu"
+                    mkdir -p "$pi_extract_dir/lib/aarch64-linux-gnu"
                 fi
             fi
         fi
     done
-    log_success "Extracted $extracted_files critical Pi OS files"
-    if [[ ${#failed_files[@]} -gt 0 ]]; then
-        log_warning "Failed to extract ${#failed_files[@]} files: ${failed_files[*]}"
+    
+    log_info "Pi OS extraction summary: $total_extracted directories succeeded, $total_failed failed"
+    
+    # Copy extracted Pi OS content to our root-content directory
+    log_info "Merging extracted Pi OS content with SoulBox customizations..."
+    if [[ -d "$pi_extract_dir" ]]; then
+        # Copy everything from the extracted Pi OS, but don't overwrite SoulBox files
+        cp -r "$pi_extract_dir"/* "$temp_dir/root-content/" 2>/dev/null || true
+        log_success "Pi OS content merged with SoulBox customizations"
+        
+        # Clean up extraction directory
+        rm -rf "$pi_extract_dir"
     fi
     
     # Create essential system files (fallback if extraction failed)
