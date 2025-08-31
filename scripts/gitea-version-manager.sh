@@ -10,6 +10,7 @@ GITEA_SERVER="http://192.168.176.113:3000"
 GITEA_OWNER="reaper"
 GITEA_REPO="soulbox"
 GITEA_API_URL="${GITEA_SERVER}/api/v1/repos/${GITEA_OWNER}/${GITEA_REPO}"
+GITEA_TOKEN="${GITEA_TOKEN:-}"  # Set via environment variable
 
 # Colors for output
 RED='\033[0;31m'
@@ -26,7 +27,10 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Function to query Gitea releases API
 query_gitea_releases() {
     local releases_url="${GITEA_API_URL}/releases"
-    log_info "Querying Gitea releases: $releases_url"
+    # Only log when not in auto mode to avoid version output contamination
+    if [[ "${1:-}" != "silent" ]]; then
+        log_info "Querying Gitea releases: $releases_url" >&2
+    fi
     
     # Try to get releases from Gitea API
     if command -v curl >/dev/null 2>&1; then
@@ -53,11 +57,9 @@ get_latest_gitea_version() {
     
     # Validate version format and return
     if [[ "$latest_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        log_info "Latest Gitea release: $latest_version"
         echo "$latest_version"
     else
-        log_warning "No valid releases found on Gitea, using git tags as fallback"
-        # Fallback to git tags
+        # Fallback to git tags silently for clean version output
         get_latest_git_version
     fi
 }
@@ -140,7 +142,9 @@ get_next_version() {
     
     # Get latest version from Gitea first, fallback to git tags
     latest_version=$(get_latest_gitea_version)
-    log_info "Current version: $latest_version"
+    
+    # Log to stderr to avoid interfering with version output
+    log_info "Current version: $latest_version" >&2
     
     # Auto-determine increment type if not specified
     if [[ -z "$increment_type" ]]; then
@@ -150,9 +154,11 @@ get_next_version() {
     local next_version
     next_version=$(increment_version "$latest_version" "$increment_type")
     
-    log_info "Increment type: $increment_type"
-    log_info "Next version: $next_version"
+    # Log to stderr to avoid interfering with version output
+    log_info "Increment type: $increment_type" >&2
+    log_info "Next version: $next_version" >&2
     
+    # Only output the version to stdout (clean single line)
     echo "$next_version"
 }
 
@@ -183,9 +189,16 @@ EOF
     if command -v curl >/dev/null 2>&1; then
         log_info "Creating release via Gitea API..."
         local response
-        response=$(curl -s -X POST "$releases_url" \
-            -H "Content-Type: application/json" \
-            -d "$release_data" 2>/dev/null || echo '{"message":"API call failed"}')
+        if [[ -n "$GITEA_TOKEN" ]]; then
+            response=$(curl -s -X POST "$releases_url" \
+                -H "Authorization: token $GITEA_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "$release_data" 2>/dev/null || echo '{"message":"API call failed"}')
+        else
+            response=$(curl -s -X POST "$releases_url" \
+                -H "Content-Type: application/json" \
+                -d "$release_data" 2>/dev/null || echo '{"message":"API call failed"}')
+        fi
         
         # Check if release was created successfully
         local release_id
@@ -230,12 +243,17 @@ upload_release_asset() {
     log_info "Uploading release asset: $filename"
     
     local upload_url="${GITEA_API_URL}/releases/${release_id}/assets"
-    if curl -s -X POST "$upload_url" \
-        -H "Content-Type: application/octet-stream" \
-        -F "attachment=@${file_path};filename=${filename}" >/dev/null 2>&1; then
-        log_success "Uploaded: $filename"
+    if [[ -n "$GITEA_TOKEN" ]]; then
+        if curl -s -X POST "$upload_url" \
+            -H "Authorization: token $GITEA_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            -F "attachment=@${file_path};filename=${filename}" >/dev/null 2>&1; then
+            log_success "Uploaded: $filename"
+        else
+            log_warning "Failed to upload: $filename"
+        fi
     else
-        log_warning "Failed to upload: $filename"
+        log_warning "No Gitea token provided - skipping asset upload: $filename"
     fi
 }
 
