@@ -1348,37 +1348,95 @@ extract_with_debugfs_recursive() {
     local filesystem="$1"
     local staging_dir="$2"
     local fs_path="$3"
+    local current_depth="${4:-0}"
+    
+    # Prevent infinite recursion
+    if [[ $current_depth -gt 10 ]]; then
+        log_warning "Maximum recursion depth reached for $fs_path"
+        return 0
+    fi
     
     # Create the directory in staging
     mkdir -p "$staging_dir$fs_path"
     
-    # Get directory listing from debugfs
-    local listings
-    listings=$(echo "ls -l $fs_path" | debugfs "$filesystem" 2>/dev/null | grep -v "debugfs:")
+    # Get directory listing from debugfs with better error handling
+    local listings debug_output debug_exit_code
+    debug_output=$(echo "ls -l $fs_path" | debugfs "$filesystem" 2>&1)
+    debug_exit_code=$?
+    
+    if [[ $debug_exit_code -ne 0 ]]; then
+        log_warning "debugfs ls command failed for $fs_path (exit code: $debug_exit_code)"
+        log_info "debugfs output: $debug_output"
+        return 1
+    fi
+    
+    # Filter out debugfs prompts and extract actual directory listing
+    listings=$(echo "$debug_output" | grep -v "debugfs:" | grep -v "^$")
+    
+    if [[ -z "$listings" ]]; then
+        log_info "No directory contents found for $fs_path"
+        return 0
+    fi
+    
+    # Debug output for root directory
+    if [[ "$fs_path" == "/" ]]; then
+        log_info "Root directory listing from debugfs:"
+        echo "$listings" | while read -r line; do
+            [[ -n "$line" ]] && log_info "  $line"
+        done
+    fi
+    
+    local files_extracted=0
+    local dirs_processed=0
     
     # Parse debugfs output and extract files/directories
     while read -r line; do
         [[ -z "$line" ]] && continue
         
         # Parse debugfs ls -l output format
+        # Format: permissions links owner group size month day time/year name
         local perms=$(echo "$line" | awk '{print $1}')
         local name=$(echo "$line" | awk '{print $NF}')
         
         [[ "$name" == "." || "$name" == ".." ]] && continue
         [[ -z "$name" ]] && continue
         
-        local full_fs_path="$fs_path/$name"
+        local full_fs_path
+        if [[ "$fs_path" == "/" ]]; then
+            full_fs_path="/$name"
+        else
+            full_fs_path="$fs_path/$name"
+        fi
         local full_staging_path="$staging_dir$full_fs_path"
         
         if [[ "${perms:0:1}" == "d" ]]; then
             # It's a directory - recurse
-            extract_with_debugfs_recursive "$filesystem" "$staging_dir" "$full_fs_path"
+            if extract_with_debugfs_recursive "$filesystem" "$staging_dir" "$full_fs_path" $((current_depth + 1)); then
+                dirs_processed=$((dirs_processed + 1))
+            fi
         else
             # It's a file - extract it
-            echo "dump $full_fs_path $full_staging_path" | debugfs "$filesystem" 2>/dev/null >/dev/null
+            local dump_output
+            dump_output=$(echo "dump $full_fs_path $full_staging_path" | debugfs "$filesystem" 2>&1)
+            local dump_exit_code=$?
+            
+            if [[ $dump_exit_code -eq 0 ]]; then
+                files_extracted=$((files_extracted + 1))
+                # Log progress for root level files
+                if [[ $current_depth -eq 0 ]]; then
+                    log_info "Extracted file: $name"
+                fi
+            else
+                log_warning "Failed to extract $full_fs_path: $dump_output"
+            fi
         fi
         
     done <<< "$listings"
+    
+    # Log extraction summary for root level
+    if [[ "$fs_path" == "/" ]]; then
+        log_info "Root extraction summary: $files_extracted files, $dirs_processed directories processed"
+    fi
     
     return 0
 }
