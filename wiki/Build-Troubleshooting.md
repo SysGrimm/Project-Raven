@@ -129,6 +129,66 @@ fi
 log_success "Filesystem copied successfully"
 ```
 
+### Build #117 Pattern: False Positive Release Creation
+
+**Symptoms**:
+```bash
+✅ Gitea release created successfully!
+🔗 Release URL: https://gitea.osiris-adelie.ts.net/reaper/soulbox/releases/tag/v0.2.1756682593
+```
+But no actual release appears on the Gitea releases page, only old releases remain.
+
+**Root Cause**: Test version manager script provides false success without actual Gitea API integration.
+
+**Debug Commands**:
+```bash
+# Check what the version manager script actually does
+cat scripts/gitea-version-manager.sh
+
+# Test the create-release command manually
+./scripts/gitea-version-manager.sh create-release "v1.0.0" "test.img" "test.sha256"
+
+# Check if script handles arguments properly
+./scripts/gitea-version-manager.sh --help
+```
+
+**Wrong Test Implementation (Build #117 Issue)**:
+```bash
+# BROKEN - only outputs timestamp, ignores all arguments
+#!/bin/bash
+echo "v0.2.$(date +%s)"
+```
+
+**Fixed Test Implementation**:
+```bash
+# CORRECT - handles arguments and provides honest feedback
+#!/bin/bash
+case "$1" in
+    auto)
+        echo "v0.2.$(date +%s)"
+        ;;
+    create-release)
+        VERSION="$2"
+        IMAGE_FILE="$3"
+        CHECKSUM_FILE="$4"
+        echo "[TEST MODE] Would create release: $VERSION"
+        echo "[TEST MODE] Release creation simulated - no actual release created"
+        exit 0
+        ;;
+    *)
+        echo "Test version manager - Usage: $0 {auto|create-release}"
+        echo "Current mode: TEST (no real releases created)"
+        exit 1
+        ;;
+esac
+```
+
+**Key Points**:
+- ✅ Test scripts must clearly indicate when they're simulating operations
+- ✅ Never provide false success messages for operations that didn't actually complete
+- ⚠️ Always distinguish between "test success" and "actual success" in logs
+- 📝 Test infrastructure should validate workflow logic, not create false confidence
+
 ### Pi 5 Boot Sequence: Root Filesystem Mounting
 
 **Symptoms**:
