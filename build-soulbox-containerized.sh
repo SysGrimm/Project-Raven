@@ -2200,7 +2200,13 @@ EOF
         # Method 1: Standard LibreELEC populatefs syntax (filesystem source_dir)
         if [[ "$populate_success" != "true" ]]; then
             log_info "Method 1 - LibreELEC syntax: $populatefs_cmd $temp_dir/root-new.ext4 $staging_dir"
+            log_info "Populatefs debug: About to run populatefs with $staging_files staging files"
             if "$populatefs_cmd" "$temp_dir/root-new.ext4" "$staging_dir" >"$SAVE_ERROR" 2>&1; then
+                log_info "Populatefs debug: Command returned success (exit code 0)"
+                if [[ -s "$SAVE_ERROR" ]]; then
+                    log_info "Populatefs debug output:"
+                    cat "$SAVE_ERROR" | sed 's/^/    /' | head -10 || true
+                fi
                 populate_success=true
                 log_success "✓ Populatefs succeeded with LibreELEC syntax (method 1)"
             else
@@ -2279,8 +2285,8 @@ EOF
         fi
         
         if [[ "$populate_success" == "true" ]]; then
-            # CRITICAL: Verify filesystem was actually populated
-            log_info "Verifying filesystem population..."
+                # CRITICAL: Verify filesystem was actually populated
+            log_info "=== COMPREHENSIVE FILESYSTEM VERIFICATION ==="
             
             local verification_failed=false
             
@@ -2293,16 +2299,72 @@ EOF
                 local free_blocks=$(echo "$fs_info" | grep "Free blocks:" | awk '{print $3}' || echo "0")
                 local used_blocks=$((block_count - free_blocks))
                 
-                log_info "Filesystem usage: $used_inodes inodes used, $used_blocks blocks used"
+                log_info "Post-populatefs filesystem statistics:"
+                log_info "  - Total inodes: $total_inodes"
+                log_info "  - Used inodes: $used_inodes"
+                log_info "  - Total blocks: $block_count"
+                log_info "  - Used blocks: $used_blocks"
                 
-                # Check for essential system files using e2ls
+                # Enhanced root directory analysis
+                log_info "Examining root directory structure..."
+                if e2ls "$temp_dir/root-new.ext4:/" >/dev/null 2>&1; then
+                    local root_listing=$(e2ls "$temp_dir/root-new.ext4:/" 2>/dev/null | grep -v '^d.*\.$' | sort)
+                    local root_entries=$(echo "$root_listing" | wc -l)
+                    log_info "Root directory has $root_entries entries:"
+                    echo "$root_listing" | head -20 | while read -r entry; do
+                        log_info "    $entry"
+                    done
+                    if [[ $root_entries -gt 20 ]]; then
+                        log_info "    ... and $((root_entries - 20)) more entries"
+                    fi
+                else
+                    log_error "Cannot examine root directory - filesystem may be inaccessible"
+                    verification_failed=true
+                fi
+                
+                # Check for essential system files using e2ls with detailed output
+                log_info "Checking essential system files:"
                 local critical_missing=()
-                local critical_files=("/bin/bash" "/sbin/init" "/etc/passwd" "/lib" "/usr/bin")
+                local critical_files=("/bin/bash" "/sbin/init" "/etc/passwd" "/lib" "/usr/bin" "/boot" "/home" "/var")
                 for critical_file in "${critical_files[@]}"; do
-                    if ! e2ls "$temp_dir/root-new.ext4:$critical_file" >/dev/null 2>&1; then
+                    if e2ls "$temp_dir/root-new.ext4:$critical_file" >/dev/null 2>&1; then
+                        log_info "  ✓ Found: $critical_file"
+                    else
                         critical_missing+=("$critical_file")
+                        log_warning "  ✗ Missing: $critical_file"
                     fi
                 done
+                
+                # Detailed analysis of key directories
+                for key_dir in "/usr/bin" "/lib" "/etc"; do
+                    if e2ls "$temp_dir/root-new.ext4:$key_dir" >/dev/null 2>&1; then
+                        local dir_count=$(e2ls "$temp_dir/root-new.ext4:$key_dir" 2>/dev/null | wc -l)
+                        log_info "  $key_dir contains $dir_count items"
+                        if [[ $dir_count -lt 5 && "$key_dir" == "/usr/bin" ]]; then
+                            log_warning "  WARNING: $key_dir has very few items ($dir_count) - incomplete extraction?"
+                        fi
+                    fi
+                done
+                
+                # Compare with staging directory to detect populatefs issues
+                if [[ -d "$staging_dir" ]]; then
+                    local staging_file_count=$(find "$staging_dir" -type f | wc -l)
+                    log_info "Staging vs Filesystem comparison:"
+                    log_info "  - Staging directory files: $staging_file_count"
+                    log_info "  - Filesystem inodes used: $used_inodes"
+                    log_info "  - Expected ratio: ~1:1 (staging files : filesystem inodes)"
+                    
+                    if [[ $staging_file_count -gt 1000 && $used_inodes -lt 100 ]]; then
+                        log_error "CRITICAL MISMATCH: Staging has $staging_file_count files but filesystem only $used_inodes inodes"
+                        log_error "This indicates populatefs silently failed to copy files to the filesystem"
+                        verification_failed=true
+                    elif [[ $staging_file_count -gt 500 && $used_inodes -lt $((staging_file_count / 10)) ]]; then
+                        log_warning "WARNING: Significant mismatch - staging: $staging_file_count files, filesystem: $used_inodes inodes"
+                        log_warning "populatefs may have partially failed"
+                    else
+                        log_success "✓ Reasonable ratio between staging files and filesystem inodes"
+                    fi
+                fi
                 
                 # FAIL BUILD if filesystem is essentially empty (would cause Pi 5 boot failure)
                 if [[ $used_inodes -lt 100 ]]; then
@@ -2310,8 +2372,8 @@ EOF
                     log_error "Expected: >1000 inodes for a functional Pi OS base system"
                     log_error "This would cause 'No init found' boot failure on Pi 5"
                     verification_failed=true
-                elif [[ ${#critical_missing[@]} -gt 2 ]]; then
-                    log_error "CRITICAL: Missing essential system files: ${critical_missing[*]}"
+                elif [[ ${#critical_missing[@]} -gt 3 ]]; then
+                    log_error "CRITICAL: Missing too many essential system files: ${critical_missing[*]}"
                     log_error "This would cause 'can't execute /sbin/init' boot failure on Pi 5"
                     verification_failed=true
                 else
