@@ -474,6 +474,118 @@ fi
 **Build Script Integration**:
 These optimizations are now integrated into the main build script in the `extract_with_debugfs_recursive()` function and related helpers. The optimizations maintain system compatibility while dramatically improving extraction performance in container environments.
 
+### Build #94 Pattern: Populatefs Silent Failure (Argument Order Bug)
+
+**Symptoms**:
+```bash
+# Build appears to succeed through all phases
+✓ Populatefs succeeded with LibreELEC syntax (method 1)
+✓ Populatefs debug: Command returned success (exit code 0)
+
+# But filesystem verification reveals the truth:
+CRITICAL MISMATCH: Staging has 1105 files but filesystem only 11 inodes
+This indicates populatefs silently failed to copy files to the filesystem
+This would cause 'No init found' boot failure on Pi 5
+```
+
+**Root Cause**: **Argument order reversal** in populatefs command - the most insidious type of bug.
+
+**Detailed Analysis**:
+```bash
+# WRONG SYNTAX (Build #94):
+populatefs <filesystem> <source_directory>
+populatefs /workspace/.../root-new.ext4 /workspace/.../staging-root
+
+# CORRECT SYNTAX (Build #95 fix):
+populatefs <source_directory> <filesystem>  
+populatefs /workspace/.../staging-root /workspace/.../root-new.ext4
+```
+
+**Why This Bug Was So Dangerous**:
+1. **populatefs returned exit code 0** (success)
+2. **No visible error messages** during execution
+3. **Filesystem was created** with proper size (350MB)
+4. **Only discovered during verification** (11 inodes vs 1105 expected)
+5. **Would have created unbootable image** ("No init found" on Pi 5)
+
+**The Tell-Tale Error Hidden in Debug Output**:
+```bash
+debugfs 1.47.0 (5-Feb-2023)
+debugfs: Is a directory while trying to open /workspace/.../staging-root
+```
+
+**Analysis**: This error reveals that populatefs was trying to use the **staging directory** as the **filesystem image** instead of the **source directory**.
+
+**Debug Commands**:
+```bash
+# Check inode usage after populatefs
+tune2fs -l root-filesystem.ext4 | grep -E "(Inode count|Free inodes)"
+
+# Compare staging files vs filesystem inodes
+echo "Staging files: $(find staging-dir -type f | wc -l)"
+echo "Used inodes: $(( $(tune2fs -l root.ext4 | grep 'Inode count:' | awk '{print $3}') - $(tune2fs -l root.ext4 | grep 'Free inodes:' | awk '{print $3}') ))"
+
+# Examine root directory contents
+e2ls root-filesystem.ext4:/
+
+# Look for the "Is a directory" error in populatefs output
+grep -i "is a directory" populatefs-log.txt
+```
+
+**Root Cause Documentation**:
+
+The `populate-extfs.sh` script from e2fsprogs has this usage:
+```bash
+# From populate-extfs.sh source:
+# Usage: populate-extfs.sh <source> <device>
+# Create an ext2/ext3/ext4 filesystem from a directory or file
+#   source: The source directory or file  
+#   device: The target device
+
+# Internal script variables:
+SRCDIR=${1%%/}    # First argument = source directory
+DEVICE=$2          # Second argument = device/filesystem
+```
+
+**The Fix Applied**:
+```bash
+# BEFORE (Build #94 - Wrong order):
+log_info "Method 1 - LibreELEC syntax: $populatefs_cmd $temp_dir/root-new.ext4 $staging_dir"
+if "$populatefs_cmd" "$temp_dir/root-new.ext4" "$staging_dir" >"$SAVE_ERROR" 2>&1; then
+
+# AFTER (Build #95 - Correct order):
+log_info "Method 1 - populate-extfs.sh syntax: $populatefs_cmd $staging_dir $temp_dir/root-new.ext4"
+if "$populatefs_cmd" "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERROR" 2>&1; then
+```
+
+**Prevention - Enhanced Verification**:
+```bash
+# Comprehensive filesystem verification added to catch silent failures
+if [[ $staging_file_count -gt 1000 && $used_inodes -lt 100 ]]; then
+    log_error "CRITICAL MISMATCH: Staging has $staging_file_count files but filesystem only $used_inodes inodes"
+    log_error "This indicates populatefs silently failed to copy files to the filesystem"
+    verification_failed=true
+fi
+
+# Essential file verification
+local critical_files=("/bin/bash" "/sbin/init" "/etc/passwd" "/lib" "/usr/bin" "/boot" "/home" "/var")
+for critical_file in "${critical_files[@]}"; do
+    if e2ls "$filesystem:$critical_file" >/dev/null 2>&1; then
+        log_info "  ✓ Found: $critical_file"
+    else
+        critical_missing+=("$critical_file")
+        log_warning "  ✗ Missing: $critical_file"
+    fi
+done
+```
+
+**Lessons Learned**:
+1. **Silent failures are the most dangerous** - tools that appear to succeed but do nothing
+2. **Always verify tool arguments** against original documentation, not assumptions
+3. **Comprehensive verification is essential** - catch issues before creating unbootable images
+4. **Exit codes don't tell the whole story** - populatefs returned 0 despite doing nothing
+5. **Debug output analysis is critical** - the "Is a directory" error was the smoking gun
+
 ### Build #93 Pattern: Container Disk Space Exhaustion (Refined Analysis)
 
 **Symptoms**:

@@ -436,17 +436,18 @@ test_populatefs_functionality() {
     dd if=/dev/zero of="$test_ext4" bs=1M count=10 2>/dev/null
     mke2fs -F -q -t ext4 "$test_ext4" >/dev/null 2>&1
     
-    # Test both syntaxes
-    if populatefs "$test_ext4" "$test_staging" >/dev/null 2>&1 || \
-       populatefs -U -d "$test_staging" "$test_ext4" >/dev/null 2>&1; then
-        log_success "✅ Populatefs functionality verified"
-        rm -rf "$test_dir"
-        return 0
-    else
-        log_error "❌ Populatefs functionality test failed"
-        rm -rf "$test_dir"
-        return 1
-    fi
+# Test both syntaxes (shell script syntax first)
+# Correct order: populatefs <source_directory> <filesystem>
+if populatefs "$test_staging" "$test_ext4" >/dev/null 2>&1 || \
+   populatefs -U -d "$test_staging" "$test_ext4" >/dev/null 2>&1; then
+    log_success "✅ Populatefs functionality verified"
+    rm -rf "$test_dir"
+    return 0
+else
+    log_error "❌ Populatefs functionality test failed"
+    rm -rf "$test_dir"
+    return 1
+fi
 }
 ```
 
@@ -1098,12 +1099,32 @@ if "$populatefs_cmd" -U -d "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERRO
     log_success "✓ Populatefs succeeded with binary syntax"
 else
     # Method 2: Shell script syntax (populate-extfs.sh)
-    if "$populatefs_cmd" "$temp_dir/root-new.ext4" "$staging_dir" >"$SAVE_ERROR" 2>&1; then
+    # Correct order: populatefs <source_directory> <filesystem>
+    if "$populatefs_cmd" "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERROR" 2>&1; then
         populate_success=true
         log_success "✓ Populatefs succeeded with shell script syntax"
     fi
 fi
 ```
+
+##### Populatefs Argument Order Bug (Build #94 finding)
+
+During Build #94 we discovered a silent failure caused by reversed arguments when calling the shell script version (populate-extfs.sh). The correct usage is:
+
+```bash
+# Correct (shell script)
+populatefs <source_directory> <filesystem>
+# Example
+populatefs "$staging_dir" "$temp_dir/root-new.ext4"
+```
+
+Wrong ordering may appear to succeed (exit code 0) but results in an almost-empty filesystem. A tell-tale error in verbose logs is:
+
+```bash
+debugfs: Is a directory while trying to open /path/to/staging-dir
+```
+
+We have updated all examples and internal calls to ensure the correct order is used and added verification to detect silent failures (inode count vs. staging file count).
 
 #### Debugfs Extraction with Recursive Symlink Handling
 
@@ -1190,23 +1211,149 @@ fi
 - Artifacts: ✅ All files uploaded successfully
 ```
 
-#### Filesystem Population Verification
+#### Filesystem Population Verification (Enhanced Post-Build #94)
+
+After the Build #94 silent failure discovery, we implemented comprehensive verification to catch populatefs failures that return success but don't actually populate the filesystem:
 
 ```bash
-# Critical verification step:
-if tune2fs -l "$temp_dir/root-new.ext4" >/dev/null 2>&1; then
-    local fs_info=$(tune2fs -l "$temp_dir/root-new.ext4" 2>/dev/null)
-    local block_count=$(echo "$fs_info" | grep "Block count:" | awk '{print $3}' || echo "0")
-    local free_blocks=$(echo "$fs_info" | grep "Free blocks:" | awk '{print $3}' || echo "0")
-    local used_blocks=$((block_count - free_blocks))
+# Comprehensive filesystem verification to detect silent populatefs failures
+verify_filesystem_population() {
+    local filesystem="$1"
+    local staging_dir="$2"
+    local verification_failed=false
+    local critical_missing=()
     
-    if [[ $used_blocks -gt 1000 ]]; then
-        log_success "Populatefs completed - filesystem has content (used blocks: $used_blocks)"
+    log_info "Performing comprehensive filesystem verification..."
+    
+    # Count staging files vs filesystem inodes
+    local staging_file_count=$(find "$staging_dir" -type f 2>/dev/null | wc -l)
+    
+    if tune2fs -l "$filesystem" >/dev/null 2>&1; then
+        local fs_info=$(tune2fs -l "$filesystem" 2>/dev/null)
+        local inode_count=$(echo "$fs_info" | grep "Inode count:" | awk '{print $3}' || echo "0")
+        local free_inodes=$(echo "$fs_info" | grep "Free inodes:" | awk '{print $3}' || echo "0")
+        local used_inodes=$((inode_count - free_inodes))
+        
+        log_info "File count comparison:"
+        log_info "  Staging files: $staging_file_count"
+        log_info "  Filesystem used inodes: $used_inodes"
+        
+        # Critical mismatch detection (Build #94 lesson)
+        if [[ $staging_file_count -gt 1000 && $used_inodes -lt 100 ]]; then
+            log_error "CRITICAL MISMATCH: Staging has $staging_file_count files but filesystem only $used_inodes inodes"
+            log_error "This indicates populatefs silently failed to copy files to the filesystem"
+            log_error "This would cause 'No init found' boot failure on Pi 5"
+            verification_failed=true
+        elif [[ $used_inodes -gt 1000 ]]; then
+            log_success "✅ Filesystem verification passed: $used_inodes inodes used (adequate population)"
+        else
+            log_warning "⚠️ Filesystem has limited content: $used_inodes inodes used"
+        fi
     else
-        log_warning "Filesystem appears mostly empty (used blocks: $used_blocks)"
+        log_error "Cannot read filesystem metadata for verification"
+        verification_failed=true
     fi
-fi
+    
+    # Essential file verification (prevent unbootable images)
+    local critical_files=("/bin/bash" "/sbin/init" "/etc/passwd" "/lib" "/usr/bin" "/boot" "/home" "/var")
+    log_info "Verifying essential system files exist..."
+    
+    for critical_file in "${critical_files[@]}"; do
+        if e2ls "$filesystem:$critical_file" >/dev/null 2>&1; then
+            log_info "  ✅ Found: $critical_file"
+        else
+            critical_missing+=("$critical_file")
+            log_warning "  ❌ Missing: $critical_file"
+        fi
+    done
+    
+    # Report critical missing files
+    if [[ ${#critical_missing[@]} -gt 0 ]]; then
+        log_error "Critical system files missing from filesystem:"
+        for missing_file in "${critical_missing[@]}"; do
+            log_error "  - $missing_file"
+        done
+        
+        if [[ ${#critical_missing[@]} -gt 3 ]]; then
+            log_error "Too many critical files missing - filesystem population likely failed"
+            verification_failed=true
+        fi
+    else
+        log_success "✅ All essential system files present"
+    fi
+    
+    # Directory structure verification
+    local essential_dirs=("/usr" "/etc" "/var" "/home" "/opt" "/tmp")
+    log_info "Verifying directory structure..."
+    
+    for essential_dir in "${essential_dirs[@]}"; do
+        if e2ls "$filesystem:$essential_dir" >/dev/null 2>&1; then
+            log_info "  ✅ Directory exists: $essential_dir"
+        else
+            log_warning "  ❌ Directory missing: $essential_dir"
+            verification_failed=true
+        fi
+    done
+    
+    # Final verification result
+    if [[ "$verification_failed" == "true" ]]; then
+        log_error "❌ FILESYSTEM VERIFICATION FAILED"
+        log_error "The created filesystem appears to be incomplete or corrupted"
+        log_error "This would result in an unbootable image"
+        return 1
+    else
+        log_success "✅ FILESYSTEM VERIFICATION PASSED"
+        log_success "Filesystem contains complete Pi OS structure and would be bootable"
+        return 0
+    fi
+}
 ```
+
+##### Key Verification Improvements (Build #94+)
+
+**Silent Failure Detection**:
+- **Inode vs File Count Comparison**: Detects when staging has 1000+ files but filesystem has <100 inodes
+- **Critical Mismatch Alerts**: Specifically catches the Build #94 pattern where populatefs appeared to succeed but did nothing
+- **Boot Failure Prevention**: Identifies scenarios that would cause "No init found" failures
+
+**Essential File Verification**:
+- **Critical System Files**: Verifies presence of `/sbin/init`, `/bin/bash`, `/etc/passwd`, etc.
+- **Directory Structure**: Ensures essential directories like `/usr`, `/etc`, `/var` exist
+- **Bootability Check**: Confirms the filesystem contains the minimum required structure for Pi 5 boot
+
+**Enhanced Error Reporting**:
+- **Detailed Diagnostics**: Shows exact file counts and inode usage
+- **Clear Failure Reasons**: Explains why verification failed and what would happen
+- **Actionable Information**: Helps developers understand and fix population issues
+
+**Integration with Populatefs**:
+```bash
+# Enhanced populatefs with mandatory verification
+populate_with_comprehensive_populatefs() {
+    local staging_dir="$1"
+    local filesystem="$2"
+    
+    # ... populatefs execution code ...
+    
+    # MANDATORY verification (Build #94+ requirement)
+    if [[ "$populate_success" == "true" ]]; then
+        log_info "Populatefs reported success - performing verification..."
+        if verify_filesystem_population "$filesystem" "$staging_dir"; then
+            log_success "✅ Populatefs verification passed - filesystem properly populated"
+            return 0
+        else
+            log_error "❌ Populatefs verification FAILED - filesystem not properly populated"
+            log_error "Despite populatefs returning success, the filesystem is incomplete"
+            return 1
+        fi
+    else
+        log_error "Populatefs failed during execution"
+        return 1
+    fi
+}
+```
+
+This comprehensive verification system ensures that Build #94-style silent failures are immediately detected and the build fails fast rather than creating unbootable images.
 
 ## Advanced Debugging and Troubleshooting
 
