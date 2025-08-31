@@ -1998,21 +1998,65 @@ EOF
         fi
         
         if [[ "$populate_success" == "true" ]]; then
-            # Verify the populated filesystem using tune2fs (more reliable than e2ls)
-            log_info "Verifying populated filesystem..."
+            # CRITICAL: Verify filesystem was actually populated
+            log_info "Verifying filesystem population..."
+            
+            local verification_failed=false
+            
             if tune2fs -l "$temp_dir/root-new.ext4" >/dev/null 2>&1; then
                 local fs_info=$(tune2fs -l "$temp_dir/root-new.ext4" 2>/dev/null)
+                local total_inodes=$(echo "$fs_info" | grep "Inode count:" | awk '{print $3}' || echo "0")
+                local free_inodes=$(echo "$fs_info" | grep "Free inodes:" | awk '{print $3}' || echo "0")
+                local used_inodes=$((total_inodes - free_inodes))
                 local block_count=$(echo "$fs_info" | grep "Block count:" | awk '{print $3}' || echo "0")
                 local free_blocks=$(echo "$fs_info" | grep "Free blocks:" | awk '{print $3}' || echo "0")
                 local used_blocks=$((block_count - free_blocks))
                 
-                if [[ $used_blocks -gt 1000 ]]; then
-                    log_success "Populatefs completed - filesystem has content (used blocks: $used_blocks)"
+                log_info "Filesystem usage: $used_inodes inodes used, $used_blocks blocks used"
+                
+                # Check for essential system files using e2ls
+                local critical_missing=()
+                local critical_files=("/bin/bash" "/sbin/init" "/etc/passwd" "/lib" "/usr/bin")
+                for critical_file in "${critical_files[@]}"; do
+                    if ! e2ls "$temp_dir/root-new.ext4:$critical_file" >/dev/null 2>&1; then
+                        critical_missing+=("$critical_file")
+                    fi
+                done
+                
+                # FAIL BUILD if filesystem is essentially empty (would cause Pi 5 boot failure)
+                if [[ $used_inodes -lt 100 ]]; then
+                    log_error "CRITICAL: Filesystem population failed - only $used_inodes inodes used"
+                    log_error "Expected: >1000 inodes for a functional Pi OS base system"
+                    log_error "This would cause 'No init found' boot failure on Pi 5"
+                    verification_failed=true
+                elif [[ ${#critical_missing[@]} -gt 2 ]]; then
+                    log_error "CRITICAL: Missing essential system files: ${critical_missing[*]}"
+                    log_error "This would cause 'can't execute /sbin/init' boot failure on Pi 5"
+                    verification_failed=true
                 else
-                    log_warning "Filesystem appears mostly empty (used blocks: $used_blocks)"
+                    log_success "✓ Filesystem population verified: $used_inodes inodes, $used_blocks blocks used"
+                    if [[ ${#critical_missing[@]} -gt 0 ]]; then
+                        log_warning "Some files missing but build can continue: ${critical_missing[*]}"
+                    fi
                 fi
             else
-                log_warning "Could not verify filesystem with tune2fs"
+                log_error "Could not verify filesystem with tune2fs - filesystem may be corrupted"
+                verification_failed=true
+            fi
+            
+            if [[ "$verification_failed" == "true" ]]; then
+                log_error "Filesystem verification failed - build cannot continue"
+                log_error "Debug: Check staging directory population and populatefs functionality"
+                if [[ -d "$staging_dir" ]]; then
+                    local staging_files=$(find "$staging_dir" -type f | wc -l)
+                    log_error "Staging directory contained $staging_files files"
+                    if [[ $staging_files -lt 1000 ]]; then
+                        log_error "Root cause: Base Pi OS extraction to staging failed"
+                    else
+                        log_error "Root cause: populatefs failed to copy from staging to filesystem"
+                    fi
+                fi
+                return 1
             fi
             
             log_success "Staging-style filesystem population complete!"
