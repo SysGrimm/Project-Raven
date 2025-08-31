@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SoulBox Container-Friendly Build System
-# Based on LibreELEC's approach - no loop device mounting required
+# Container-safe approach - no loop device mounting required
 # Uses mtools (FAT32) and e2tools/populatefs (ext4) for filesystem manipulation
 
 set -e
@@ -21,8 +21,8 @@ log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Configuration
-PI_OS_IMAGE_URL="https://downloads.raspberrypi.org/raspios_lite_arm64/images/raspios_lite_arm64-2024-07-04/2024-07-04-raspios-bookworm-arm64-lite.img.xz"
-PI_OS_IMAGE_NAME="2024-07-04-raspios-bookworm-arm64-lite.img"
+BASE_IMAGE_URL="https://downloads.raspberrypi.org/raspios_lite_arm64/images/raspios_lite_arm64-2024-07-04/2024-07-04-raspios-bookworm-arm64-lite.img.xz"
+BASE_IMAGE_NAME="2024-07-04-raspios-bookworm-arm64-lite.img"
 WORK_DIR="$SCRIPT_DIR/containerized-build"
 SOULBOX_VERSION=""
 
@@ -37,10 +37,10 @@ show_usage() {
     echo "  -h, --help               Show this help message"
     echo ""
     echo "This approach:"
-    echo "  1. Downloads official Raspberry Pi OS ARM64 image"
+    echo "  1. Downloads official ARM64 base image"
     echo "  2. Extracts filesystem contents using mtools and e2tools (no mounting!)"
     echo "  3. Creates new SoulBox image from scratch using parted and dd"
-    echo "  4. Populates with Pi OS content + SoulBox configurations"
+    echo "  4. Populates with base system and SoulBox configurations"
     echo "  5. Works in unprivileged containers - no loop devices needed!"
 }
 
@@ -84,6 +84,22 @@ fi
 
 log_info "Building SoulBox $SOULBOX_VERSION using container-friendly approach"
 
+# Error handling
+SAVE_ERROR=""
+
+show_error() {
+    echo "SoulBox Build: An error has occurred..."
+    echo
+    if [[ -n "$SAVE_ERROR" && -s "$SAVE_ERROR" ]]; then
+        cat "$SAVE_ERROR"
+    else
+        echo "Check available disk space and tool dependencies..."
+    fi
+    echo
+    cleanup
+    exit 1
+}
+
 # Function to check required tools
 check_required_tools() {
     log_info "Checking required tools..."
@@ -104,12 +120,34 @@ check_required_tools() {
     command -v mdir >/dev/null 2>&1 || missing_tools+=(mtools)
     command -v mkfs.fat >/dev/null 2>&1 || missing_tools+=(dosfstools)
     command -v fsck.fat >/dev/null 2>&1 || missing_tools+=(dosfstools)
-    command -v e2cp >/dev/null 2>&1 || missing_tools+=(e2tools)
     command -v mke2fs >/dev/null 2>&1 || missing_tools+=(e2fsprogs)
+    command -v tune2fs >/dev/null 2>&1 || missing_tools+=(e2fsprogs)
+    command -v e2fsck >/dev/null 2>&1 || missing_tools+=(e2fsprogs)
+    
+    # Check for populatefs (preferred) or e2tools (fallback)
+    local has_populatefs=false
+    local has_e2tools=false
+    
+    if command -v populatefs >/dev/null 2>&1; then
+        has_populatefs=true
+        log_success "Found populatefs (preferred method)"
+    fi
+    
+    if command -v e2cp >/dev/null 2>&1 && command -v e2ls >/dev/null 2>&1; then
+        has_e2tools=true
+        log_info "Found e2tools (fallback method available)"
+    fi
+    
+    if [[ "$has_populatefs" == "false" && "$has_e2tools" == "false" ]]; then
+        missing_tools+=("populatefs OR e2tools")
+        log_warning "Neither populatefs nor e2tools found!"
+        log_info "For best results, install populatefs: apt-get install e2fsprogs-extra"
+        log_info "Fallback option: apt-get install e2tools"
+    fi
     
     if [[ ${#missing_tools[@]} -gt 0 ]]; then
         log_error "Missing required tools: ${missing_tools[*]}"
-        log_info "Install with: apt-get update && apt-get install -y ${missing_tools[*]}"
+        log_info "Install with: apt-get update && apt-get install -y e2fsprogs-extra mtools dosfstools parted curl xz-utils coreutils zip tar"
         exit 1
     fi
     
@@ -127,49 +165,49 @@ setup_work_dir() {
     log_success "Work directory prepared: $WORK_DIR"
 }
 
-# Function to download Pi OS image
-download_pi_os_image() {
-    local image_path="$WORK_DIR/source/$PI_OS_IMAGE_NAME"
+# Function to download base image
+download_base_image() {
+    local image_path="$WORK_DIR/source/$BASE_IMAGE_NAME"
     
     if [[ -f "$image_path" ]]; then
-        log_info "Pi OS image already exists: $PI_OS_IMAGE_NAME"
+        log_info "Base image already exists: $BASE_IMAGE_NAME"
         return 0
     fi
     
-    log_info "Downloading Raspberry Pi OS image..."
-    log_info "URL: $PI_OS_IMAGE_URL"
+    log_info "Downloading base ARM64 image..."
+    log_info "URL: $BASE_IMAGE_URL"
     
     cd "$WORK_DIR/source"
     
     # Download compressed image
-    curl -L -o "${PI_OS_IMAGE_NAME}.xz" "$PI_OS_IMAGE_URL"
+    curl -L -o "${BASE_IMAGE_NAME}.xz" "$BASE_IMAGE_URL"
     
     # Extract image
     log_info "Extracting image..."
-    xz -d "${PI_OS_IMAGE_NAME}.xz"
+    xz -d "${BASE_IMAGE_NAME}.xz"
     
     if [[ -f "$image_path" ]]; then
-        log_success "Downloaded and extracted: $PI_OS_IMAGE_NAME"
+        log_success "Downloaded and extracted: $BASE_IMAGE_NAME"
         log_info "Size: $(ls -lh "$image_path" | awk '{print $5}')"
     else
-        log_error "Failed to extract Pi OS image"
+        log_error "Failed to extract base image"
         exit 1
     fi
 }
 
-# Function to extract Pi OS filesystems without mounting
-extract_pi_os_filesystems() {
-    local source_image="$WORK_DIR/source/$PI_OS_IMAGE_NAME"
-    local boot_fs="$WORK_DIR/filesystems/pi-boot.fat"
-    local root_fs="$WORK_DIR/filesystems/pi-root.ext4"
+# Function to extract base image filesystems without mounting
+extract_base_filesystems() {
+    local source_image="$WORK_DIR/source/$BASE_IMAGE_NAME"
+    local boot_fs="$WORK_DIR/filesystems/base-boot.fat"
+    local root_fs="$WORK_DIR/filesystems/base-root.ext4"
     
-    log_info "Extracting Pi OS filesystems using container-friendly method..."
+    log_info "Extracting base image filesystems using container-friendly method..."
     
     # Get partition information using parted
     log_info "Analyzing partition table..."
     parted -s "$source_image" unit s print > "$WORK_DIR/partition-info.txt"
     
-    # Extract partition details (assuming standard Pi OS layout)
+    # Extract partition details (assuming standard layout)
     local boot_start=$(parted -s "$source_image" unit s print | grep "^ 1" | awk '{print $2}' | sed 's/s$//')
     local boot_end=$(parted -s "$source_image" unit s print | grep "^ 1" | awk '{print $3}' | sed 's/s$//')
     local root_start=$(parted -s "$source_image" unit s print | grep "^ 2" | awk '{print $2}' | sed 's/s$//')
@@ -192,7 +230,7 @@ extract_pi_os_filesystems() {
     fsck.fat -v "$boot_fs" >/dev/null 2>&1 || log_warning "Boot filesystem check failed"
     e2fsck -n "$root_fs" >/dev/null 2>&1 || log_warning "Root filesystem check failed"
     
-    log_success "Pi OS filesystems extracted successfully"
+    log_success "Base image filesystems extracted successfully"
 }
 
 # Function to create SoulBox assets
@@ -218,7 +256,7 @@ create_boot_config() {
     # Create enhanced config.txt
     cat > "$boot_dir/soulbox-config.txt" << 'EOF'
 
-# SoulBox Will-o'-Wisp Configuration for Raspberry Pi 5
+# SoulBox Will-o'-Wisp Configuration
 gpu_mem=320
 arm_64bit=1
 disable_overscan=1
@@ -402,7 +440,7 @@ EOF
 
     Will-o'-Wisp Media Center ~ Boot Complete
     
-    🔥 The blue flame burns bright 🔥
+    The blue flame burns bright
     
     Default credentials:
     - soulbox:soulbox (media center user)
@@ -442,8 +480,8 @@ build_soulbox_image() {
     mkdir -p "$temp_dir"
     
     # Image size calculations (in MB) - Balanced approach for container space constraints
-    # Container available space: ~1.6GB, need to balance Pi OS completeness with space limits
-    local boot_size=100   # 100MB sufficient for Pi OS boot files
+    # Container available space: ~1.6GB, need to balance base OS completeness with space limits
+    local boot_size=100   # 100MB sufficient for base boot files
     local root_size=900   # 900MB - compromise between functionality and container space limits
     local total_size=$((boot_size + root_size + 25))  # 25MB padding
     
@@ -468,13 +506,13 @@ build_soulbox_image() {
     fi
     log_success "Blank image created: $(ls -lh "$output_image" | awk '{print $5}')"
     
-    # Create partition table with proper sector alignment for Raspberry Pi
-    log_info "Creating MBR partition table with Raspberry Pi compatible alignment..."
+    # Create partition table with proper sector alignment
+    log_info "Creating MBR partition table with compatible alignment..."
     if ! parted -s "$output_image" mklabel msdos; then
         log_error "Failed to create partition table"
         return 1
     fi
-    # Use 4MiB start to ensure proper alignment for FAT32 on Pi
+    # Use 4MiB start to ensure proper alignment for FAT32
     if ! parted -s "$output_image" mkpart primary fat32 4MiB $((boot_size + 4))MiB; then
         log_error "Failed to create boot partition"
         return 1
@@ -483,7 +521,7 @@ build_soulbox_image() {
         log_error "Failed to create root partition"
         return 1
     fi
-    # Set proper partition IDs for Raspberry Pi compatibility
+    # Set proper partition IDs for hardware compatibility
     if ! parted -s "$output_image" set 1 boot on; then
         log_error "Failed to set boot flag"
         return 1
@@ -492,7 +530,7 @@ build_soulbox_image() {
         log_error "Failed to set LBA flag"
         return 1
     fi
-    log_success "Partition table created with Pi-compatible alignment"
+    log_success "Partition table created with compatible alignment"
     
     # Create filesystem images
     log_info "Creating boot filesystem (${boot_size}MB)..."
@@ -500,7 +538,7 @@ build_soulbox_image() {
         log_error "Failed to create boot filesystem image"
         return 1
     fi
-    # Format as FAT32 with proper parameters for Raspberry Pi compatibility
+    # Format as FAT32 with proper parameters for hardware compatibility
     if ! mkfs.fat -F 32 -n "SOULBOX" -v "$temp_dir/boot-new.fat" 2>/dev/null; then
         log_error "Failed to format boot filesystem"
         return 1
@@ -545,17 +583,17 @@ build_soulbox_image() {
     fi
     log_success "Root filesystem ready: $(ls -lh "$temp_dir/root-new.ext4" | awk '{print $5}')"
     
-    if [[ ! -f "$WORK_DIR/filesystems/pi-boot.fat" ]]; then
-        log_error "Source boot partition missing: $WORK_DIR/filesystems/pi-boot.fat"
+    if [[ ! -f "$WORK_DIR/filesystems/base-boot.fat" ]]; then
+        log_error "Source boot partition missing: $WORK_DIR/filesystems/base-boot.fat"
         return 1
     fi
-    log_success "Source boot partition ready: $(ls -lh "$WORK_DIR/filesystems/pi-boot.fat" | awk '{print $5}')"
+    log_success "Source boot partition ready: $(ls -lh "$WORK_DIR/filesystems/base-boot.fat" | awk '{print $5}')"
     
-    if [[ ! -f "$WORK_DIR/filesystems/pi-root.ext4" ]]; then
-        log_error "Source root partition missing: $WORK_DIR/filesystems/pi-root.ext4"
+    if [[ ! -f "$WORK_DIR/filesystems/base-root.ext4" ]]; then
+        log_error "Source root partition missing: $WORK_DIR/filesystems/base-root.ext4"
         return 1
     fi
-    log_success "Source root partition ready: $(ls -lh "$WORK_DIR/filesystems/pi-root.ext4" | awk '{print $5}')"
+    log_success "Source root partition ready: $(ls -lh "$WORK_DIR/filesystems/base-root.ext4" | awk '{print $5}')"
     
     if [[ ! -d "$WORK_DIR/soulbox-assets" ]]; then
         log_error "SoulBox assets missing: $WORK_DIR/soulbox-assets"
@@ -619,27 +657,51 @@ extract_directory_contents() {
     local source_dir="$2"
     local target_dir="$3"
     local max_files="${4:-1000}"
+    local current_depth="${5:-0}"
     
     # Create target directory
     mkdir -p "$target_dir"
     
-    # Get directory listing - e2ls outputs items separated by spaces
-    local items_raw
-    items_raw=$(e2ls "$source_img:$source_dir" 2>/dev/null || echo "")
+    # Increase depth limit for kernel modules (they can be deeply nested)
+    local max_depth=6
+    if [[ $current_depth -gt $max_depth ]]; then
+        echo "    Maximum recursion depth ($max_depth) reached for $source_dir"
+        return 0
+    fi
     
-    if [[ -z "$items_raw" ]]; then
+    # Get directory listing using long format to better parse filenames
+    local listing_output
+    listing_output=$(e2ls -l "$source_img:$source_dir" 2>&1)
+    local e2ls_exit_code=$?
+    
+    if [[ $e2ls_exit_code -ne 0 ]]; then
+        echo "    ERROR: e2ls failed for $source_dir (exit code: $e2ls_exit_code)"
+        echo "    e2ls output: $listing_output"
         return 1
+    fi
+    
+    if [[ -z "$listing_output" ]]; then
+        echo "    WARNING: Empty directory listing for $source_dir"
+        return 0
     fi
     
     local files_copied=0
     local dirs_processed=0
     local total_processed=0
+    local copy_failures=0
     
-    # Parse e2ls output - items are separated by spaces/tabs
-    for item in $items_raw; do
-        [[ -z "$item" ]] && continue
+    # Parse e2ls -l output line by line (format: permissions links user group size date filename)
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        
+        # Extract filename from the end of the line (after date/time)
+        # e2ls -l format: drwxr-xr-x   2 0    0        1024 Dec  7  2023 filename
+        local filename
+        filename=$(echo "$line" | awk '{print $NF}')
+        
         # Skip . and .. entries and lost+found
-        [[ "$item" == "." || "$item" == ".." || "$item" == "lost+found" ]] && continue
+        [[ "$filename" == "." || "$filename" == ".." || "$filename" == "lost+found" ]] && continue
+        [[ -z "$filename" ]] && continue
         
         # Limit extraction to prevent runaway copying
         if [[ $total_processed -ge $max_files ]]; then
@@ -647,82 +709,380 @@ extract_directory_contents() {
             break
         fi
         
-        local source_item="$source_dir/$item"
-        local target_item="$target_dir/$item"
+        local source_item="$source_dir/$filename"
+        local target_item="$target_dir/$filename"
         
-        # Test if this item is a directory by trying to list it
-        if e2ls "$source_img:$source_item" >/dev/null 2>&1; then
-            # It's a directory - recurse into it (limited depth)
+        # Check if it's a directory based on the first character of permissions
+        local permissions
+        permissions=$(echo "$line" | awk '{print $1}')
+        
+        if [[ "${permissions:0:1}" == "d" ]]; then
+            # It's a directory - recurse into it
+            echo "    Processing directory: $source_item"
             mkdir -p "$target_item"
-            # Only recurse 3 levels deep to avoid excessive copying
-            local depth=$(echo "$source_dir" | tr -cd '/' | wc -c)
-            if [[ $depth -lt 3 ]]; then
-                if extract_directory_contents "$source_img" "$source_item" "$target_item" 100; then
-                    dirs_processed=$((dirs_processed + 1))
-                fi
+            if extract_directory_contents "$source_img" "$source_item" "$target_item" $max_files $((current_depth + 1)); then
+                dirs_processed=$((dirs_processed + 1))
+            else
+                echo "    WARNING: Failed to process directory: $source_item"
             fi
         else
-            # It's a file - copy it
-            if e2cp "$source_img:$source_item" "$target_item" 2>/dev/null; then
+            # It's a file - copy it with proper error handling
+            local copy_result
+            copy_result=$(e2cp "$source_img:$source_item" "$target_item" 2>&1)
+            local copy_exit_code=$?
+            
+            if [[ $copy_exit_code -eq 0 ]]; then
                 files_copied=$((files_copied + 1))
+                # For kernel modules, log successful copies
+                if [[ "$source_dir" == "/lib/modules"* ]]; then
+                    echo "    + Copied kernel module file: $filename"
+                fi
+            else
+                echo "    ERROR: Failed to copy $source_item (exit code: $copy_exit_code)"
+                echo "    e2cp output: $copy_result"
+                copy_failures=$((copy_failures + 1))
             fi
         fi
         
         total_processed=$((total_processed + 1))
+        
+        # Progress indicator for large directories
+        if [[ $((total_processed % 100)) -eq 0 ]]; then
+            echo "    Progress: $total_processed items processed in $source_dir"
+        fi
+        
+    done <<< "$listing_output"
+    
+    echo "    $source_dir: $files_copied files, $dirs_processed subdirs extracted (failures: $copy_failures)"
+    
+    # Return success if we extracted anything, or if it was an empty directory
+    if [[ $files_copied -gt 0 || $dirs_processed -gt 0 || $total_processed -eq 0 ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to validate kernel module extraction
+validate_kernel_modules_extraction() {
+    local modules_dir="$1"
+    
+    log_info "=== KERNEL MODULES EXTRACTION VALIDATION ==="
+    
+    if [[ ! -d "$modules_dir" ]]; then
+        log_error "Kernel modules directory not found: $modules_dir"
+        return 1
+    fi
+    
+    # Count kernel versions and modules
+    local kernel_versions=$(find "$modules_dir" -mindepth 1 -maxdepth 1 -type d | wc -l)
+    local total_modules=$(find "$modules_dir" -name "*.ko" | wc -l)
+    local total_files=$(find "$modules_dir" -type f | wc -l)
+    
+    log_info "Kernel module validation results:"
+    log_info "  - Kernel versions found: $kernel_versions"
+    log_info "  - Total .ko files: $total_modules"
+    log_info "  - Total files: $total_files"
+    
+    # List kernel versions
+    if [[ $kernel_versions -gt 0 ]]; then
+        log_info "  - Kernel version directories:"
+        find "$modules_dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | while read -r version; do
+            local version_modules=$(find "$modules_dir/$version" -name "*.ko" | wc -l)
+            log_info "    * $version ($version_modules modules)"
+        done
+    fi
+    
+    # Critical validation - check for essential directories
+    local critical_dirs=("kernel/drivers" "kernel/net" "kernel/fs")
+    local critical_found=0
+    
+    for kernel_ver_dir in "$modules_dir"/*/; do
+        if [[ -d "$kernel_ver_dir" ]]; then
+            for critical_dir in "${critical_dirs[@]}"; do
+                if [[ -d "$kernel_ver_dir/$critical_dir" ]]; then
+                    critical_found=$((critical_found + 1))
+                    log_info "  + Found critical directory: $(basename "$kernel_ver_dir")/$critical_dir"
+                fi
+            done
+        fi
     done
     
-    echo "    $source_dir: $files_copied files, $dirs_processed subdirs extracted"
+    # Determine validation result
+    if [[ $total_modules -eq 0 ]]; then
+        log_error "CRITICAL: No kernel modules (.ko files) found!"
+        log_error "This will cause boot failure - missing /proc/modules"
+        return 1
+    elif [[ $total_modules -lt 100 ]]; then
+        log_warning "WARNING: Very few kernel modules found ($total_modules)"
+        log_warning "This may cause hardware compatibility issues"
+    else
+        log_success "Kernel modules extraction appears successful ($total_modules modules)"
+    fi
+    
+    if [[ $critical_found -eq 0 ]]; then
+        log_warning "WARNING: No critical kernel directories found"
+        log_warning "System may have limited functionality"
+    else
+        log_success "Found $critical_found critical kernel directories"
+    fi
+    
     return 0
+}
+
+# Alternative kernel module extraction function
+extract_kernel_modules_alternative() {
+    local source_img="$1"
+    local target_modules_dir="$2"
+    
+    log_info "=== ALTERNATIVE KERNEL MODULES EXTRACTION ==="
+    
+    mkdir -p "$target_modules_dir"
+    
+    # Step 1: Find available kernel versions
+    log_info "Step 1: Discovering kernel versions..."
+    local kernel_versions
+    kernel_versions=$(e2ls -l "$source_img:/lib/modules" 2>/dev/null | grep '^d' | awk '{print $NF}' | head -5)
+    
+    if [[ -z "$kernel_versions" ]]; then
+        log_error "No kernel versions found in /lib/modules"
+        return 1
+    fi
+    
+    log_info "Found kernel versions: $(echo "$kernel_versions" | tr '\n' ' ')"
+    
+    local extracted_versions=0
+    local total_modules_extracted=0
+    
+    # Step 2: Extract each kernel version
+    while read -r kernel_ver; do
+        [[ -z "$kernel_ver" ]] && continue
+        
+        # Remove any trailing slash
+        kernel_ver="${kernel_ver%/}"
+        
+        log_info "Step 2: Extracting kernel version: $kernel_ver"
+        local kernel_modules_dir="$target_modules_dir/$kernel_ver"
+        mkdir -p "$kernel_modules_dir"
+        
+        # Step 3: Use file-by-file extraction for this kernel version
+        local version_modules=0
+        version_modules=$(extract_kernel_version_modules "$source_img" "/lib/modules/$kernel_ver" "$kernel_modules_dir")
+        
+        if [[ $version_modules -gt 0 ]]; then
+            extracted_versions=$((extracted_versions + 1))
+            total_modules_extracted=$((total_modules_extracted + version_modules))
+            log_success "✓ Extracted $version_modules modules for $kernel_ver"
+        else
+            log_warning "✗ Failed to extract modules for $kernel_ver"
+        fi
+        
+    done <<< "$kernel_versions"
+    
+    log_info "Alternative extraction summary:"
+    log_info "  - Kernel versions processed: $(echo "$kernel_versions" | wc -l)"
+    log_info "  - Kernel versions extracted: $extracted_versions"
+    log_info "  - Total modules extracted: $total_modules_extracted"
+    
+    if [[ $total_modules_extracted -gt 0 ]]; then
+        log_success "✓ Alternative kernel module extraction succeeded"
+        return 0
+    else
+        log_error "✗ Alternative kernel module extraction failed"
+        return 1
+    fi
+}
+
+# Extract modules for a specific kernel version using optimized approach
+extract_kernel_version_modules() {
+    local source_img="$1"
+    local source_modules_path="$2"
+    local target_dir="$3"
+    
+    local modules_extracted=0
+    
+    # Create essential kernel subdirectories
+    local kernel_subdirs=("kernel" "kernel/drivers" "kernel/net" "kernel/fs" "kernel/sound" "kernel/crypto")
+    for subdir in "${kernel_subdirs[@]}"; do
+        mkdir -p "$target_dir/$subdir"
+        
+        # Try to extract this subdirectory
+        if extract_directory_contents "$source_img" "$source_modules_path/$subdir" "$target_dir/$subdir" 200 0; then
+            local subdir_modules=$(find "$target_dir/$subdir" -name "*.ko" 2>/dev/null | wc -l)
+            if [[ $subdir_modules -gt 0 ]]; then
+                modules_extracted=$((modules_extracted + subdir_modules))
+                echo "    ✓ $subdir: $subdir_modules modules"
+            fi
+        fi
+    done
+    
+    # Extract essential module files from root of kernel version directory
+    local essential_files=("modules.order" "modules.builtin" "modules.builtin.modinfo" "modules.dep" "modules.dep.bin" "modules.symbols" "modules.symbols.bin" "modules.alias" "modules.alias.bin" "modules.devname")
+    for essential_file in "${essential_files[@]}"; do
+        if e2cp "$source_img:$source_modules_path/$essential_file" "$target_dir/$essential_file" 2>/dev/null; then
+            echo "    ✓ Essential file: $essential_file"
+        fi
+    done
+    
+    echo $modules_extracted
+}
+
+# LibreELEC-style staging function for Pi OS content extraction
+extract_pi_os_to_staging() {
+    local source_img="$1"
+    local staging_dir="$2"
+    
+    log_info "=== EXTRACTING PI OS TO STAGING DIRECTORY ==="
+    log_info "Source: $source_img"
+    log_info "Staging: $staging_dir"
+    
+    # Create staging directory
+    mkdir -p "$staging_dir"
+    
+    # Check if we have populatefs or need to fall back to e2tools
+    if command -v populatefs >/dev/null 2>&1; then
+        log_info "Using populatefs (LibreELEC method) for efficient extraction"
+        # TODO: populatefs typically goes the other direction (staging -> filesystem)
+        # For now, we'll use our improved e2tools as extraction and populatefs for creation
+        extract_pi_os_content_with_e2tools "$source_img" "$staging_dir"
+    else
+        log_info "Using e2tools fallback method for extraction"
+        extract_pi_os_content_with_e2tools "$source_img" "$staging_dir"
+    fi
+    
+    # Verify extraction
+    local file_count=$(find "$staging_dir" -type f | wc -l)
+    local dir_count=$(find "$staging_dir" -type d | wc -l)
+    log_info "Staging extraction complete: $file_count files, $dir_count directories"
+    
+    if [[ $file_count -lt 100 ]]; then
+        log_warning "Very few files extracted ($file_count) - this may indicate extraction problems"
+    else
+        log_success "Pi OS content successfully staged ($file_count files)"
+    fi
+}
+
+# Extract Pi OS content using improved e2tools (fallback when populatefs not available for extraction)
+extract_pi_os_content_with_e2tools() {
+    local source_img="$1"
+    local staging_dir="$2"
+    
+    # Core Pi OS directories for extraction
+    local core_dirs=(
+        "/bin" "/sbin" "/lib" "/usr/bin" "/usr/sbin" "/usr/lib"
+        "/etc" "/var/lib/dpkg" "/var/lib/apt" "/boot"
+    )
+    
+    local total_extracted=0
+    local total_failed=0
+    
+    for sys_dir in "${core_dirs[@]}"; do
+        log_info "Staging Pi OS directory: $sys_dir"
+        local target_dir="$staging_dir$sys_dir"
+        mkdir -p "$(dirname "$target_dir")"
+        
+        if extract_directory_contents "$source_img" "$sys_dir" "$target_dir" 2000; then
+            total_extracted=$((total_extracted + 1))
+            log_success "Staged: $sys_dir"
+            
+            # Special handling for kernel modules validation
+            if [[ "$sys_dir" == "/lib" ]]; then
+                validate_kernel_modules_extraction "$target_dir/modules" || log_warning "Kernel module staging may be incomplete"
+            fi
+        else
+            log_warning "Failed to stage: $sys_dir (trying critical files)"
+            total_failed=$((total_failed + 1))
+            
+            # Critical file fallback for key directories
+            if [[ "$sys_dir" == "/bin" ]]; then
+                extract_critical_bin_files "$source_img" "$staging_dir"
+            elif [[ "$sys_dir" == "/lib" ]]; then
+                extract_critical_lib_files "$source_img" "$staging_dir"
+            fi
+        fi
+    done
+    
+    log_info "Pi OS staging summary: $total_extracted succeeded, $total_failed failed"
+}
+
+# Extract critical /bin files when directory extraction fails
+extract_critical_bin_files() {
+    local source_img="$1"
+    local staging_dir="$2"
+    
+    mkdir -p "$staging_dir/bin"
+    local bin_files=("bash" "sh" "ls" "cp" "mv" "rm" "mount" "umount" "cat" "grep" "sed" "awk" "chmod" "chown")
+    
+    for bin_file in "${bin_files[@]}"; do
+        if e2cp "$source_img:/bin/$bin_file" "$staging_dir/bin/$bin_file" 2>/dev/null; then
+            log_info "✓ Critical binary: /bin/$bin_file"
+        fi
+    done
+}
+
+# Extract critical /lib files when directory extraction fails
+extract_critical_lib_files() {
+    local source_img="$1"
+    local staging_dir="$2"
+    
+    mkdir -p "$staging_dir/lib"
+    
+    # Try alternative kernel module extraction to staging
+    log_info "Attempting alternative kernel module staging..."
+    if extract_kernel_modules_alternative "$source_img" "$staging_dir/lib/modules"; then
+        log_success "✓ Kernel modules staged via alternative method"
+    else
+        log_error "✗ All kernel module staging methods failed"
+    fi
+    
+    # Essential library files
+    local lib_files=("ld-linux-aarch64.so.1")
+    for lib_file in "${lib_files[@]}"; do
+        if e2cp "$source_img:/lib/$lib_file" "$staging_dir/lib/$lib_file" 2>/dev/null; then
+            log_info "✓ Critical library: /lib/$lib_file"
+        fi
+    done
 }
 
 # Function to copy and customize filesystems
 copy_and_customize_filesystems() {
-    # Temporarily disable set -e for better error handling
-    set +e
+    # LibreELEC-style error handling
+    SAVE_ERROR="$1/save_error"
     
     local temp_dir="$1"
-    local pi_boot="$WORK_DIR/filesystems/pi-boot.fat"
-    local pi_root="$WORK_DIR/filesystems/pi-root.ext4"
+    local base_boot="$WORK_DIR/filesystems/base-boot.fat"
+    local base_root="$WORK_DIR/filesystems/base-root.ext4"
     local assets_dir="$WORK_DIR/soulbox-assets"
     
-    log_info "=== Starting filesystem copying phase ==="
+    log_info "=== STAGING-STYLE FILESYSTEM CREATION ==="
     log_info "Temp dir: $temp_dir"
-    log_info "Pi boot: $pi_boot"
-    log_info "Pi root: $pi_root"
+    log_info "Base boot: $base_boot"
+    log_info "Base root: $base_root"
     log_info "Assets: $assets_dir"
     
-    log_info "Copying Pi OS content and adding SoulBox customizations..."
-    
     # Verify input files exist
-    log_info "Checking input files..."
-    if [[ ! -f "$pi_boot" ]]; then
-        log_error "Boot partition file missing: $pi_boot"
-        set -e
+    if [[ ! -f "$base_boot" ]]; then
+        log_error "Boot partition file missing: $base_boot"
         return 1
     fi
-    log_success "Boot partition file found: $(ls -lh "$pi_boot" | awk '{print $5}')"
     
-    if [[ ! -f "$pi_root" ]]; then
-        log_error "Root partition file missing: $pi_root"
-        set -e
+    if [[ ! -f "$base_root" ]]; then
+        log_error "Root partition file missing: $base_root"
         return 1
     fi
-    log_success "Root partition file found: $(ls -lh "$pi_root" | awk '{print $5}')"
     
     if [[ ! -d "$assets_dir" ]]; then
         log_error "Assets directory missing: $assets_dir"
-        set -e
         return 1
     fi
-    log_success "Assets directory found"
     
-    # Copy Pi OS boot content
+    # Copy base OS boot content
     log_info "Processing boot partition..."
     mkdir -p "$temp_dir/boot-content"
     
     # Extract boot content using mtools
     log_info "Extracting boot partition content..."
-    if mcopy -s -i "$pi_boot" :: "$temp_dir/boot-content/" 2>&1; then
+    if mcopy -s -i "$base_boot" :: "$temp_dir/boot-content/" 2>&1; then
         log_success "Boot partition extracted successfully"
         log_info "Boot files found: $(ls -la "$temp_dir/boot-content/" | wc -l) items"
     else
@@ -744,7 +1104,7 @@ copy_and_customize_filesystems() {
     fi
     
     # Ensure essential boot files are present
-    log_info "Ensuring essential Pi boot files are present..."
+    log_info "Ensuring essential boot files are present..."
     local essential_files=("start4.elf" "fixup4.dat" "bcm2712-rpi-5-b.dtb" "kernel8.img" "config.txt" "cmdline.txt")
     for essential_file in "${essential_files[@]}"; do
         if [[ ! -f "$temp_dir/boot-content/$essential_file" ]]; then
@@ -799,7 +1159,7 @@ copy_and_customize_filesystems() {
     log_info "Processing root partition..."
     mkdir -p "$temp_dir/root-content"
     
-    # Create essential Pi OS directory structure
+    # Create essential directory structure
     log_info "Creating directory structure..."
     local dirs=("bin" "boot/firmware" "dev" "etc/systemd/system" "etc/apt" "etc/ssh" "home" "lib" "media" "mnt" "opt" "proc" "root" "run" "sbin" "srv" "sys" "tmp" "usr/bin" "usr/lib" "usr/local" "usr/share" "var/log" "var/tmp" "var/cache")
     for dir in "${dirs[@]}"; do
@@ -819,129 +1179,179 @@ copy_and_customize_filesystems() {
         log_warning "SoulBox assets directory not found: $assets_dir/root"
     fi
     
-    # CRITICAL CHANGE: Use comprehensive Pi OS extraction approach
-    log_info "Performing comprehensive Pi OS root filesystem extraction..."
+    # STAGING APPROACH: Use staging directory and populatefs
+    log_info "=== STAGING-STYLE STAGING AND POPULATION ==="
     
-    # Instead of selective file extraction, copy most of the Pi OS root filesystem
-    # This ensures we get all kernel modules, system libraries, and essential components
+    # Create staging directory
+    local staging_dir="$temp_dir/staging-root"
+    log_info "Creating staging directory: $staging_dir"
+    mkdir -p "$staging_dir"
     
-    # Create temporary extraction area
-    local pi_extract_dir="$temp_dir/pi-root-extract"
-    mkdir -p "$pi_extract_dir"
+    # Extract base OS content to staging directory
+    log_info "Extracting base OS content to staging directory..."
+    extract_pi_os_to_staging "$base_root" "$staging_dir"
     
-    # Extract the core Pi OS directories that are essential for boot
-    local core_system_dirs=(
-        "/bin" "/sbin" "/lib" "/usr/bin" "/usr/sbin" "/usr/lib" 
-        "/etc" "/var/lib/dpkg" "/var/lib/apt" "/var/cache/apt"
-        "/boot" "/usr/share/keyrings"
-    )
+    # Merge SoulBox customizations into staging
+    log_info "Merging SoulBox customizations with base OS content..."
+    if [[ -d "$temp_dir/root-content" ]]; then
+        cp -r "$temp_dir/root-content"/* "$staging_dir/" 2>/dev/null || true
+        log_success "SoulBox customizations merged into staging"
+    fi
     
-    local total_extracted=0
-    local total_failed=0
+    # Add filesystem marker
+    touch "$staging_dir/.please_resize_me"
+    log_info "Added filesystem resize marker"
     
-    for sys_dir in "${core_system_dirs[@]}"; do
-        log_info "Extracting essential system directory: $sys_dir"
-        local target_dir="$pi_extract_dir$sys_dir"
-        mkdir -p "$(dirname "$target_dir")"
-        
-        # FIXED: Use proper e2tools syntax instead of non-existent 'e2cp -r'
-        if extract_directory_contents "$pi_root" "$sys_dir" "$target_dir" 1000; then
-            total_extracted=$((total_extracted + 1))
-            log_success "Extracted system directory: $sys_dir"
-        else
-            log_warning "Failed to extract system directory: $sys_dir"
-            total_failed=$((total_failed + 1))
-            # Create minimal directory structure
-            mkdir -p "$target_dir"
+    # Populate filesystem using staging method
+    log_info "Populating filesystem using staging method..."
+    if command -v populatefs >/dev/null 2>&1; then
+        log_info "Using populatefs (preferred method)"
+        if populatefs -U -d "$staging_dir" "$temp_dir/root-new.ext4" >"$SAVE_ERROR" 2>&1; then
+            log_success "Filesystem populated using populatefs"
+            # Verify the populated filesystem
+            local populated_items=$(e2ls "$temp_dir/root-new.ext4:/" 2>/dev/null | wc -l || echo "0")
+            log_success "Populatefs completed - $populated_items items in root filesystem"
             
-            # For critical directories, try to extract at least some key files
-            if [[ "$sys_dir" == "/bin" ]]; then
-                log_info "Attempting to extract critical /bin files individually..."
-                local bin_files=("bash" "sh" "ls" "cp" "mv" "rm" "mount" "umount" "cat" "grep" "sed" "awk")
-                for bin_file in "${bin_files[@]}"; do
-                    e2cp "$pi_root:/bin/$bin_file" "$pi_extract_dir/bin/$bin_file" 2>/dev/null && log_info "✓ /bin/$bin_file" || log_warning "✗ /bin/$bin_file"
-                done
-            elif [[ "$sys_dir" == "/sbin" ]]; then
-                log_info "Attempting to extract critical /sbin files individually..."
-                local sbin_files=("init" "fsck" "fsck.ext4" "blkid" "mke2fs" "modprobe" "depmod")
-                for sbin_file in "${sbin_files[@]}"; do
-                    e2cp "$pi_root:/sbin/$sbin_file" "$pi_extract_dir/sbin/$sbin_file" 2>/dev/null && log_info "✓ /sbin/$sbin_file" || log_warning "✗ /sbin/$sbin_file"
-                done
-            elif [[ "$sys_dir" == "/lib" ]]; then
-                log_info "Attempting to extract critical /lib components individually..."
-                mkdir -p "$pi_extract_dir/lib"
-                
-                # Extract the dynamic linker (absolutely critical)
-                e2cp "$pi_root:/lib/ld-linux-aarch64.so.1" "$pi_extract_dir/lib/ld-linux-aarch64.so.1" 2>/dev/null && log_info "✓ ld-linux-aarch64.so.1"
-                
-                # CRITICAL: Try to extract kernel modules directory structure
-                log_info "Attempting to extract kernel modules recursively..."
-                if extract_directory_contents "$pi_root" "/lib/modules" "$pi_extract_dir/lib/modules" 5000; then
-                    log_success "✓ /lib/modules (CRITICAL - Full extraction)"
-                else
-                    log_error "✗ /lib/modules (CRITICAL FAILURE - trying alternative approach)"
-                    # Alternative: Find and extract specific kernel version
-                    mkdir -p "$pi_extract_dir/lib/modules"
-                    # Try to find the kernel version by listing the modules directory
-                    local kernel_versions
-                    kernel_versions=$(e2ls "$pi_root:/lib/modules" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | head -3)
-                    if [[ -n "$kernel_versions" ]]; then
-                        log_info "Found kernel versions: $kernel_versions"
-                        while read -r kernel_ver; do
-                            if [[ -n "$kernel_ver" ]]; then
-                                # Remove trailing / if present
-                                kernel_ver="${kernel_ver%/}"
-                                log_info "Extracting kernel modules for: $kernel_ver"
-                                if extract_directory_contents "$pi_root" "/lib/modules/$kernel_ver" "$pi_extract_dir/lib/modules/$kernel_ver" 1000; then
-                                    log_success "✓ /lib/modules/$kernel_ver"
-                                else
-                                    log_warning "✗ /lib/modules/$kernel_ver"
-                                fi
-                            fi
-                        done <<< "$kernel_versions"
-                    else
-                        log_error "Could not determine kernel version for module extraction"
-                    fi
-                fi
-                
-                # Extract firmware (important for hardware support)
-                if extract_directory_contents "$pi_root" "/lib/firmware" "$pi_extract_dir/lib/firmware" 1000; then
-                    log_success "✓ /lib/firmware"
-                else
-                    log_warning "✗ /lib/firmware"
-                    mkdir -p "$pi_extract_dir/lib/firmware"
-                fi
-                
-                # Extract systemd components
-                if extract_directory_contents "$pi_root" "/lib/systemd" "$pi_extract_dir/lib/systemd" 1000; then
-                    log_success "✓ /lib/systemd"
-                else
-                    log_warning "✗ /lib/systemd"
-                    mkdir -p "$pi_extract_dir/lib/systemd"
-                fi
-                
-                # Extract architecture-specific libraries
-                if extract_directory_contents "$pi_root" "/lib/aarch64-linux-gnu" "$pi_extract_dir/lib/aarch64-linux-gnu" 2000; then
-                    log_success "✓ /lib/aarch64-linux-gnu"
-                else
-                    log_warning "✗ /lib/aarch64-linux-gnu"
-                    mkdir -p "$pi_extract_dir/lib/aarch64-linux-gnu"
-                fi
+            # Validate kernel modules in the populated filesystem
+            if e2ls "$temp_dir/root-new.ext4:/lib/modules" >/dev/null 2>&1; then
+                log_success "✓ Kernel modules directory confirmed in populated filesystem"
+            else
+                log_warning "⚠ No /lib/modules directory found in populated filesystem"
             fi
+            
+            log_success "Staging-style filesystem population complete!"
+            return 0
+        else
+            log_error "Populatefs failed - falling back to e2tools method"
+            if [[ -s "$SAVE_ERROR" ]]; then
+                log_error "Populatefs error output:"
+                cat "$SAVE_ERROR"
+            fi
+        fi
+    else
+        log_info "populatefs not available - using e2tools fallback"
+    fi
+    
+    # Fallback to e2tools method if populatefs failed or not available
+    log_info "Using e2tools fallback for filesystem population..."
+    populate_filesystem_with_e2tools "$temp_dir" "$staging_dir"
+}
+
+# E2tools fallback function for filesystem population
+populate_filesystem_with_e2tools() {
+    local temp_dir="$1"
+    local staging_dir="$2"
+    
+    log_info "=== E2TOOLS FALLBACK FILESYSTEM POPULATION ==="
+    
+    # Create directories first - using a different approach due to e2tools limitations
+    local dir_count=0
+    local file_count=0
+    local failed_ops=0
+    
+    log_info "Creating essential directories in ext4 filesystem..."
+    # Create critical directories individually without -p flag (e2mkdir doesn't support -p reliably)
+    local essential_dirs=("bin" "boot" "dev" "etc" "home" "lib" "media" "mnt" "opt" "proc" "root" "run" "sbin" "srv" "sys" "tmp" "usr" "var")
+    for dir in "${essential_dirs[@]}"; do
+        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
+            dir_count=$((dir_count + 1))
+        else
+            log_warning "Failed to create essential directory: /$dir"
+            failed_ops=$((failed_ops + 1))
         fi
     done
     
-    log_info "Pi OS extraction summary: $total_extracted directories succeeded, $total_failed failed"
+    # Create nested directories one level at a time
+    local nested_dirs=("boot/firmware" "etc/systemd" "etc/apt" "etc/ssh" "home/soulbox" "home/pi" "opt/soulbox" "usr/bin" "usr/lib" "usr/local" "usr/share" "var/log" "var/tmp" "var/cache")
+    for dir in "${nested_dirs[@]}"; do
+        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
+            dir_count=$((dir_count + 1))
+        else
+            log_warning "Failed to create nested directory: /$dir"
+            failed_ops=$((failed_ops + 1))
+        fi
+    done
     
-    # Copy extracted Pi OS content to our root-content directory
-    log_info "Merging extracted Pi OS content with SoulBox customizations..."
-    if [[ -d "$pi_extract_dir" ]]; then
-        # Copy everything from the extracted Pi OS, but don't overwrite SoulBox files
-        cp -r "$pi_extract_dir"/* "$temp_dir/root-content/" 2>/dev/null || true
-        log_success "Pi OS content merged with SoulBox customizations"
+    # Create SoulBox specific directories
+    local soulbox_dirs=("home/soulbox/Videos" "home/soulbox/Music" "home/soulbox/Pictures" "home/soulbox/Downloads" "home/soulbox/.kodi" "home/soulbox/.kodi/userdata" "opt/soulbox/assets" "opt/soulbox/scripts" "opt/soulbox/logs" "etc/systemd/system" "etc/systemd/system/multi-user.target.wants")
+    for dir in "${soulbox_dirs[@]}"; do
+        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
+            dir_count=$((dir_count + 1))
+        else
+            log_warning "Failed to create SoulBox directory: /$dir"
+            failed_ops=$((failed_ops + 1))
+        fi
+    done
+    
+    log_success "Created $dir_count directories (failed: $failed_ops)"
+    
+    # Copy files from staging directory
+    log_info "Copying files from staging directory to ext4 filesystem..."
+    failed_ops=0
+    if [[ -d "$staging_dir" ]]; then
+        while IFS= read -r -d '' file; do
+            rel_path="${file#$staging_dir}"
+            if [[ -n "$rel_path" && "$rel_path" != "/.please_resize_me" ]]; then
+                if e2cp "$file" "$temp_dir/root-new.ext4:$rel_path" 2>/dev/null; then
+                    file_count=$((file_count + 1))
+                else
+                    # Only log warnings for important files
+                    if [[ "$rel_path" == "/lib/modules/"* || "$rel_path" == "/bin/"* || "$rel_path" == "/sbin/"* ]]; then
+                        log_warning "Failed to copy important file: $rel_path"
+                    fi
+                    failed_ops=$((failed_ops + 1))
+                fi
+            fi
+        done < <(find "$staging_dir" -type f -print0)
+        log_success "Copied $file_count files from staging (failed: $failed_ops)"
+    else
+        log_warning "Staging directory not found - using minimal content"
+    fi
+    
+    # Handle symbolic links workaround - create them in first-boot script
+    log_info "Processing symbolic links from staging..."
+    local link_count=0
+    local symlink_commands=""
+    if [[ -d "$staging_dir" ]]; then
+        while IFS= read -r -d '' link; do
+            rel_path="${link#$staging_dir}"
+            target=$(readlink "$link" 2>/dev/null || echo "")
+            if [[ -n "$target" && -n "$rel_path" ]]; then
+                log_info "Creating symlink workaround for: $rel_path -> $target"
+                # Add command to create symlink during first boot
+                symlink_commands+="ln -sf '$target' '$rel_path'\n"
+                link_count=$((link_count + 1))
+            fi
+        done < <(find "$staging_dir" -type l -print0 2>/dev/null)
         
-        # Clean up extraction directory
-        rm -rf "$pi_extract_dir"
+        if [[ $link_count -gt 0 ]]; then
+            log_info "Creating symlink restoration script for $link_count links"
+            # Create a script to restore symlinks on first boot
+            mkdir -p "$staging_dir/opt/soulbox"
+            cat > "$staging_dir/opt/soulbox/restore-symlinks.sh" << EOF
+#!/bin/bash
+# SoulBox Symlink Restoration Script
+set -e
+
+echo "Restoring symbolic links..."
+${symlink_commands}
+echo "Symbolic links restored successfully"
+EOF
+            chmod +x "$staging_dir/opt/soulbox/restore-symlinks.sh"
+            
+            # Copy the symlink script to filesystem
+            e2cp "$staging_dir/opt/soulbox/restore-symlinks.sh" "$temp_dir/root-new.ext4:/opt/soulbox/restore-symlinks.sh" 2>/dev/null
+        fi
+    fi
+    
+    # Final verification
+    log_info "Verifying populated filesystem..."
+    if e2ls "$temp_dir/root-new.ext4:/" >/dev/null 2>&1; then
+        local root_items=$(e2ls "$temp_dir/root-new.ext4:/" 2>/dev/null | wc -l || echo "0")
+        log_success "E2tools fallback completed - $root_items items in root filesystem"
+    else
+        log_error "E2tools filesystem verification failed"
+        return 1
     fi
     
     # Create essential system files (fallback if extraction failed)
@@ -1140,22 +1550,22 @@ main() {
     # Execute build steps
     check_required_tools
     setup_work_dir
-    download_pi_os_image
-    extract_pi_os_filesystems
+    download_base_image
+    extract_base_filesystems
     create_soulbox_assets
     build_soulbox_image
     
     echo ""
-    log_success "🎉 SoulBox $SOULBOX_VERSION is ready!"
+    log_success "SoulBox $SOULBOX_VERSION is ready!"
     echo ""
-    echo "📋 Build Summary:"
+    echo "Build Summary:"
     echo "   Version: $SOULBOX_VERSION"
     echo "   Method: Container-friendly (no loop devices)"
     echo "   Output: soulbox-v${SOULBOX_VERSION#v}.img"
-    echo "   Base: Official Raspberry Pi OS ARM64"
+    echo "   Base: Official ARM64 base image"
     echo ""
-    echo "🚀 Flash to SD card and boot - first boot will install packages automatically!"
-    echo "💡 This approach works in any container environment!"
+    echo "Flash to SD card and boot - first boot will install packages automatically!"
+    echo "This approach works in any container environment!"
 }
 
 main "$@"
