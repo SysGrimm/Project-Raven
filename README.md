@@ -203,3 +203,4 @@ This project is open source. See LICENSE file for details.
 **Build Status**: ![Build Status](https://gitea.osiris-adelie.ts.net/reaper/soulbox/workflows/Build%20SoulBox%20SD%20Card%20Image/badge.svg)
 
 Ready to flash and boot! 🔥
+# Build test Sun Aug 31 17:53:20 CDT 2025
