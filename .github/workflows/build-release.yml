@@ -76,8 +76,10 @@ jobs:
             
             # Fix the hardcoded debugfs path to use system debugfs
             echo "🔧 Patching populatefs to use system debugfs..."
-            sudo sed -i 's|\"\$BIN_DIR/../debugfs/debugfs\"|debugfs|g' /usr/local/bin/populatefs
-            sudo sed -i 's|\$BIN_DIR/../debugfs/debugfs|debugfs|g' /usr/local/bin/populatefs
+            sudo sed -i 's|\"\$CONTRIB_DIR/../debugfs/debugfs\"|debugfs|g' /usr/local/bin/populatefs
+            sudo sed -i 's|\$CONTRIB_DIR/../debugfs/debugfs|debugfs|g' /usr/local/bin/populatefs
+            echo "📝 Verifying populatefs patch applied correctly..."
+            grep -n "debugfs" /usr/local/bin/populatefs || echo "No debugfs references found"
             
             echo "✅ populate-extfs.sh installed as populatefs"
         elif [[ -d "contrib/dir2fs" ]]; then
