@@ -1262,71 +1262,83 @@ extract_with_debugfs() {
     
     log_info "Using debugfs for ext4 extraction"
     
-    # Extract root partition as separate file first (reuse existing logic)
-    local temp_root="/tmp/soulbox-debugfs-root-$$.ext4"
-    
-    # Get partition information using parted with robust parsing
-    log_info "Analyzing partition table for root partition location..."
-    
-    # Get partition table info with verbose output for debugging
+    # Check if source_img is already an ext4 filesystem (extracted partition) or a disk image
     local parted_output
     parted_output=$(parted -s "$source_img" unit s print 2>/dev/null)
     
     # Debug output
-    log_info "Partition table output:"
+    log_info "Analyzing source image format..."
     echo "$parted_output" | while read -r line; do
         log_info "  $line"
     done
     
-    # Try multiple parsing approaches for root partition (partition 2)
-    local root_start root_end
+    local temp_root="/tmp/soulbox-debugfs-root-$$.ext4"
     
-    # Method 1: Look for line starting with space(s) + 2
-    root_start=$(echo "$parted_output" | grep -E '^[[:space:]]*2[[:space:]]' | awk '{print $2}' | sed 's/s$//')
-    root_end=$(echo "$parted_output" | grep -E '^[[:space:]]*2[[:space:]]' | awk '{print $3}' | sed 's/s$//')
-    
-    # Method 2: If that fails, try looking for any line containing partition 2
-    if [[ -z "$root_start" || -z "$root_end" ]]; then
-        root_start=$(echo "$parted_output" | grep -E '2[[:space:]]+[0-9]+s[[:space:]]+[0-9]+s' | awk '{print $2}' | sed 's/s$//')
-        root_end=$(echo "$parted_output" | grep -E '2[[:space:]]+[0-9]+s[[:space:]]+[0-9]+s' | awk '{print $3}' | sed 's/s$//')
-    fi
-    
-    # Method 3: Alternative approach using awk to find partition 2
-    if [[ -z "$root_start" || -z "$root_end" ]]; then
-        local partition_line=$(echo "$parted_output" | awk '/^[ ]*2[ ]+/ {print; exit}')
-        if [[ -n "$partition_line" ]]; then
-            root_start=$(echo "$partition_line" | awk '{print $2}' | sed 's/s$//')
-            root_end=$(echo "$partition_line" | awk '{print $3}' | sed 's/s$//')
+    # Check if this is a loop device (single filesystem) or partitioned disk
+    if echo "$parted_output" | grep -q "Partition Table: loop"; then
+        # This is already an extracted filesystem, use it directly
+        log_info "Source is already an ext4 filesystem - using directly with debugfs"
+        temp_root="$source_img"
+        local skip_cleanup=true
+    else
+        # This is a partitioned disk image - need to extract root partition
+        log_info "Source is a partitioned disk image - extracting root partition first"
+        
+        # Try multiple parsing approaches for root partition (partition 2)
+        local root_start root_end
+        
+        # Method 1: Look for line starting with space(s) + 2
+        root_start=$(echo "$parted_output" | grep -E '^[[:space:]]*2[[:space:]]' | awk '{print $2}' | sed 's/s$//')
+        root_end=$(echo "$parted_output" | grep -E '^[[:space:]]*2[[:space:]]' | awk '{print $3}' | sed 's/s$//')
+        
+        # Method 2: If that fails, try looking for any line containing partition 2
+        if [[ -z "$root_start" || -z "$root_end" ]]; then
+            root_start=$(echo "$parted_output" | grep -E '2[[:space:]]+[0-9]+s[[:space:]]+[0-9]+s' | awk '{print $2}' | sed 's/s$//')
+            root_end=$(echo "$parted_output" | grep -E '2[[:space:]]+[0-9]+s[[:space:]]+[0-9]+s' | awk '{print $3}' | sed 's/s$//')
         fi
+        
+        # Method 3: Alternative approach using awk to find partition 2
+        if [[ -z "$root_start" || -z "$root_end" ]]; then
+            local partition_line=$(echo "$parted_output" | awk '/^[ ]*2[ ]+/ {print; exit}')
+            if [[ -n "$partition_line" ]]; then
+                root_start=$(echo "$partition_line" | awk '{print $2}' | sed 's/s$//')
+                root_end=$(echo "$partition_line" | awk '{print $3}' | sed 's/s$//')
+            fi
+        fi
+        
+        log_info "Parsed root partition: start=$root_start, end=$root_end"
+        
+        if [[ -z "$root_start" || -z "$root_end" || ! "$root_start" =~ ^[0-9]+$ || ! "$root_end" =~ ^[0-9]+$ ]]; then
+            log_error "Could not determine root partition location (start=$root_start, end=$root_end)"
+            log_error "Partition table parsing failed - this may indicate an unsupported image format"
+            return 1
+        fi
+        
+        log_success "Root partition located: sectors $root_start to $root_end"
+        
+        # Extract root partition
+        local root_size_sectors=$((root_end - root_start + 1))
+        if ! dd if="$source_img" of="$temp_root" bs=512 skip="$root_start" count="$root_size_sectors" 2>/dev/null; then
+            log_error "Failed to extract root partition for debugfs"
+            return 1
+        fi
+        
+        log_info "Extracted root partition for debugfs processing"
+        local skip_cleanup=false
     fi
-    
-    log_info "Parsed root partition: start=$root_start, end=$root_end"
-    
-    if [[ -z "$root_start" || -z "$root_end" || ! "$root_start" =~ ^[0-9]+$ || ! "$root_end" =~ ^[0-9]+$ ]]; then
-        log_error "Could not determine root partition location (start=$root_start, end=$root_end)"
-        log_error "Partition table parsing failed - this may indicate an unsupported image format"
-        return 1
-    fi
-    
-    log_success "Root partition located: sectors $root_start to $root_end"
-    
-    # Extract root partition
-    local root_size_sectors=$((root_end - root_start + 1))
-    if ! dd if="$source_img" of="$temp_root" bs=512 skip="$root_start" count="$root_size_sectors" 2>/dev/null; then
-        log_error "Failed to extract root partition for debugfs"
-        return 1
-    fi
-    
-    log_info "Extracted root partition, using debugfs to dump filesystem"
     
     # Use debugfs to recursively dump the filesystem
     if extract_with_debugfs_recursive "$temp_root" "$staging_dir" "/"; then
         log_success "debugfs extraction completed successfully"
-        rm -f "$temp_root"
+        if [[ "$skip_cleanup" != "true" ]]; then
+            rm -f "$temp_root"
+        fi
         return 0
     else
         log_warning "debugfs extraction failed"
-        rm -f "$temp_root"
+        if [[ "$skip_cleanup" != "true" ]]; then
+            rm -f "$temp_root"
+        fi
         return 1
     fi
 }
