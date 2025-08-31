@@ -22,10 +22,7 @@ jobs:
     # Based on LibreELEC's methodology using mtools and e2tools
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Manual repository checkout
+    - name: Repository checkout with local IP fallback
       run: |
         echo "=== Manual Git Checkout ==="
         cd /tmp
