@@ -246,17 +246,26 @@ upload_release_asset() {
     local file_path="$2"
     local filename="$(basename "$file_path")"
     
-    log_info "Uploading release asset: $filename"
+    log_info "Uploading release asset: $filename ($(du -h "$file_path" | cut -f1))"
+    log_info "File path: $file_path"
+    log_info "File exists: $(test -f "$file_path" && echo "YES" || echo "NO")"
     
     local upload_url="${GITEA_API_URL}/releases/${release_id}/assets"
     if [[ -n "$GITEA_TOKEN" ]]; then
-        if curl -s -X POST "$upload_url" \
+        log_info "Uploading to: $upload_url"
+        local response
+        response=$(curl -s -X POST "$upload_url" \
             -H "Authorization: token $GITEA_TOKEN" \
             -H "Content-Type: application/octet-stream" \
-            -F "attachment=@${file_path};filename=${filename}" >/dev/null 2>&1; then
+            -F "attachment=@${file_path};filename=${filename}" 2>&1)
+        local exit_code=$?
+        
+        if [[ $exit_code -eq 0 ]]; then
             log_success "Uploaded: $filename"
+            log_info "Upload response: $response"
         else
-            log_warning "Failed to upload: $filename"
+            log_warning "Failed to upload: $filename (exit code: $exit_code)"
+            log_warning "Upload response: $response"
         fi
     else
         log_warning "No Gitea token provided - skipping asset upload: $filename"

@@ -591,16 +591,6 @@ build_soulbox_image() {
     
     log_info "Creating compressed image formats..."
     
-    # Create ZIP format (most compatible with Pi Imager)
-    log_info "Creating ZIP archive..."
-    if zip -q "${base_name}.img.zip" "$(basename "$output_image")" 2>&1; then
-        sha256sum "${base_name}.img.zip" > "${base_name}.img.zip.sha256" 2>/dev/null || echo "ZIP checksum generation failed" >&2
-        log_success "ZIP archive created successfully"
-    else
-        log_warning "ZIP archive creation failed - likely due to disk space"
-        touch "${base_name}.img.zip.sha256"  # Create empty file to prevent errors
-    fi
-    
     # Create TAR.GZ format (better compression, Linux-friendly)
     log_info "Creating TAR.GZ archive..."
     if tar -czf "${base_name}.img.tar.gz" "$(basename "$output_image")" 2>&1; then
@@ -613,13 +603,11 @@ build_soulbox_image() {
     
     log_success "SoulBox image created in multiple formats:"
     log_info "Raw IMG: $(ls -lh "$output_image" | awk '{print $5}')"
-    log_info "ZIP: $(ls -lh "${base_name}.img.zip" | awk '{print $5}')"
-    log_info "TAR.GZ: $(ls -lh "${base_name}.img.tar.gz" | awk '{print $5}')"
+    log_info "TAR.GZ: $(ls -lh "${base_name}.img.tar.gz" | awk '{print $5}' 2>/dev/null || echo 'failed')"
     
     # Copy all formats to script directory for easy access
     cp "$output_image" "$SCRIPT_DIR/"
-    cp "${base_name}.img.zip" "$SCRIPT_DIR/"
-    cp "${base_name}.img.tar.gz" "$SCRIPT_DIR/"
+    cp "${base_name}.img.tar.gz" "$SCRIPT_DIR/" 2>/dev/null || true
     cp *.sha256 "$SCRIPT_DIR/"
     
     log_success "All formats copied to: $SCRIPT_DIR/"
