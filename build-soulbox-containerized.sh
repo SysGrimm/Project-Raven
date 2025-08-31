@@ -1362,7 +1362,7 @@ handle_debugfs_symlink() {
             echo "$target" | sed 's/[[:space:]]*$//' | tr -d '\0'
         else
             # Alternative parsing: try to find -> pattern anywhere in the line
-            if [[ "$ls_output" =~ ->.*([^[:space:]]+) ]]; then
+            if [[ "$ls_output" =~ -\>.*([^[:space:]]+) ]]; then
                 local target=$(echo "$ls_output" | sed 's/.*->[[:space:]]*//' | awk '{print $1}')
                 echo "$target" | tr -d '\0'
             else
