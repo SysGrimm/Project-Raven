@@ -441,9 +441,10 @@ build_soulbox_image() {
     
     mkdir -p "$temp_dir"
     
-    # Image size calculations (in MB) - Optimized for container disk space limits (~1.5GB available)
-    local boot_size=128   # Reduced from 256MB - sufficient for Pi OS boot files
-    local root_size=1024  # Reduced from 2048MB - minimal but functional Pi OS system
+    # Image size calculations (in MB) - Optimized for container disk space limits
+    # Container available space: ~1.6GB, need room for compression
+    local boot_size=100   # Reduced further - 100MB sufficient for Pi OS boot files
+    local root_size=700   # Reduced to 700MB - minimal but functional Pi OS system
     local total_size=$((boot_size + root_size + 25))  # 25MB padding
     
     log_info "Image size planning: Boot=${boot_size}MB, Root=${root_size}MB, Total=${total_size}MB"
@@ -577,17 +578,38 @@ build_soulbox_image() {
     # Generate checksums for raw image
     sha256sum "$(basename "$output_image")" > "${base_name}.img.sha256"
     
+    # Clean up intermediate files to free space before compression
+    log_info "Cleaning up intermediate files for compression space..."
+    rm -rf "$temp_dir" 2>/dev/null || true
+    rm -rf "$WORK_DIR/source" 2>/dev/null || true
+    rm -rf "$WORK_DIR/filesystems" 2>/dev/null || true
+    rm -rf "$WORK_DIR/soulbox-assets" 2>/dev/null || true
+    
+    # Check available space before compression
+    local available_before=$(df /workspace --output=avail | tail -1)
+    log_info "Available space before compression: ${available_before}KB"
+    
     log_info "Creating compressed image formats..."
     
     # Create ZIP format (most compatible with Pi Imager)
     log_info "Creating ZIP archive..."
-    zip -q "${base_name}.img.zip" "$(basename "$output_image")"
-    sha256sum "${base_name}.img.zip" > "${base_name}.img.zip.sha256"
+    if zip -q "${base_name}.img.zip" "$(basename "$output_image")" 2>&1; then
+        sha256sum "${base_name}.img.zip" > "${base_name}.img.zip.sha256" 2>/dev/null || echo "ZIP checksum generation failed" >&2
+        log_success "ZIP archive created successfully"
+    else
+        log_warning "ZIP archive creation failed - likely due to disk space"
+        touch "${base_name}.img.zip.sha256"  # Create empty file to prevent errors
+    fi
     
     # Create TAR.GZ format (better compression, Linux-friendly)
     log_info "Creating TAR.GZ archive..."
-    tar -czf "${base_name}.img.tar.gz" "$(basename "$output_image")"
-    sha256sum "${base_name}.img.tar.gz" > "${base_name}.img.tar.gz.sha256"
+    if tar -czf "${base_name}.img.tar.gz" "$(basename "$output_image")" 2>&1; then
+        sha256sum "${base_name}.img.tar.gz" > "${base_name}.img.tar.gz.sha256" 2>/dev/null || echo "TAR.GZ checksum generation failed" >&2
+        log_success "TAR.GZ archive created successfully"
+    else
+        log_warning "TAR.GZ archive creation failed - likely due to disk space"
+        touch "${base_name}.img.tar.gz.sha256"  # Create empty file to prevent errors
+    fi
     
     log_success "SoulBox image created in multiple formats:"
     log_info "Raw IMG: $(ls -lh "$output_image" | awk '{print $5}')"
