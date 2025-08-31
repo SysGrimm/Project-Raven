@@ -1148,15 +1148,15 @@ extract_pi_os_to_staging() {
     # Create staging directory
     mkdir -p "$staging_dir"
     
-    # Try extraction methods in order of reliability
+# Try extraction methods in order of reliability (e2tools removed due to corruption)
     if extract_with_loop_mount "$source_img" "$staging_dir"; then
         log_success "Pi OS extracted using loop mounting (most reliable)"
     elif extract_with_debugfs "$source_img" "$staging_dir"; then
         log_success "Pi OS extracted using debugfs (reliable fallback)"
-    elif extract_with_e2tools "$source_img" "$staging_dir"; then
-        log_warning "Pi OS extracted using e2tools (last resort - may have issues)"
     else
-        log_error "All extraction methods failed - cannot proceed"
+        log_error "CRITICAL: Both loop mount and debugfs extraction failed"
+        log_error "E2tools extraction has been removed due to systematic corruption"
+        log_error "Container environment may not support loop devices and debugfs failed"
         return 1
     fi
     
