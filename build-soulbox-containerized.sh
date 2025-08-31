@@ -843,20 +843,22 @@ build_soulbox_image() {
     
     mkdir -p "$temp_dir"
     
-    # Image size calculations (in MB) - Conservative sizing for container space constraints
-    # Container available space: ~1.6GB total, but need buffer for temp files, extraction, etc.
-    # After analysis: build #81 failed at ~662MB, so limit to 600MB root for safety
+    # Image size calculations (in MB) - Ultra-conservative sizing for container space constraints
+    # Container available space: Build #93 shows only ~1.37GB available in practice
+    # Need to account for: source image (2.7GB), extracted filesystems, temp files, staging, final image
+    # Reducing to minimal viable sizes to fit container constraints
     local boot_size=80    # 80MB sufficient for base boot files
-    local root_size=600   # 600MB - conservative size that fits container limits
-    local total_size=$((boot_size + root_size + 20))  # 20MB padding
+    local root_size=350   # 350MB - minimal root filesystem to fit container limits
+    local total_size=$((boot_size + root_size + 20))  # 20MB padding = 450MB total
     
     log_info "Image size planning: Boot=${boot_size}MB, Root=${root_size}MB, Total=${total_size}MB"
     
     # Check available disk space with safety buffer
     # Need space for: source image (~2.7GB), extracted filesystems (~2.5GB), 
-    #                 temp files (~600MB), final image (total_size), staging (~500MB)
+    #                 temp files (~350MB), final image (total_size), staging (~300MB)
+    # With 450MB total image size, need much less temp space
     local available_space=$(df /workspace --output=avail | tail -1)
-    local required_space=$((total_size * 2 * 1024))  # 2x final image size for safety buffer
+    local required_space=$((total_size * 1024 + 400 * 1024))  # Final image + 400MB safety buffer
     log_info "Disk space check: Available=${available_space}KB, Required=${required_space}KB (with safety buffer)"
     
     if [[ $available_space -lt $required_space ]]; then
