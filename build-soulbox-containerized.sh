@@ -815,8 +815,19 @@ build_soulbox_image() {
     
     # Merge filesystems into final image
     log_info "Merging filesystems into SoulBox image..."
-    dd if="$temp_dir/boot-new.fat" of="$output_image" bs=1M seek=4 conv=notrunc 2>/dev/null
-    dd if="$temp_dir/root-new.ext4" of="$output_image" bs=1M seek=$((boot_size + 4)) conv=notrunc 2>/dev/null
+    log_info "Copying boot filesystem to image at offset 4MB..."
+    if ! dd if="$temp_dir/boot-new.fat" of="$output_image" bs=1M seek=4 conv=notrunc 2>&1; then
+        log_error "Failed to copy boot filesystem to final image"
+        return 1
+    fi
+    log_success "Boot filesystem merged successfully"
+    
+    log_info "Copying root filesystem to image at offset $((boot_size + 4))MB..."
+    if ! dd if="$temp_dir/root-new.ext4" of="$output_image" bs=1M seek=$((boot_size + 4)) conv=notrunc 2>&1; then
+        log_error "Failed to copy root filesystem to final image"
+        return 1
+    fi
+    log_success "Root filesystem merged successfully"
     
     # Generate multiple formats for different use cases
     cd "$WORK_DIR/output"
