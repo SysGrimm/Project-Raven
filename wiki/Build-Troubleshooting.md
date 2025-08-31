@@ -129,6 +129,82 @@ fi
 log_success "Filesystem copied successfully"
 ```
 
+### Pi 5 Boot Sequence: Root Filesystem Mounting
+
+**Symptoms**:
+```
+Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
+[    1.234567] PARTUUID=12345678-02 does not exist
+[    1.234568] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
+Dropping to initramfs shell...
+```
+
+**Root Cause**: The `cmdline.txt` file contains incorrect or non-existent PARTUUID references that don't match the actual SoulBox image partition layout.
+
+**Debug Commands**:
+```bash
+# Check current cmdline.txt content
+cat /boot/firmware/cmdline.txt
+
+# Check actual partition UUIDs
+sudo blkid
+
+# Check filesystem labels (preferred method)
+sudo blkid -o list | grep LABEL
+
+# Verify root filesystem label exists
+sudo blkid | grep soulbox-root
+```
+
+**Analysis**:
+- The base Pi OS image `cmdline.txt` uses hardcoded PARTUUIDs
+- These PARTUUIDs don't match the SoulBox image partition layout
+- Pi 5 bootloader successfully loads but kernel can't find root filesystem
+- Kernel falls back to initramfs shell
+
+**Solution Applied in Build Script**:
+```bash
+# Fix extracted cmdline.txt to use filesystem labels instead of PARTUUIDs
+if [[ -f "$temp_dir/boot-content/cmdline.txt" ]]; then
+    log_info "Fixing cmdline.txt to use correct root filesystem..."
+    # Replace any existing root= parameter with label-based approach
+    sed -i 's/root=[^ ]*/root=LABEL=soulbox-root/g' "$temp_dir/boot-content/cmdline.txt"
+    # Add rootdelay if not present for boot reliability
+    if ! grep -q "rootdelay" "$temp_dir/boot-content/cmdline.txt"; then
+        sed -i 's/$/ rootdelay=5/' "$temp_dir/boot-content/cmdline.txt"
+    fi
+    log_success "cmdline.txt updated to use LABEL=soulbox-root"
+fi
+```
+
+**Correct cmdline.txt Format**:
+```
+console=serial0,115200 console=tty1 root=LABEL=soulbox-root rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait rootdelay=5
+```
+
+**Why Label-Based Root is Better**:
+- ✅ Filesystem labels are consistent across image deployments
+- ✅ Labels don't change when partitions are resized or moved
+- ✅ More reliable than PARTUUIDs which can vary between SD cards
+- ✅ Easier to debug and verify
+
+**Manual Fix for Existing Images**:
+```bash
+# Mount the boot partition
+sudo mkdir -p /mnt/soulbox-boot
+sudo mount /dev/mmcblk0p1 /mnt/soulbox-boot
+
+# Edit cmdline.txt
+sudo sed -i 's/root=[^ ]*/root=LABEL=soulbox-root/' /mnt/soulbox-boot/cmdline.txt
+sudo sed -i 's/$/ rootdelay=5/' /mnt/soulbox-boot/cmdline.txt
+
+# Verify the change
+cat /mnt/soulbox-boot/cmdline.txt
+
+# Unmount
+sudo umount /mnt/soulbox-boot
+```
+
 ### Build #82 Pattern: Container Disk Space Exhaustion
 
 **Symptoms**:

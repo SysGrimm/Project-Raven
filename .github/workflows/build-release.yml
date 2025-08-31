@@ -3,8 +3,16 @@ name: Build SoulBox Will-o'-Wisp Media Center
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'wiki/**'
+      - '*.md'
+      - 'docs/**'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'wiki/**'
+      - '*.md'
+      - 'docs/**'
   workflow_dispatch:
 
 jobs:
