@@ -1265,14 +1265,50 @@ extract_with_debugfs() {
     # Extract root partition as separate file first (reuse existing logic)
     local temp_root="/tmp/soulbox-debugfs-root-$$.ext4"
     
-    # Get partition information using parted
-    local root_start=$(parted -s "$source_img" unit s print | grep "^ 2" | awk '{print $2}' | sed 's/s$//')
-    local root_end=$(parted -s "$source_img" unit s print | grep "^ 2" | awk '{print $3}' | sed 's/s$//')
+    # Get partition information using parted with robust parsing
+    log_info "Analyzing partition table for root partition location..."
     
+    # Get partition table info with verbose output for debugging
+    local parted_output
+    parted_output=$(parted -s "$source_img" unit s print 2>/dev/null)
+    
+    # Debug output
+    log_info "Partition table output:"
+    echo "$parted_output" | while read -r line; do
+        log_info "  $line"
+    done
+    
+    # Try multiple parsing approaches for root partition (partition 2)
+    local root_start root_end
+    
+    # Method 1: Look for line starting with space(s) + 2
+    root_start=$(echo "$parted_output" | grep -E '^[[:space:]]*2[[:space:]]' | awk '{print $2}' | sed 's/s$//')
+    root_end=$(echo "$parted_output" | grep -E '^[[:space:]]*2[[:space:]]' | awk '{print $3}' | sed 's/s$//')
+    
+    # Method 2: If that fails, try looking for any line containing partition 2
     if [[ -z "$root_start" || -z "$root_end" ]]; then
-        log_error "Could not determine root partition location"
+        root_start=$(echo "$parted_output" | grep -E '2[[:space:]]+[0-9]+s[[:space:]]+[0-9]+s' | awk '{print $2}' | sed 's/s$//')
+        root_end=$(echo "$parted_output" | grep -E '2[[:space:]]+[0-9]+s[[:space:]]+[0-9]+s' | awk '{print $3}' | sed 's/s$//')
+    fi
+    
+    # Method 3: Alternative approach using awk to find partition 2
+    if [[ -z "$root_start" || -z "$root_end" ]]; then
+        local partition_line=$(echo "$parted_output" | awk '/^[ ]*2[ ]+/ {print; exit}')
+        if [[ -n "$partition_line" ]]; then
+            root_start=$(echo "$partition_line" | awk '{print $2}' | sed 's/s$//')
+            root_end=$(echo "$partition_line" | awk '{print $3}' | sed 's/s$//')
+        fi
+    fi
+    
+    log_info "Parsed root partition: start=$root_start, end=$root_end"
+    
+    if [[ -z "$root_start" || -z "$root_end" || ! "$root_start" =~ ^[0-9]+$ || ! "$root_end" =~ ^[0-9]+$ ]]; then
+        log_error "Could not determine root partition location (start=$root_start, end=$root_end)"
+        log_error "Partition table parsing failed - this may indicate an unsupported image format"
         return 1
     fi
+    
+    log_success "Root partition located: sectors $root_start to $root_end"
     
     # Extract root partition
     local root_size_sectors=$((root_end - root_start + 1))
