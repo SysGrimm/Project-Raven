@@ -1348,24 +1348,31 @@ handle_debugfs_symlink() {
     local filesystem="$1"
     local symlink_path="$2"
     
-    # Use debugfs to read the symlink target
-    local symlink_output
-    symlink_output=$(echo "dump $symlink_path -" | debugfs "$filesystem" 2>/dev/null)
+    # Use debugfs ls -l to get symlink info (dump doesn't work for symlinks)
+    local ls_output
+    ls_output=$(echo "ls -l $symlink_path" | debugfs "$filesystem" 2>/dev/null | grep -v "debugfs:" | head -1)
     
-    if [[ $? -eq 0 && -n "$symlink_output" ]]; then
-        # Clean up the output (remove any null terminators or extra whitespace)
-        echo "$symlink_output" | tr -d '\0' | xargs
-    else
-        # Alternative method: use ls -l and parse the symlink arrow
-        local ls_output
-        ls_output=$(echo "ls -l $symlink_path" | debugfs "$filesystem" 2>/dev/null | grep -v "debugfs:")
-        
-        if [[ "$ls_output" =~ -\>[[:space:]]*([^[:space:]]+) ]]; then
-            echo "${BASH_REMATCH[1]}"
+    if [[ -n "$ls_output" ]]; then
+        # Parse the ls -l output to extract symlink target after the ->
+        # Format: inode perms links owner group size date time name -> target
+        if [[ "$ls_output" =~ -\>[[:space:]]*([^[:space:]].*)$ ]]; then
+            # Extract and clean the target path
+            local target="${BASH_REMATCH[1]}"
+            # Remove any trailing whitespace or special characters
+            echo "$target" | sed 's/[[:space:]]*$//' | tr -d '\0'
         else
-            # Final fallback: extract from detailed stat info
-            echo ""
+            # Alternative parsing: try to find -> pattern anywhere in the line
+            if [[ "$ls_output" =~ ->.*([^[:space:]]+) ]]; then
+                local target=$(echo "$ls_output" | sed 's/.*->[[:space:]]*//' | awk '{print $1}')
+                echo "$target" | tr -d '\0'
+            else
+                log_warning "Could not parse symlink target from: $ls_output"
+                echo ""
+            fi
         fi
+    else
+        log_warning "Could not get symlink info for $symlink_path"
+        echo ""
     fi
 }
 
