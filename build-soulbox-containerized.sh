@@ -726,28 +726,62 @@ copy_and_customize_filesystems() {
         log_warning "SoulBox assets directory not found: $assets_dir/root"
     fi
     
-    # Create essential system files
-    log_info "Creating essential system files..."
-    cat > "$temp_dir/root-content/etc/passwd" << 'EOF'
+    # Extract critical files from the original Pi OS root filesystem
+    log_info "Extracting essential Pi OS files from root partition..."
+    local critical_files=(
+        "/etc/passwd" "/etc/group" "/etc/shadow" "/etc/fstab" "/etc/hostname" "/etc/hosts"
+        "/etc/resolv.conf" "/etc/apt/sources.list" "/etc/ssh/sshd_config"
+        "/bin/bash" "/bin/sh" "/usr/bin/systemctl" "/usr/bin/apt" "/usr/bin/dpkg"
+    )
+    
+    local extracted_files=0
+    for critical_file in "${critical_files[@]}"; do
+        local target_dir="$temp_dir/root-content$(dirname "$critical_file")"
+        mkdir -p "$target_dir"
+        if e2cp "$pi_root:$critical_file" "$temp_dir/root-content$critical_file" 2>/dev/null; then
+            extracted_files=$((extracted_files + 1))
+        else
+            log_warning "Failed to extract critical file: $critical_file"
+        fi
+    done
+    log_success "Extracted $extracted_files critical Pi OS files"
+    
+    # Create essential system files (fallback if extraction failed)
+    log_info "Ensuring essential system files exist..."
+    if [[ ! -f "$temp_dir/root-content/etc/passwd" ]]; then
+        cat > "$temp_dir/root-content/etc/passwd" << 'EOF'
 root:x:0:0:root:/root:/bin/bash
 pi:x:1000:1000:Raspberry Pi User,,,:/home/pi:/bin/bash
 EOF
+    fi
     
-    cat > "$temp_dir/root-content/etc/group" << 'EOF'
+    if [[ ! -f "$temp_dir/root-content/etc/group" ]]; then
+        cat > "$temp_dir/root-content/etc/group" << 'EOF'
 root:x:0:
 pi:x:1000:
 EOF
+    fi
     
-    cat > "$temp_dir/root-content/etc/shadow" << 'EOF'
+    if [[ ! -f "$temp_dir/root-content/etc/shadow" ]]; then
+        cat > "$temp_dir/root-content/etc/shadow" << 'EOF'
 root:*:19000:0:99999:7:::
 pi:*:19000:0:99999:7:::
 EOF
+    fi
+    
+    if [[ ! -f "$temp_dir/root-content/etc/fstab" ]]; then
+        cat > "$temp_dir/root-content/etc/fstab" << 'EOF'
+proc            /proc           proc    defaults          0       0
+LABEL=SOULBOX  /boot/firmware  vfat    defaults          0       2
+LABEL=soulbox-root /               ext4    defaults,noatime  0       1
+EOF
+    fi
     
     # Create home directories
     mkdir -p "$temp_dir/root-content/home/pi"
     mkdir -p "$temp_dir/root-content/root"
     
-    log_success "Essential system files created"
+    log_success "Essential system files verified"
     
     # Verify filesystem before populating
     if [[ ! -f "$temp_dir/root-new.ext4" ]]; then
@@ -767,25 +801,44 @@ EOF
     # Populate the ext4 filesystem using e2cp
     log_info "Populating root filesystem with e2tools..."
     
-    # Create directories first
+    # Create directories first - using a different approach due to e2tools limitations
     local dir_count=0
     local file_count=0
     local failed_ops=0
     
-    log_info "Creating directories in ext4 filesystem..."
-    while IFS= read -r -d '' dir; do
-        if [[ "$dir" != "$temp_dir/root-content" ]]; then
-            rel_path="${dir#$temp_dir/root-content}"
-            if [[ -n "$rel_path" && "$rel_path" != "/" ]]; then
-                if e2mkdir -p "$temp_dir/root-new.ext4:$rel_path" 2>/dev/null; then
-                    dir_count=$((dir_count + 1))
-                else
-                    log_warning "Failed to create directory: $rel_path"
-                    failed_ops=$((failed_ops + 1))
-                fi
-            fi
+    log_info "Creating essential directories in ext4 filesystem..."
+    # Create critical directories individually without -p flag (e2mkdir doesn't support -p reliably)
+    local essential_dirs=("bin" "boot" "dev" "etc" "home" "lib" "media" "mnt" "opt" "proc" "root" "run" "sbin" "srv" "sys" "tmp" "usr" "var")
+    for dir in "${essential_dirs[@]}"; do
+        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
+            dir_count=$((dir_count + 1))
+        else
+            log_warning "Failed to create essential directory: /$dir"
+            failed_ops=$((failed_ops + 1))
         fi
-    done < <(find "$temp_dir/root-content" -type d -print0)
+    done
+    
+    # Create nested directories one level at a time
+    local nested_dirs=("boot/firmware" "etc/systemd" "etc/apt" "etc/ssh" "home/soulbox" "home/pi" "opt/soulbox" "usr/bin" "usr/lib" "usr/local" "usr/share" "var/log" "var/tmp" "var/cache")
+    for dir in "${nested_dirs[@]}"; do
+        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
+            dir_count=$((dir_count + 1))
+        else
+            log_warning "Failed to create nested directory: /$dir"
+            failed_ops=$((failed_ops + 1))
+        fi
+    done
+    
+    # Create SoulBox specific directories
+    local soulbox_dirs=("home/soulbox/Videos" "home/soulbox/Music" "home/soulbox/Pictures" "home/soulbox/Downloads" "home/soulbox/.kodi" "home/soulbox/.kodi/userdata" "opt/soulbox/assets" "opt/soulbox/scripts" "opt/soulbox/logs" "etc/systemd/system" "etc/systemd/system/multi-user.target.wants")
+    for dir in "${soulbox_dirs[@]}"; do
+        if e2mkdir "$temp_dir/root-new.ext4:/$dir" 2>/dev/null; then
+            dir_count=$((dir_count + 1))
+        else
+            log_warning "Failed to create SoulBox directory: /$dir"
+            failed_ops=$((failed_ops + 1))
+        fi
+    done
     
     log_success "Created $dir_count directories (failed: $failed_ops)"
     
