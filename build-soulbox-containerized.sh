@@ -441,10 +441,10 @@ build_soulbox_image() {
     
     mkdir -p "$temp_dir"
     
-    # Image size calculations (in MB) - Increased to accommodate full Pi OS system components
-    # Container available space: ~5.5GB after cleanup, Pi OS needs more space for kernel modules
+    # Image size calculations (in MB) - Balanced approach for container space constraints
+    # Container available space: ~1.6GB, need to balance Pi OS completeness with space limits
     local boot_size=100   # 100MB sufficient for Pi OS boot files
-    local root_size=1200  # Increased to 1.2GB to accommodate full Pi OS system including kernel modules
+    local root_size=900   # 900MB - compromise between functionality and container space limits
     local total_size=$((boot_size + root_size + 25))  # 25MB padding
     
     log_info "Image size planning: Boot=${boot_size}MB, Root=${root_size}MB, Total=${total_size}MB"
