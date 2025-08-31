@@ -1,14 +1,36 @@
-# SoulBox - Raspberry Pi 5 OS
+<div align="center">
+  <img src="assets/logos/soulbox-logo-1024.png" alt="SoulBox Logo" width="200"/>
+  <h1>SoulBox</h1>
+  <h3>Will-o'-Wisp Media Center</h3>
+  <p><em>A turnkey media center solution for ARM64 devices</em></p>
 
-A Debian-based Raspberry Pi 5 operating system with Docker-based cross-compilation build system.
+  <p>
+    <a href="#quick-start">Quick Start</a> •
+    <a href="#features">Features</a> •
+    <a href="#installation">Installation</a> •
+    <a href="#documentation">Documentation</a>
+  </p>
+</div>
 
-## 🚀 Quick Start
+---
 
-### Download Pre-built Images
-Ready-to-flash SD card images are automatically built on every commit:
-- Check the [Releases page](https://192.168.176.113:3000/yourusername/soulbox/releases) for the latest builds
-- Download the `.img` file and flash it to an SD card (8GB+ recommended)
-- Use [balenaEtcher](https://www.balena.io/etcher/) or [Raspberry Pi Imager](https://rpi.org/imager)
+## What is SoulBox?
+
+SoulBox is a **ready-to-use media center operating system** built specifically for ARM64 devices like the Raspberry Pi 5. It combines a lightweight Debian base with a fully configured Kodi media center, creating an appliance-like experience that just works.
+
+**Perfect for:**
+- Home media servers
+- Living room entertainment centers
+- Digital signage displays
+- Anyone wanting Kodi without the hassle
+
+## Quick Start
+
+### 1. Download & Flash
+**Get the latest pre-built image:**
+- 📥 [Download from Releases](../../releases/latest) 
+- Flash to 8GB+ SD card using [balenaEtcher](https://www.balena.io/etcher/)
+- Insert card and power on your device
 
 ### Building from Source
 
@@ -139,10 +161,15 @@ Every push triggers:
 
 ## 📖 Documentation
 
-- **[TFM.md](TFM.md)**: Comprehensive technical documentation
-- **[Build Process](TFM.md#build-process-flow)**: Detailed build steps
-- **[Docker Integration](TFM.md#docker-based-build-environment)**: Container setup
-- **[Troubleshooting Guide](TFM.md#troubleshooting-guide)**: Common issues and solutions
+Comprehensive documentation is available in the **[SoulBox Wiki](https://192.168.176.113:3000/yourusername/soulbox/wiki)**:
+
+- **[🏠 Home](https://192.168.176.113:3000/yourusername/soulbox/wiki/Home)**: Overview and navigation
+- **[🏗️ Architecture](https://192.168.176.113:3000/yourusername/soulbox/wiki/Architecture)**: System design and technology stack
+- **[🔧 Build System](https://192.168.176.113:3000/yourusername/soulbox/wiki/Build-System)**: Container-friendly build process
+- **[🚀 Deployment Guide](https://192.168.176.113:3000/yourusername/soulbox/wiki/Deployment-Guide)**: Installation and configuration
+- **[🎯 Features](https://192.168.176.113:3000/yourusername/soulbox/wiki/Features)**: Complete feature overview
+- **[👨‍💻 Development](https://192.168.176.113:3000/yourusername/soulbox/wiki/Development)**: Contributing and development workflow
+- **[🛠️ Troubleshooting](https://192.168.176.113:3000/yourusername/soulbox/wiki/Troubleshooting)**: Common issues and solutions
 
 ## 📄 License
 

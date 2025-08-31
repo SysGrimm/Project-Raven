@@ -100,6 +100,82 @@ show_error() {
     exit 1
 }
 
+# Function to install populatefs
+install_populatefs() {
+    log_info "Attempting to install populatefs..."
+    
+    # Check if we have package manager access
+    if ! command -v apt-get >/dev/null 2>&1; then
+        log_warning "apt-get not available - cannot install populatefs"
+        return 1
+    fi
+    
+    # Try to install e2fsprogs-extra (contains populatefs)
+    if apt-get update -qq && apt-get install -y e2fsprogs-extra 2>/dev/null; then
+        if command -v populatefs >/dev/null 2>&1; then
+            log_success "Successfully installed populatefs"
+            return 0
+        else
+            log_warning "e2fsprogs-extra installed but populatefs not found"
+            return 1
+        fi
+    else
+        log_warning "Failed to install e2fsprogs-extra package"
+        return 1
+    fi
+}
+
+# Function to install e2tools
+install_e2tools() {
+    log_info "Attempting to install e2tools..."
+    
+    # Check if we have package manager access
+    if ! command -v apt-get >/dev/null 2>&1; then
+        log_warning "apt-get not available - cannot install e2tools"
+        return 1
+    fi
+    
+    # Try to install e2tools
+    if apt-get install -y e2tools 2>/dev/null; then
+        if command -v e2cp >/dev/null 2>&1 && command -v e2ls >/dev/null 2>&1; then
+            log_success "Successfully installed e2tools"
+            return 0
+        else
+            log_warning "e2tools package installed but commands not found"
+            return 1
+        fi
+    else
+        log_warning "Failed to install e2tools package"
+        return 1
+    fi
+}
+
+# Function to install missing system tools
+install_missing_system_tools() {
+    log_info "Installing missing system tools for container environment..."
+    
+    # Tools that are often missing in minimal containers
+    local system_tools=("udev" "systemd" "dbus")
+    local installed_count=0
+    
+    for tool in "${system_tools[@]}"; do
+        if apt-get install -y "$tool" 2>/dev/null; then
+            installed_count=$((installed_count + 1))
+            log_info "✓ Installed $tool"
+        else
+            log_warning "✗ Failed to install $tool"
+        fi
+    done
+    
+    if [[ $installed_count -gt 0 ]]; then
+        log_success "Installed $installed_count system tools"
+        return 0
+    else
+        log_warning "Could not install additional system tools"
+        return 1
+    fi
+}
+
 # Function to check required tools
 check_required_tools() {
     log_info "Checking required tools..."
@@ -139,10 +215,25 @@ check_required_tools() {
     fi
     
     if [[ "$has_populatefs" == "false" && "$has_e2tools" == "false" ]]; then
-        missing_tools+=("populatefs OR e2tools")
         log_warning "Neither populatefs nor e2tools found!"
-        log_info "For best results, install populatefs: apt-get install e2fsprogs-extra"
-        log_info "Fallback option: apt-get install e2tools"
+        log_info "Attempting to install populatefs..."
+        
+        # Try to install populatefs automatically
+        if install_populatefs; then
+            has_populatefs=true
+            log_success "Successfully installed populatefs"
+        else
+            log_warning "Could not install populatefs, checking for e2tools..."
+            if install_e2tools; then
+                has_e2tools=true
+                log_success "Successfully installed e2tools"
+            else
+                missing_tools+=("populatefs OR e2tools")
+                log_error "Failed to install either populatefs or e2tools"
+                log_info "Manual installation: apt-get install e2fsprogs-extra (for populatefs)"
+                log_info "Or: apt-get install e2tools (for fallback)"
+            fi
+        fi
     fi
     
     if [[ ${#missing_tools[@]} -gt 0 ]]; then
@@ -165,13 +256,20 @@ setup_work_dir() {
     log_success "Work directory prepared: $WORK_DIR"
 }
 
-# Function to download base image
+# Function to download base image with integrity checking
 download_base_image() {
     local image_path="$WORK_DIR/source/$BASE_IMAGE_NAME"
+    local compressed_path="${image_path}.xz"
     
     if [[ -f "$image_path" ]]; then
         log_info "Base image already exists: $BASE_IMAGE_NAME"
-        return 0
+        # Verify existing image integrity
+        if verify_image_integrity "$image_path"; then
+            return 0
+        else
+            log_warning "Existing image appears corrupted, re-downloading..."
+            rm -f "$image_path"
+        fi
     fi
     
     log_info "Downloading base ARM64 image..."
@@ -179,20 +277,97 @@ download_base_image() {
     
     cd "$WORK_DIR/source"
     
-    # Download compressed image
-    curl -L -o "${BASE_IMAGE_NAME}.xz" "$BASE_IMAGE_URL"
+    # Try multiple download attempts with fallback URLs
+    local download_success=false
+    local urls=(
+        "$BASE_IMAGE_URL"
+        "https://archive.raspberrypi.org/debian/raspios_lite_arm64/images/raspios_lite_arm64-2024-07-04/2024-07-04-raspios-bookworm-arm64-lite.img.xz"
+    )
     
-    # Extract image
+    for attempt in 1 2 3; do
+        for url in "${urls[@]}"; do
+            log_info "Download attempt $attempt with URL: $url"
+            
+            # Download with resume support and progress
+            if curl -L -C - --retry 3 --retry-delay 5 -o "${BASE_IMAGE_NAME}.xz" "$url"; then
+                log_success "Download completed"
+                download_success=true
+                break 2
+            else
+                log_warning "Download failed, trying next URL..."
+                rm -f "${BASE_IMAGE_NAME}.xz" 2>/dev/null || true
+            fi
+        done
+        
+        if [[ "$download_success" == "true" ]]; then
+            break
+        fi
+        
+        log_warning "Attempt $attempt failed, retrying in 5 seconds..."
+        sleep 5
+    done
+    
+    if [[ "$download_success" != "true" ]]; then
+        log_error "Failed to download base image after multiple attempts"
+        exit 1
+    fi
+    
+    # Extract image with verification
     log_info "Extracting image..."
-    xz -d "${BASE_IMAGE_NAME}.xz"
+    if ! xz -d -v "${BASE_IMAGE_NAME}.xz"; then
+        log_error "Failed to extract compressed image"
+        exit 1
+    fi
     
     if [[ -f "$image_path" ]]; then
         log_success "Downloaded and extracted: $BASE_IMAGE_NAME"
         log_info "Size: $(ls -lh "$image_path" | awk '{print $5}')"
+        
+        # Verify image integrity
+        if verify_image_integrity "$image_path"; then
+            log_success "Image integrity verified"
+        else
+            log_error "Downloaded image failed integrity check"
+            exit 1
+        fi
     else
         log_error "Failed to extract base image"
         exit 1
     fi
+}
+
+# Function to verify image integrity
+verify_image_integrity() {
+    local image_path="$1"
+    
+    log_info "Verifying image integrity..."
+    
+    # Check if file exists and has reasonable size
+    if [[ ! -f "$image_path" ]]; then
+        log_error "Image file not found: $image_path"
+        return 1
+    fi
+    
+    local file_size=$(stat -c%s "$image_path" 2>/dev/null || stat -f%z "$image_path" 2>/dev/null)
+    if [[ $file_size -lt 1000000000 ]]; then  # Less than 1GB
+        log_error "Image file too small: ${file_size} bytes"
+        return 1
+    fi
+    
+    # Check if it's a valid disk image by looking for partition table
+    if ! parted -s "$image_path" print >/dev/null 2>&1; then
+        log_error "Invalid disk image - no readable partition table"
+        return 1
+    fi
+    
+    # Check for EXT4 filesystem signature
+    if ! dd if="$image_path" skip=1056768 bs=512 count=1 2>/dev/null | grep -q "EXT"; then
+        log_warning "EXT4 filesystem signature not found at expected location"
+        # This is a warning, not a failure, as partition layout might vary
+    fi
+    
+    log_success "Image integrity verification passed"
+    return 0
 }
 
 # Function to extract base image filesystems without mounting
