@@ -36,6 +36,7 @@ jobs:
           e2tools \
           dosfstools \
           e2fsprogs \
+          e2fsprogs-extra \
           wget \
           curl \
           xz-utils \
@@ -52,6 +53,7 @@ jobs:
         which xz && echo "xz: OK" || echo "xz: MISSING" 
         which parted && echo "parted: OK" || echo "parted: MISSING"
         which mcopy && echo "mtools: OK" || echo "mtools: MISSING"
+        which populatefs && echo "populatefs: OK (preferred)" || echo "populatefs: MISSING (will use e2tools fallback)"
         which e2cp && echo "e2tools: OK" || echo "e2tools: MISSING"
         which mke2fs && echo "e2fsprogs: OK" || echo "e2fsprogs: MISSING"
         which dd && echo "dd: OK" || echo "dd: MISSING"
