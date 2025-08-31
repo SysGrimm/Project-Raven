@@ -640,58 +640,54 @@ EOF
 create_root_customizations() {
     local root_dir="$1"
     
+    log_info "Creating SoulBox root filesystem customizations..."
+    
     # Create SoulBox directory structure
     mkdir -p "$root_dir/opt/soulbox"/{assets,scripts,logs}
     mkdir -p "$root_dir/home/soulbox"/{Videos,Music,Pictures,Downloads,.kodi/userdata}
     
-    # Create first boot setup script with embedded TSAUTH
-    cat > "$root_dir/opt/soulbox/first-boot-setup.sh" << EOF
-#!/bin/bash
-
-# SoulBox First Boot Setup
-set -e
-
-LOG_FILE="/var/log/soulbox-setup.log"
-exec > >(tee -a \$LOG_FILE) 2>&1
-
-echo "\$(date): Starting SoulBox first boot setup..."
-
-# Set Tailscale auth key from build-time environment (secure injection)
-export TSAUTH="${TSAUTH:-}"
-echo "$(date): Starting SoulBox first boot setup..."
-
-# Update package lists
-echo "Updating package lists..."
-apt-get update -qq
-
-# Install required packages
-echo "Installing SoulBox packages..."
-apt-get install -y \
-    kodi mesa-utils xinit xorg openbox \
-    python3-pip screen tmux unzip zip alsa-utils \
-    tailscale fbi
-
-# Create soulbox user
-if ! id "soulbox" &>/dev/null; then
-    echo "Creating soulbox user..."
-    useradd -m -s /bin/bash -G sudo,adm,dialout,cdrom,audio,video,plugdev,games,users,input,netdev,gpio,i2c,spi,render soulbox
-    echo 'soulbox:soulbox' | chpasswd
-fi
-
-# Set passwords
-echo 'pi:soulbox' | chpasswd
-echo 'root:soulbox' | chpasswd
-
-# Configure autologin
-mkdir -p /etc/systemd/system/getty@tty1.service.d
-cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'AUTOLOGIN'
+    # Create soulbox user directly in the image
+    log_info "Pre-configuring soulbox user..."
+    
+    # Add soulbox user to passwd
+    echo "soulbox:x:1001:1001:SoulBox Media User:/home/soulbox:/bin/bash" >> "$root_dir/etc/passwd"
+    
+    # Add soulbox group to group file  
+    echo "soulbox:x:1001:" >> "$root_dir/etc/group"
+    
+    # Set soulbox user password hash (password: soulbox)
+    # Generated with: openssl passwd -6 soulbox
+    local soulbox_hash='$6$rounds=4096$saltsalt$Lst8/l8MhczmHIRNJqfWD7SHb7jg.t8Rn9F.xpTmKnJ.uLNE4J7VX9lVKvkE8GbzjEI2sXYQGaV9.uM5ILPK.'
+    echo "soulbox:${soulbox_hash}:19000:0:99999:7:::" >> "$root_dir/etc/shadow"
+    
+    # Set pi user password (same hash)
+    sed -i "s|^pi:.*|pi:${soulbox_hash}:19000:0:99999:7:::|" "$root_dir/etc/shadow"
+    
+    # Set root password (same hash)  
+    sed -i "s|^root:.*|root:${soulbox_hash}:19000:0:99999:7:::|" "$root_dir/etc/shadow"
+    
+    # Add soulbox to required groups
+    local groups=("sudo" "adm" "dialout" "cdrom" "audio" "video" "plugdev" "games" "users" "input" "netdev" "gpio" "i2c" "spi" "render")
+    for group in "${groups[@]}"; do
+        # Check if group exists and add soulbox to it
+        if grep -q "^${group}:" "$root_dir/etc/group"; then
+            sed -i "/^${group}:/ s/$/,soulbox/" "$root_dir/etc/group"
+            sed -i "/^${group}:/ s/:,/:/ " "$root_dir/etc/group"  # Fix double colons
+        fi
+    done
+    
+    # Configure autologin for soulbox user
+    log_info "Configuring autologin..."
+    mkdir -p "$root_dir/etc/systemd/system/getty@tty1.service.d"
+    cat > "$root_dir/etc/systemd/system/getty@tty1.service.d/autologin.conf" << 'EOF'
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin soulbox --noclear %I $TERM
-AUTOLOGIN
-
-# Create Kodi service
-cat > /etc/systemd/system/kodi-standalone.service << 'KODI_SERVICE'
+EOF
+    
+    # Create Kodi standalone service
+    log_info "Creating Kodi service..."
+    cat > "$root_dir/etc/systemd/system/kodi-standalone.service" << 'EOF'
 [Unit]
 Description=SoulBox Kodi Media Center
 After=systemd-user-sessions.service network.target sound.target
@@ -721,77 +717,53 @@ Environment="MESA_LOADER_DRIVER_OVERRIDE=v3d"
 
 [Install]
 WantedBy=multi-user.target
-KODI_SERVICE
-
-# Configure Tailscale if auth key is available
-if [ -n "${TSAUTH:-}" ]; then
-    echo "Configuring Tailscale with provided auth key..."
-    
-    # Start Tailscale daemon
-    systemctl start tailscaled
-    
-    # Wait for daemon to be ready
-    for i in {1..10}; do
-        if tailscale status >/dev/null 2>&1; then
-            break
-        fi
-        sleep 2
-    done
-    
-    # Configure Tailscale with auth key
-    if tailscale up --auth-key="${TSAUTH}" --accept-routes --ssh; then
-        echo "✅ Tailscale configured successfully"
-    else
-        echo "⚠️ Tailscale configuration failed - manual setup required"
-    fi
-else
-    echo "No Tailscale auth key provided - manual authentication required after boot"
-fi
-
-# Enable services
-systemctl enable kodi-standalone.service
-systemctl mask getty@tty1.service
-systemctl enable tailscaled
-systemctl enable ssh
-
-# Set proper ownership
-chown -R soulbox:soulbox /home/soulbox/
-
-# Create completion marker
-touch /opt/soulbox/setup-complete
-
-echo "$(date): SoulBox first boot setup complete!"
-
-# Disable this service
-systemctl disable soulbox-setup.service
-
-echo "$(date): Rebooting in 10 seconds..."
-sleep 10
-reboot
 EOF
     
-    chmod +x "$root_dir/opt/soulbox/first-boot-setup.sh"
+    # Enable Kodi service by creating symlink
+    mkdir -p "$root_dir/etc/systemd/system/multi-user.target.wants"
+    ln -sf /etc/systemd/system/kodi-standalone.service "$root_dir/etc/systemd/system/multi-user.target.wants/kodi-standalone.service"
     
-    # Create SoulBox setup service
+    # Mask getty@tty1 to prevent conflicts with Kodi
     mkdir -p "$root_dir/etc/systemd/system"
-    cat > "$root_dir/etc/systemd/system/soulbox-setup.service" << 'EOF'
+    ln -sf /dev/null "$root_dir/etc/systemd/system/getty@tty1.service"
+    
+    # Enable SSH service
+    ln -sf /lib/systemd/system/ssh.service "$root_dir/etc/systemd/system/multi-user.target.wants/ssh.service"
+    
+    # Enable Tailscale service
+    ln -sf /lib/systemd/system/tailscaled.service "$root_dir/etc/systemd/system/multi-user.target.wants/tailscaled.service"
+    
+    # Create Tailscale auth setup if TSAUTH is provided
+    if [[ -n "${TSAUTH:-}" ]]; then
+        log_info "Configuring Tailscale with auth key..."
+        
+        # Create one-shot service to authenticate Tailscale on first boot
+        cat > "$root_dir/etc/systemd/system/tailscale-auth.service" << EOF
 [Unit]
-Description=SoulBox First Boot Setup
-After=network.target
-ConditionPathExists=!/opt/soulbox/setup-complete
+Description=Tailscale Authentication
+After=tailscaled.service network-online.target
+Wants=network-online.target
+ConditionPathExists=!/opt/soulbox/tailscale-configured
 
 [Service]
 Type=oneshot
-ExecStart=/opt/soulbox/first-boot-setup.sh
+User=root
+ExecStartPre=/bin/sleep 10
+ExecStart=/usr/bin/tailscale up --auth-key=${TSAUTH} --accept-routes --ssh
+ExecStartPost=/bin/touch /opt/soulbox/tailscale-configured
+ExecStartPost=/bin/systemctl disable tailscale-auth.service
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 EOF
+        
+        # Enable the auth service
+        ln -sf /etc/systemd/system/tailscale-auth.service "$root_dir/etc/systemd/system/multi-user.target.wants/tailscale-auth.service"
+    fi
     
-    # Create systemd wants directory and enable service
-    mkdir -p "$root_dir/etc/systemd/system/multi-user.target.wants"
-    ln -sf /etc/systemd/system/soulbox-setup.service "$root_dir/etc/systemd/system/multi-user.target.wants/soulbox-setup.service"
+    # Set proper ownership for home directory
+    chown -R 1001:1001 "$root_dir/home/soulbox"
     
     # Create branded MOTD
     cat > "$root_dir/etc/motd" << 'EOF'
@@ -802,9 +774,9 @@ EOF
      ___) | (_) | |_| | | |_) | (_) >  < 
     |____/ \___/ \__,_|_|____/ \___/_/\_\
 
-    Will-o'-Wisp Media Center ~ Boot Complete
+    Will-o'-Wisp Media Center ~ Ready to Use
     
-    The blue flame burns bright
+    The blue flame burns bright - no setup required!
     
     Default credentials:
     - soulbox:soulbox (media center user)
@@ -812,11 +784,12 @@ EOF
     - root:soulbox (admin access)
     
     Services:
-    - Kodi media center (auto-starts after setup)
-    - Tailscale VPN integration
-    - Boot setup service active
+    - Kodi media center (auto-starts on boot)
+    - Tailscale VPN (ready for connection)
+    - SSH remote access enabled
     
     The blue flame has guided you home...
+    Flash → Boot → Enjoy!
 
 EOF
 
