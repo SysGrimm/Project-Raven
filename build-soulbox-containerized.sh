@@ -1771,6 +1771,18 @@ copy_and_customize_filesystems() {
         log_warning "SoulBox boot config not found: $assets_dir/boot/soulbox-config.txt"
     fi
     
+    # Fix cmdline.txt if it exists to use the correct root filesystem
+    if [[ -f "$temp_dir/boot-content/cmdline.txt" ]]; then
+        log_info "Fixing cmdline.txt to use correct root filesystem..."
+        # Replace any existing root= parameter with our label-based approach
+        sed -i 's/root=[^ ]*/root=LABEL=soulbox-root/g' "$temp_dir/boot-content/cmdline.txt"
+        # Add rootdelay if not present
+        if ! grep -q "rootdelay" "$temp_dir/boot-content/cmdline.txt"; then
+            sed -i 's/$/ rootdelay=5/' "$temp_dir/boot-content/cmdline.txt"
+        fi
+        log_success "cmdline.txt updated to use LABEL=soulbox-root"
+    fi
+    
     # Verify essential boot files are present (DO NOT CREATE PLACEHOLDERS)
     log_info "Verifying essential boot files are present..."
     local essential_files=("start4.elf" "fixup4.dat" "bcm2712-rpi-5-b.dtb" "kernel8.img" "config.txt" "cmdline.txt")
@@ -1813,7 +1825,7 @@ dtoverlay=vc4-kms-v3d
 EOF
         elif [[ "$missing_file" == "cmdline.txt" ]]; then
             log_info "Creating minimal cmdline.txt..."
-            echo "console=serial0,115200 console=tty1 root=PARTUUID=ROOT_PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait" > "$temp_dir/boot-content/cmdline.txt"
+            echo "console=serial0,115200 console=tty1 root=LABEL=soulbox-root rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait rootdelay=5" > "$temp_dir/boot-content/cmdline.txt"
         fi
     done
     
