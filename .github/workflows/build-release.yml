@@ -58,28 +58,56 @@ jobs:
         cd /tmp/populatefs-build
         
         # Download e2fsprogs source (contains populatefs)
+        echo "Downloading e2fsprogs source..."
         wget -q https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.0/e2fsprogs-1.47.0.tar.xz
         tar -xf e2fsprogs-1.47.0.tar.xz
         cd e2fsprogs-1.47.0
         
-        # Configure build
+        # Check if populatefs directory exists
+        if [[ -d "contrib/populatefs" ]]; then
+            echo "✅ populatefs source found in contrib/populatefs"
+        else
+            echo "❌ populatefs source not found - checking available contrib tools"
+            ls contrib/ || echo "No contrib directory found"
+            exit 1
+        fi
+        
+        # Configure build (without the invalid --enable-populatefs flag)
         echo "Configuring e2fsprogs build..."
-        ./configure --prefix=/usr/local --enable-populatefs 2>&1 | head -20
+        ./configure --prefix=/usr/local 2>&1 | head -20
         
         # Build only populatefs (much faster than full e2fsprogs)
         echo "Building populatefs..."
-        make -j$(nproc) -C contrib/populatefs
-        
-        # Install populatefs binary
-        sudo cp contrib/populatefs/populatefs /usr/local/bin/
-        sudo chmod +x /usr/local/bin/populatefs
-        
-        # Verify installation
-        if /usr/local/bin/populatefs --help >/dev/null 2>&1; then
-            echo "✅ populatefs built and installed successfully"
-            /usr/local/bin/populatefs --version || echo "populatefs version check failed"
+        if make -j$(nproc) -C contrib/populatefs 2>&1; then
+            echo "✅ populatefs build completed successfully"
         else
-            echo "❌ populatefs build failed"
+            echo "❌ populatefs build failed - trying to build with dependencies"
+            # Try building the required libraries first
+            make -j$(nproc) -C lib/ext2fs
+            make -j$(nproc) -C lib/e2p
+            make -j$(nproc) -C lib/support
+            # Then build populatefs
+            make -j$(nproc) -C contrib/populatefs
+        fi
+        
+        # Verify the binary was built
+        if [[ -f "contrib/populatefs/populatefs" ]]; then
+            echo "✅ populatefs binary found"
+            # Install populatefs binary
+            sudo cp contrib/populatefs/populatefs /usr/local/bin/
+            sudo chmod +x /usr/local/bin/populatefs
+            
+            # Verify installation
+            if /usr/local/bin/populatefs --help >/dev/null 2>&1; then
+                echo "✅ populatefs installed and working"
+                /usr/local/bin/populatefs --version || echo "populatefs ready (no version flag)"
+            else
+                echo "❌ populatefs installation verification failed"
+                exit 1
+            fi
+        else
+            echo "❌ populatefs binary not found after build"
+            ls -la contrib/populatefs/ || echo "populatefs directory empty"
             exit 1
         fi
         
