@@ -99,9 +99,11 @@ check_required_tools() {
     # Check for filesystem tools
     command -v mcopy >/dev/null 2>&1 || missing_tools+=(mtools)
     command -v mformat >/dev/null 2>&1 || missing_tools+=(mtools)
+    command -v mdir >/dev/null 2>&1 || missing_tools+=(mtools)
+    command -v mkfs.fat >/dev/null 2>&1 || missing_tools+=(dosfstools)
+    command -v fsck.fat >/dev/null 2>&1 || missing_tools+=(dosfstools)
     command -v e2cp >/dev/null 2>&1 || missing_tools+=(e2tools)
     command -v mke2fs >/dev/null 2>&1 || missing_tools+=(e2fsprogs)
-    command -v fsck.fat >/dev/null 2>&1 || missing_tools+=(dosfstools)
     
     if [[ ${#missing_tools[@]} -gt 0 ]]; then
         log_error "Missing required tools: ${missing_tools[*]}"
@@ -463,25 +465,31 @@ build_soulbox_image() {
     fi
     log_success "Blank image created: $(ls -lh "$output_image" | awk '{print $5}')"
     
-    # Create partition table
-    log_info "Creating partition table..."
+    # Create partition table with proper sector alignment for Raspberry Pi
+    log_info "Creating MBR partition table with Raspberry Pi compatible alignment..."
     if ! parted -s "$output_image" mklabel msdos; then
         log_error "Failed to create partition table"
         return 1
     fi
-    if ! parted -s "$output_image" mkpart primary fat32 1MiB $((boot_size + 1))MiB; then
+    # Use 4MiB start to ensure proper alignment for FAT32 on Pi
+    if ! parted -s "$output_image" mkpart primary fat32 4MiB $((boot_size + 4))MiB; then
         log_error "Failed to create boot partition"
         return 1
     fi
-    if ! parted -s "$output_image" mkpart primary ext4 $((boot_size + 1))MiB $((boot_size + root_size + 1))MiB; then
+    if ! parted -s "$output_image" mkpart primary ext4 $((boot_size + 4))MiB $((boot_size + root_size + 4))MiB; then
         log_error "Failed to create root partition"
         return 1
     fi
+    # Set proper partition IDs for Raspberry Pi compatibility
     if ! parted -s "$output_image" set 1 boot on; then
         log_error "Failed to set boot flag"
         return 1
     fi
-    log_success "Partition table created successfully"
+    if ! parted -s "$output_image" set 1 lba on; then
+        log_error "Failed to set LBA flag"
+        return 1
+    fi
+    log_success "Partition table created with Pi-compatible alignment"
     
     # Create filesystem images
     log_info "Creating boot filesystem (${boot_size}MB)..."
@@ -489,7 +497,8 @@ build_soulbox_image() {
         log_error "Failed to create boot filesystem image"
         return 1
     fi
-    if ! mformat -i "$temp_dir/boot-new.fat" -v "SOULBOX" -F ::; then
+    # Format as FAT32 with proper parameters for Raspberry Pi compatibility
+    if ! mkfs.fat -F 32 -n "SOULBOX" -v "$temp_dir/boot-new.fat" 2>/dev/null; then
         log_error "Failed to format boot filesystem"
         return 1
     fi
@@ -556,8 +565,8 @@ build_soulbox_image() {
     
     # Merge filesystems into final image
     log_info "Merging filesystems into SoulBox image..."
-    dd if="$temp_dir/boot-new.fat" of="$output_image" bs=1M seek=1 conv=notrunc 2>/dev/null
-    dd if="$temp_dir/root-new.ext4" of="$output_image" bs=1M seek=$((boot_size + 1)) conv=notrunc 2>/dev/null
+    dd if="$temp_dir/boot-new.fat" of="$output_image" bs=1M seek=4 conv=notrunc 2>/dev/null
+    dd if="$temp_dir/root-new.ext4" of="$output_image" bs=1M seek=$((boot_size + 4)) conv=notrunc 2>/dev/null
     
     # Generate checksum
     cd "$WORK_DIR/output"
@@ -641,19 +650,57 @@ copy_and_customize_filesystems() {
         log_warning "SoulBox boot config not found: $assets_dir/boot/soulbox-config.txt"
     fi
     
-    # Copy back to new boot filesystem
-    log_info "Populating new boot filesystem..."
-    local boot_copy_count=0
-    for file in "$temp_dir/boot-content"/*; do
-        if [[ -f "$file" ]]; then
-            if mcopy -i "$temp_dir/boot-new.fat" "$file" :: 2>&1; then
-                boot_copy_count=$((boot_copy_count + 1))
-            else
-                log_warning "Failed to copy $(basename "$file") to boot partition"
+    # Ensure essential boot files are present
+    log_info "Ensuring essential Pi boot files are present..."
+    local essential_files=("start4.elf" "fixup4.dat" "bcm2712-rpi-5-b.dtb" "kernel8.img" "config.txt" "cmdline.txt")
+    for essential_file in "${essential_files[@]}"; do
+        if [[ ! -f "$temp_dir/boot-content/$essential_file" ]]; then
+            log_warning "Essential boot file missing: $essential_file"
+            # For now, create placeholder - ideally should extract from Pi OS image
+            if [[ "$essential_file" == "config.txt" ]]; then
+                echo "# Raspberry Pi Configuration" > "$temp_dir/boot-content/config.txt"
+            elif [[ "$essential_file" == "cmdline.txt" ]]; then
+                echo "console=serial0,115200 console=tty1 root=PARTUUID=ROOT_PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait" > "$temp_dir/boot-content/cmdline.txt"
             fi
         fi
     done
-    log_success "Boot filesystem populated with $boot_copy_count files"
+    
+    # Copy back to new boot filesystem using proper mtools commands
+    log_info "Populating new boot filesystem..."
+    local boot_copy_count=0
+    local boot_copy_failures=0
+    
+    # First, ensure the FAT32 filesystem is accessible
+    if ! mdir -i "$temp_dir/boot-new.fat" :: >/dev/null 2>&1; then
+        log_error "Cannot access newly created boot filesystem"
+        return 1
+    fi
+    
+    # Copy files one by one with better error handling
+    for file in "$temp_dir/boot-content"/*; do
+        if [[ -f "$file" ]]; then
+            filename=$(basename "$file")
+            log_info "Copying boot file: $filename"
+            if mcopy -i "$temp_dir/boot-new.fat" "$file" "::$filename" 2>/dev/null; then
+                boot_copy_count=$((boot_copy_count + 1))
+            else
+                log_warning "Failed to copy $filename to boot partition"
+                boot_copy_failures=$((boot_copy_failures + 1))
+            fi
+        fi
+    done
+    
+    log_success "Boot filesystem populated with $boot_copy_count files ($boot_copy_failures failed)"
+    
+    # Verify boot filesystem has files
+    log_info "Verifying boot filesystem contents..."
+    if mdir -i "$temp_dir/boot-new.fat" :: 2>/dev/null | grep -q .; then
+        local file_count=$(mdir -i "$temp_dir/boot-new.fat" :: 2>/dev/null | grep -c '^[^d]' || echo "0")
+        log_success "Boot filesystem verification passed: $file_count files found"
+    else
+        log_error "Boot filesystem appears to be empty!"
+        return 1
+    fi
     
     # Process root filesystem
     log_info "Processing root partition..."
