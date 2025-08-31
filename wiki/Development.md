@@ -474,6 +474,53 @@ Include in feature requests:
 - Impact on existing functionality
 - Compatibility considerations
 
+### Gitea API Token Setup
+
+For automated releases and asset uploads, configure a Gitea API token:
+
+#### 1. Generate Token
+1. Log into Gitea: `http://your-gitea-server:3000`
+2. Go to **Settings** → **Applications** → **Generate New Token**
+3. Name: `SoulBox Build Automation`
+4. Permissions: `repo`, `write:repository`, `write:issue`
+5. Copy the token immediately
+
+#### 2. Configure in Environment
+```bash
+# For Gitea Actions - add as repository secret
+GITOKEN=your_token_here
+
+# For local testing
+export GITOKEN="your_token_here"
+./scripts/gitea-version-manager.sh create-release v1.0.0 image.img
+```
+
+#### Token Capabilities
+- ✅ Create Gitea releases automatically
+- ✅ Upload `.img` files as release assets
+- ✅ Upload `.sha256` checksum files
+- ✅ Full automated release pipeline
+
+### Gitea Actions Troubleshooting
+
+#### Check Actions Status
+```bash
+# Test if Actions are enabled
+curl -s "http://your-gitea:3000/api/v1/repos/owner/repo/actions/runs"
+
+# Check runner service
+sudo systemctl status act_runner
+
+# View runner logs
+sudo journalctl -u act_runner -n 50
+```
+
+#### Common Issues
+- **"404 page not found" for Actions**: Enable Gitea Actions in configuration
+- **No workflows visible**: Check workflow file location and syntax
+- **Workflows queued but not running**: Register and start act-runner service
+- **Runner shows offline**: Check runner service status and logs
+
 ### Development Environment Setup
 
 #### IDE Configuration
