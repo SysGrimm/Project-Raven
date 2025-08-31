@@ -60,10 +60,10 @@ jobs:
             echo "Creating minimal build script..."
             cat > build-soulbox-containerized.sh << 'EOF'
 #!/bin/bash
-echo "SoulBox containerized build script (minimal version for CI testing)"
+echo 'SoulBox containerized build script (minimal version for CI testing)'
 
 # Parse arguments
-VERSION="v0.1.0"
+VERSION='v0.1.0'
 while [[ $# -gt 0 ]]; do
   case $1 in
     --version)
@@ -71,7 +71,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --clean)
-      echo "Clean build requested"
+      echo 'Clean build requested'
       shift
       ;;
     *)
@@ -82,15 +82,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Version: $VERSION"
-echo "This is a minimal build to test CI infrastructure"
+echo 'This is a minimal build to test CI infrastructure'
 
 # Create test image and checksum
 mkdir -p build
 echo "Test SoulBox image content - Build $(date)" > "soulbox-$VERSION.img"
-echo "Features: Kodi + Tailscale + Pi 5 optimizations" >> "soulbox-$VERSION.img"
+echo 'Features: Kodi + Tailscale + Pi 5 optimizations' >> "soulbox-$VERSION.img"
 sha256sum "soulbox-$VERSION.img" > "soulbox-$VERSION.img.sha256"
 
-echo "Minimal build artifacts created:"
+echo 'Minimal build artifacts created:'
 ls -la soulbox-*
 EOF
             
