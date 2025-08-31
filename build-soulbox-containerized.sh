@@ -1712,17 +1712,55 @@ copy_and_customize_filesystems() {
     
     # Extract boot content using mtools
     log_info "Extracting boot partition content..."
-    if mcopy -s -i "$base_boot" :: "$temp_dir/boot-content/" 2>&1; then
-        log_success "Boot partition extracted successfully"
-        log_info "Boot files found: $(ls -la "$temp_dir/boot-content/" | wc -l) items"
+    local boot_extraction_success=false
+    
+    # Try multiple mtools extraction methods
+    if mcopy -s -i "$base_boot" "::*" "$temp_dir/boot-content/" 2>/dev/null; then
+        boot_extraction_success=true
+        log_success "Boot partition extracted successfully with wildcard method"
+    elif mcopy -i "$base_boot" "::" "$temp_dir/boot-content/" 2>/dev/null; then
+        boot_extraction_success=true
+        log_success "Boot partition extracted successfully with directory method"
     else
-        log_warning "Boot partition extraction failed, creating minimal setup"
-        # Create minimal boot files
-        touch "$temp_dir/boot-content/config.txt"
-        touch "$temp_dir/boot-content/cmdline.txt"
-        echo "# Minimal boot configuration" > "$temp_dir/boot-content/config.txt"
-        echo "console=serial0,115200 console=tty1 root=PARTUUID=ROOT_PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait" > "$temp_dir/boot-content/cmdline.txt"
+        log_warning "Standard mtools extraction failed, trying individual file extraction..."
+        
+        # Try to extract essential boot files individually
+        local essential_boot_files=("start4.elf" "fixup4.dat" "kernel8.img" "config.txt" "cmdline.txt" "bcm2712-rpi-5-b.dtb")
+        local extraction_count=0
+        
+        for boot_file in "${essential_boot_files[@]}"; do
+            if mcopy -i "$base_boot" "::$boot_file" "$temp_dir/boot-content/$boot_file" 2>/dev/null; then
+                log_info "✓ Extracted essential boot file: $boot_file"
+                extraction_count=$((extraction_count + 1))
+            else
+                log_warning "✗ Failed to extract: $boot_file"
+            fi
+        done
+        
+        # Also try alternative Pi 4/5 boot files
+        local alt_boot_files=("start.elf" "fixup.dat" "bootcode.bin")
+        for boot_file in "${alt_boot_files[@]}"; do
+            if mcopy -i "$base_boot" "::$boot_file" "$temp_dir/boot-content/$boot_file" 2>/dev/null; then
+                log_info "✓ Extracted alternative boot file: $boot_file"
+                extraction_count=$((extraction_count + 1))
+            fi
+        done
+        
+        if [[ $extraction_count -gt 3 ]]; then
+            boot_extraction_success=true
+            log_success "Individual file extraction succeeded: $extraction_count files extracted"
+        fi
     fi
+    
+    # If all extraction methods failed, create error and exit
+    if [[ "$boot_extraction_success" != "true" ]]; then
+        log_error "CRITICAL: All boot file extraction methods failed"
+        log_error "Cannot create bootable image without essential boot files"
+        log_error "Please verify the base Raspberry Pi OS image is valid"
+        return 1
+    fi
+    
+    log_info "Boot files found: $(ls -la "$temp_dir/boot-content/" | wc -l) items"
     
     # Add SoulBox boot customizations
     if [[ -f "$assets_dir/boot/soulbox-config.txt" ]]; then
@@ -1733,20 +1771,68 @@ copy_and_customize_filesystems() {
         log_warning "SoulBox boot config not found: $assets_dir/boot/soulbox-config.txt"
     fi
     
-    # Ensure essential boot files are present
-    log_info "Ensuring essential boot files are present..."
+    # Verify essential boot files are present (DO NOT CREATE PLACEHOLDERS)
+    log_info "Verifying essential boot files are present..."
     local essential_files=("start4.elf" "fixup4.dat" "bcm2712-rpi-5-b.dtb" "kernel8.img" "config.txt" "cmdline.txt")
+    local missing_critical_files=()
+    local missing_optional_files=()
+    
     for essential_file in "${essential_files[@]}"; do
         if [[ ! -f "$temp_dir/boot-content/$essential_file" ]]; then
-            log_warning "Essential boot file missing: $essential_file"
-            # For now, create placeholder - ideally should extract from Pi OS image
-            if [[ "$essential_file" == "config.txt" ]]; then
-                echo "# Raspberry Pi Configuration" > "$temp_dir/boot-content/config.txt"
-            elif [[ "$essential_file" == "cmdline.txt" ]]; then
-                echo "console=serial0,115200 console=tty1 root=PARTUUID=ROOT_PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait" > "$temp_dir/boot-content/cmdline.txt"
+            # Categorize missing files
+            if [[ "$essential_file" == "config.txt" || "$essential_file" == "cmdline.txt" ]]; then
+                missing_optional_files+=("$essential_file")
+                log_warning "Boot configuration file missing: $essential_file (can create minimal version)"
+            else
+                missing_critical_files+=("$essential_file")
+                log_error "CRITICAL boot file missing: $essential_file (CANNOT BOOT WITHOUT THIS)"
             fi
+        else
+            log_success "✓ Found essential boot file: $essential_file"
         fi
     done
+    
+    # Create minimal config files only if they're missing
+    for missing_file in "${missing_optional_files[@]}"; do
+        if [[ "$missing_file" == "config.txt" ]]; then
+            log_info "Creating minimal config.txt..."
+            cat > "$temp_dir/boot-content/config.txt" << 'EOF'
+# Raspberry Pi Configuration
+# Generated by SoulBox - minimal boot configuration
+arm_64bit=1
+disable_overscan=1
+
+# GPU memory for media center
+gpu_mem=320
+
+# Boot optimization
+boot_delay=0
+
+# GPU driver
+dtoverlay=vc4-kms-v3d
+EOF
+        elif [[ "$missing_file" == "cmdline.txt" ]]; then
+            log_info "Creating minimal cmdline.txt..."
+            echo "console=serial0,115200 console=tty1 root=PARTUUID=ROOT_PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait" > "$temp_dir/boot-content/cmdline.txt"
+        fi
+    done
+    
+    # FAIL BUILD if critical boot files are missing
+    if [[ ${#missing_critical_files[@]} -gt 0 ]]; then
+        log_error "CRITICAL ERROR: Missing essential boot files that cannot be recreated:"
+        for missing in "${missing_critical_files[@]}"; do
+            log_error "  - $missing (required for Pi 5 boot)"
+        done
+        log_error "These files must be extracted from the base Raspberry Pi OS image"
+        log_error "The image would fail to boot without them - stopping build"
+        return 1
+    fi
+    
+    if [[ ${#missing_optional_files[@]} -gt 0 ]]; then
+        log_success "Created minimal versions of missing configuration files: ${missing_optional_files[*]}"
+    fi
+    
+    log_success "All essential boot files verified or created"
     
     # Copy back to new boot filesystem using proper mtools commands
     log_info "Populating new boot filesystem..."
