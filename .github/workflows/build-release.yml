@@ -22,12 +22,63 @@ jobs:
     # Based on LibreELEC's methodology using mtools and e2tools
     
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
     - name: Manual repository checkout
       run: |
         echo "=== Manual Git Checkout ==="
         cd /tmp
-        # Use local IP since runner is on same network
-        git clone http://192.168.176.113:3000/reaper/soulbox.git soulbox-build
+        
+        # Try multiple clone methods until one works
+        clone_success=false
+        
+        # Method 1: Try local IP with anonymous access
+        echo "Trying local IP clone..."
+        if git clone http://192.168.176.113:3000/reaper/soulbox.git soulbox-build 2>/dev/null; then
+            clone_success=true
+            echo "✅ Local IP clone successful"
+        else
+            echo "❌ Local IP clone failed, trying alternatives..."
+        fi
+        
+        # Method 2: Try with git:// protocol if available
+        if [ "$clone_success" != "true" ]; then
+            echo "Trying git:// protocol..."
+            if git clone git://192.168.176.113/reaper/soulbox.git soulbox-build 2>/dev/null; then
+                clone_success=true
+                echo "✅ Git protocol clone successful"
+            fi
+        fi
+        
+        # Method 3: Try SSH clone (if keys are configured)
+        if [ "$clone_success" != "true" ]; then
+            echo "Trying SSH clone..."
+            if git clone ssh://git@192.168.176.113:22/reaper/soulbox.git soulbox-build 2>/dev/null; then
+                clone_success=true
+                echo "✅ SSH clone successful"
+            fi
+        fi
+        
+        # Method 4: Fallback to using built-in checkout action files
+        if [ "$clone_success" != "true" ]; then
+            echo "⚠️  All git clone methods failed, using workspace files..."
+            mkdir -p soulbox-build
+            cd soulbox-build
+            # Files should already be in GITHUB_WORKSPACE from the checkout action
+            if [ -d "$GITHUB_WORKSPACE/.git" ]; then
+                cp -r $GITHUB_WORKSPACE/* . 2>/dev/null || true
+                cp -r $GITHUB_WORKSPACE/.* . 2>/dev/null || true
+                clone_success=true
+                echo "✅ Used existing workspace files"
+            fi
+        fi
+        
+        if [ "$clone_success" != "true" ]; then
+            echo "❌ All clone methods failed"
+            exit 1
+        fi
+        
         cd soulbox-build
         echo "Repository cloned successfully"
         cp -r . $GITHUB_WORKSPACE/
