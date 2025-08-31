@@ -613,6 +613,68 @@ build_soulbox_image() {
     log_success "All formats copied to: $SCRIPT_DIR/"
 }
 
+# Helper function to extract directory contents recursively using correct e2tools syntax
+extract_directory_contents() {
+    local source_img="$1"
+    local source_dir="$2"
+    local target_dir="$3"
+    local max_files="${4:-1000}"
+    
+    # Create target directory
+    mkdir -p "$target_dir"
+    
+    # Get directory listing - e2ls outputs items separated by spaces
+    local items_raw
+    items_raw=$(e2ls "$source_img:$source_dir" 2>/dev/null || echo "")
+    
+    if [[ -z "$items_raw" ]]; then
+        return 1
+    fi
+    
+    local files_copied=0
+    local dirs_processed=0
+    local total_processed=0
+    
+    # Parse e2ls output - items are separated by spaces/tabs
+    for item in $items_raw; do
+        [[ -z "$item" ]] && continue
+        # Skip . and .. entries and lost+found
+        [[ "$item" == "." || "$item" == ".." || "$item" == "lost+found" ]] && continue
+        
+        # Limit extraction to prevent runaway copying
+        if [[ $total_processed -ge $max_files ]]; then
+            echo "    Reached file limit ($max_files) for $source_dir"
+            break
+        fi
+        
+        local source_item="$source_dir/$item"
+        local target_item="$target_dir/$item"
+        
+        # Test if this item is a directory by trying to list it
+        if e2ls "$source_img:$source_item" >/dev/null 2>&1; then
+            # It's a directory - recurse into it (limited depth)
+            mkdir -p "$target_item"
+            # Only recurse 3 levels deep to avoid excessive copying
+            local depth=$(echo "$source_dir" | tr -cd '/' | wc -c)
+            if [[ $depth -lt 3 ]]; then
+                if extract_directory_contents "$source_img" "$source_item" "$target_item" 100; then
+                    dirs_processed=$((dirs_processed + 1))
+                fi
+            fi
+        else
+            # It's a file - copy it
+            if e2cp "$source_img:$source_item" "$target_item" 2>/dev/null; then
+                files_copied=$((files_copied + 1))
+            fi
+        fi
+        
+        total_processed=$((total_processed + 1))
+    done
+    
+    echo "    $source_dir: $files_copied files, $dirs_processed subdirs extracted"
+    return 0
+}
+
 # Function to copy and customize filesystems
 copy_and_customize_filesystems() {
     # Temporarily disable set -e for better error handling
@@ -782,8 +844,8 @@ copy_and_customize_filesystems() {
         local target_dir="$pi_extract_dir$sys_dir"
         mkdir -p "$(dirname "$target_dir")"
         
-        # Try to extract the entire directory recursively
-        if e2cp -r "$pi_root:$sys_dir" "$pi_extract_dir/" 2>/dev/null; then
+        # FIXED: Use proper e2tools syntax instead of non-existent 'e2cp -r'
+        if extract_directory_contents "$pi_root" "$sys_dir" "$target_dir" 1000; then
             total_extracted=$((total_extracted + 1))
             log_success "Extracted system directory: $sys_dir"
         else
@@ -814,7 +876,7 @@ copy_and_customize_filesystems() {
                 
                 # CRITICAL: Try to extract kernel modules directory structure
                 log_info "Attempting to extract kernel modules recursively..."
-                if e2cp -r "$pi_root:/lib/modules" "$pi_extract_dir/lib/" 2>/dev/null; then
+                if extract_directory_contents "$pi_root" "/lib/modules" "$pi_extract_dir/lib/modules" 5000; then
                     log_success "✓ /lib/modules (CRITICAL - Full extraction)"
                 else
                     log_error "✗ /lib/modules (CRITICAL FAILURE - trying alternative approach)"
@@ -827,8 +889,10 @@ copy_and_customize_filesystems() {
                         log_info "Found kernel versions: $kernel_versions"
                         while read -r kernel_ver; do
                             if [[ -n "$kernel_ver" ]]; then
+                                # Remove trailing / if present
+                                kernel_ver="${kernel_ver%/}"
                                 log_info "Extracting kernel modules for: $kernel_ver"
-                                if e2cp -r "$pi_root:/lib/modules/$kernel_ver" "$pi_extract_dir/lib/modules/" 2>/dev/null; then
+                                if extract_directory_contents "$pi_root" "/lib/modules/$kernel_ver" "$pi_extract_dir/lib/modules/$kernel_ver" 1000; then
                                     log_success "✓ /lib/modules/$kernel_ver"
                                 else
                                     log_warning "✗ /lib/modules/$kernel_ver"
@@ -841,7 +905,7 @@ copy_and_customize_filesystems() {
                 fi
                 
                 # Extract firmware (important for hardware support)
-                if e2cp -r "$pi_root:/lib/firmware" "$pi_extract_dir/lib/" 2>/dev/null; then
+                if extract_directory_contents "$pi_root" "/lib/firmware" "$pi_extract_dir/lib/firmware" 1000; then
                     log_success "✓ /lib/firmware"
                 else
                     log_warning "✗ /lib/firmware"
@@ -849,7 +913,7 @@ copy_and_customize_filesystems() {
                 fi
                 
                 # Extract systemd components
-                if e2cp -r "$pi_root:/lib/systemd" "$pi_extract_dir/lib/" 2>/dev/null; then
+                if extract_directory_contents "$pi_root" "/lib/systemd" "$pi_extract_dir/lib/systemd" 1000; then
                     log_success "✓ /lib/systemd"
                 else
                     log_warning "✗ /lib/systemd"
@@ -857,7 +921,7 @@ copy_and_customize_filesystems() {
                 fi
                 
                 # Extract architecture-specific libraries
-                if e2cp -r "$pi_root:/lib/aarch64-linux-gnu" "$pi_extract_dir/lib/" 2>/dev/null; then
+                if extract_directory_contents "$pi_root" "/lib/aarch64-linux-gnu" "$pi_extract_dir/lib/aarch64-linux-gnu" 2000; then
                     log_success "✓ /lib/aarch64-linux-gnu"
                 else
                     log_warning "✗ /lib/aarch64-linux-gnu"
