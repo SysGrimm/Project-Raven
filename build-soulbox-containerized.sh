@@ -1131,7 +1131,7 @@ extract_kernel_version_modules() {
     echo $modules_extracted
 }
 
-# LibreELEC-style staging function for Pi OS content extraction
+# Modern LibreELEC-style staging function with proper extraction methods
 extract_pi_os_to_staging() {
     local source_img="$1"
     local staging_dir="$2"
@@ -1143,15 +1143,16 @@ extract_pi_os_to_staging() {
     # Create staging directory
     mkdir -p "$staging_dir"
     
-    # Check if we have populatefs or need to fall back to e2tools
-    if command -v populatefs >/dev/null 2>&1; then
-        log_info "Using populatefs (LibreELEC method) for efficient extraction"
-        # TODO: populatefs typically goes the other direction (staging -> filesystem)
-        # For now, we'll use our improved e2tools as extraction and populatefs for creation
-        extract_pi_os_content_with_e2tools "$source_img" "$staging_dir"
+    # Try extraction methods in order of reliability
+    if extract_with_loop_mount "$source_img" "$staging_dir"; then
+        log_success "Pi OS extracted using loop mounting (most reliable)"
+    elif extract_with_debugfs "$source_img" "$staging_dir"; then
+        log_success "Pi OS extracted using debugfs (reliable fallback)"
+    elif extract_with_e2tools "$source_img" "$staging_dir"; then
+        log_warning "Pi OS extracted using e2tools (last resort - may have issues)"
     else
-        log_info "Using e2tools fallback method for extraction"
-        extract_pi_os_content_with_e2tools "$source_img" "$staging_dir"
+        log_error "All extraction methods failed - cannot proceed"
+        return 1
     fi
     
     # Verify extraction
@@ -1159,11 +1160,186 @@ extract_pi_os_to_staging() {
     local dir_count=$(find "$staging_dir" -type d | wc -l)
     log_info "Staging extraction complete: $file_count files, $dir_count directories"
     
-    if [[ $file_count -lt 100 ]]; then
-        log_warning "Very few files extracted ($file_count) - this may indicate extraction problems"
+    if [[ $file_count -lt 500 ]]; then
+        log_error "Too few files extracted ($file_count) - extraction likely failed"
+        return 1
     else
         log_success "Pi OS content successfully staged ($file_count files)"
     fi
+}
+
+# Method 1: Loop mounting extraction (most reliable - LibreELEC preferred)
+extract_with_loop_mount() {
+    local source_img="$1"
+    local staging_dir="$2"
+    
+    log_info "=== ATTEMPTING LOOP MOUNTING EXTRACTION ==="
+    
+    # Check if loop devices are available
+    if [[ ! -e /dev/loop0 ]] && [[ ! -c /dev/loop-control ]]; then
+        log_info "Loop devices not available - container environment detected"
+        return 1
+    fi
+    
+    # Check if we can create loop devices (requires privileges)
+    local test_loop
+    if ! test_loop=$(losetup --find 2>/dev/null); then
+        log_info "Cannot access loop devices - insufficient privileges"
+        return 1
+    fi
+    
+    log_info "Loop devices available - attempting mount-based extraction"
+    
+    local mount_point="/tmp/soulbox-loop-mount-$$"
+    mkdir -p "$mount_point"
+    
+    local loop_device
+    if loop_device=$(losetup --find --show "$source_img" 2>/dev/null); then
+        log_info "Mounted image on loop device: $loop_device"
+        
+        # Wait for partition devices to appear
+        sleep 2
+        partprobe "$loop_device" 2>/dev/null || true
+        
+        # Mount the ext4 partition (usually partition 2)
+        if mount "${loop_device}p2" "$mount_point" 2>/dev/null; then
+            log_success "Successfully mounted root partition"
+            
+            # Copy entire filesystem tree
+            if cp -a "$mount_point"/* "$staging_dir/" 2>/dev/null; then
+                log_success "Loop mount extraction completed successfully"
+                
+                # Cleanup
+                umount "$mount_point" 2>/dev/null || true
+                losetup -d "$loop_device" 2>/dev/null || true
+                rmdir "$mount_point" 2>/dev/null || true
+                
+                return 0
+            else
+                log_warning "Failed to copy filesystem content"
+            fi
+            
+            # Cleanup on failure
+            umount "$mount_point" 2>/dev/null || true
+        else
+            log_warning "Failed to mount root partition"
+        fi
+        
+        losetup -d "$loop_device" 2>/dev/null || true
+    else
+        log_warning "Failed to setup loop device"
+    fi
+    
+    rmdir "$mount_point" 2>/dev/null || true
+    return 1
+}
+
+# Method 2: debugfs extraction (reliable fallback)
+extract_with_debugfs() {
+    local source_img="$1"
+    local staging_dir="$2"
+    
+    log_info "=== ATTEMPTING DEBUGFS EXTRACTION ==="
+    
+    # Check if debugfs is available
+    if ! command -v debugfs >/dev/null 2>&1; then
+        log_info "debugfs not available - trying to install"
+        if command -v apt-get >/dev/null 2>&1; then
+            if ! apt-get install -y e2fsprogs 2>/dev/null; then
+                log_warning "Could not install debugfs"
+                return 1
+            fi
+        else
+            log_warning "Cannot install debugfs - no package manager"
+            return 1
+        fi
+    fi
+    
+    log_info "Using debugfs for ext4 extraction"
+    
+    # Extract root partition as separate file first (reuse existing logic)
+    local temp_root="/tmp/soulbox-debugfs-root-$$.ext4"
+    
+    # Get partition information using parted
+    local root_start=$(parted -s "$source_img" unit s print | grep "^ 2" | awk '{print $2}' | sed 's/s$//')
+    local root_end=$(parted -s "$source_img" unit s print | grep "^ 2" | awk '{print $3}' | sed 's/s$//')
+    
+    if [[ -z "$root_start" || -z "$root_end" ]]; then
+        log_error "Could not determine root partition location"
+        return 1
+    fi
+    
+    # Extract root partition
+    local root_size_sectors=$((root_end - root_start + 1))
+    if ! dd if="$source_img" of="$temp_root" bs=512 skip="$root_start" count="$root_size_sectors" 2>/dev/null; then
+        log_error "Failed to extract root partition for debugfs"
+        return 1
+    fi
+    
+    log_info "Extracted root partition, using debugfs to dump filesystem"
+    
+    # Use debugfs to recursively dump the filesystem
+    if extract_with_debugfs_recursive "$temp_root" "$staging_dir" "/"; then
+        log_success "debugfs extraction completed successfully"
+        rm -f "$temp_root"
+        return 0
+    else
+        log_warning "debugfs extraction failed"
+        rm -f "$temp_root"
+        return 1
+    fi
+}
+
+# Helper function for recursive debugfs extraction
+extract_with_debugfs_recursive() {
+    local filesystem="$1"
+    local staging_dir="$2"
+    local fs_path="$3"
+    
+    # Create the directory in staging
+    mkdir -p "$staging_dir$fs_path"
+    
+    # Get directory listing from debugfs
+    local listings
+    listings=$(echo "ls -l $fs_path" | debugfs "$filesystem" 2>/dev/null | grep -v "debugfs:")
+    
+    # Parse debugfs output and extract files/directories
+    while read -r line; do
+        [[ -z "$line" ]] && continue
+        
+        # Parse debugfs ls -l output format
+        local perms=$(echo "$line" | awk '{print $1}')
+        local name=$(echo "$line" | awk '{print $NF}')
+        
+        [[ "$name" == "." || "$name" == ".." ]] && continue
+        [[ -z "$name" ]] && continue
+        
+        local full_fs_path="$fs_path/$name"
+        local full_staging_path="$staging_dir$full_fs_path"
+        
+        if [[ "${perms:0:1}" == "d" ]]; then
+            # It's a directory - recurse
+            extract_with_debugfs_recursive "$filesystem" "$staging_dir" "$full_fs_path"
+        else
+            # It's a file - extract it
+            echo "dump $full_fs_path $full_staging_path" | debugfs "$filesystem" 2>/dev/null >/dev/null
+        fi
+        
+    done <<< "$listings"
+    
+    return 0
+}
+
+# Method 3: e2tools extraction (last resort - existing method)
+extract_with_e2tools() {
+    local source_img="$1"
+    local staging_dir="$2"
+    
+    log_info "=== USING E2TOOLS EXTRACTION (LAST RESORT) ==="
+    log_warning "Using e2tools - this method may have compatibility issues"
+    
+    extract_pi_os_content_with_e2tools "$source_img" "$staging_dir"
+    return $?
 }
 
 # Extract Pi OS content using improved e2tools (fallback when populatefs not available for extraction)
