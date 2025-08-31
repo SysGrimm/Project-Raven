@@ -1365,7 +1365,7 @@ handle_debugfs_symlink() {
     if [[ -n "$stat_output" ]]; then
         # Look for "Fast link dest:" line in stat output
         local fast_link_line=$(echo "$stat_output" | grep "Fast link dest:" | head -1)
-        if [[ -n "$fast_link_line" && "$fast_link_line" =~ Fast[[:space:]]+link[[:space:]]+dest:[[:space:]]*\"([^\"]+)\" ]]; then
+        if [[ -n "$fast_link_line" && "$fast_link_line" =~ Fast[[:space:]]+link[[:space:]]+dest:[[:space:]]*"([^"]+)" ]]; then
             local target="${BASH_REMATCH[1]}"
             echo "$target"
             return
@@ -1819,6 +1819,36 @@ copy_and_customize_filesystems() {
     
     # Populate filesystem using staging method
     log_info "Populating filesystem using staging method..."
+    
+    # Ensure all required e2fsprogs tools are in PATH for populatefs
+    local original_path="$PATH"
+    export PATH="/usr/sbin:/sbin:/usr/bin:/bin:/usr/local/bin:$PATH"
+    log_info "Enhanced PATH for populatefs dependencies: $PATH"
+    
+    # Verify populatefs dependencies are available
+    local missing_deps=()
+    for dep in mke2fs debugfs tune2fs e2fsck; do
+        if ! command -v "$dep" >/dev/null 2>&1; then
+            missing_deps+=("$dep")
+        fi
+    done
+    
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        log_warning "Missing populatefs dependencies: ${missing_deps[*]}"
+        log_info "Attempting to locate missing dependencies..."
+        for dep in "${missing_deps[@]}"; do
+            for search_path in /usr/sbin /sbin /usr/local/sbin /usr/local/bin; do
+                if [[ -x "$search_path/$dep" ]]; then
+                    log_info "Found $dep in $search_path"
+                    export PATH="$search_path:$PATH"
+                    break
+                fi
+            done
+        done
+    else
+        log_success "All populatefs dependencies found in PATH"
+    fi
+    
     local populatefs_cmd=""
     if command -v populatefs >/dev/null 2>&1; then
         populatefs_cmd="populatefs"
@@ -1873,9 +1903,14 @@ copy_and_customize_filesystems() {
             fi
             
             log_success "Staging-style filesystem population complete!"
+            # Restore original PATH
+            export PATH="$original_path"
             return 0
         fi
     fi
+    
+    # Restore original PATH before error exit
+    export PATH="$original_path"
     
     # REMOVED: e2tools fallback - it causes filesystem corruption
     log_error "CRITICAL: populatefs is required but failed or not available"
