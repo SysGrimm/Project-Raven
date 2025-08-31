@@ -1592,24 +1592,21 @@ extract_with_debugfs_recursive() {
         return 0
     fi
     
-    # Skip problematic paths that cause performance issues
+    # Handle special filesystem paths appropriately
     case "$fs_path" in
-        "/usr/bin"|"/usr/sbin"|"/bin"|"/sbin")
-            # These are usually symlinks to large directories - handle differently
-            if [[ $current_depth -eq 0 ]]; then
-                log_info "Processing large directory: $fs_path (optimized symlink handling)"
-                extract_large_directory_optimized "$filesystem" "$staging_dir" "$fs_path"
-                return $?
-            else
-                log_info "Skipping deep symlink directory to avoid performance issues: $fs_path"
-                return 0
-            fi
-            ;;
         "/proc"|"/sys"|"/dev")
             # These are virtual filesystems, just create empty directories
             log_info "Creating empty virtual filesystem directory: $fs_path"
             mkdir -p "$staging_dir$fs_path"
             return 0
+            ;;
+        "/usr/bin"|"/usr/sbin"|"/bin"|"/sbin")
+            # These are critical directories - extract with limited depth but don't skip entirely
+            if [[ $current_depth -gt 3 ]]; then
+                log_info "Limiting extraction depth for large directory: $fs_path (performance optimization)"
+                extract_with_debugfs_limited "$filesystem" "$staging_dir" "$fs_path" 200
+                return $?
+            fi
             ;;
     esac
     
