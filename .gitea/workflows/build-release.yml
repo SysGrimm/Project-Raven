@@ -169,36 +169,21 @@ jobs:
             log_info "File size: $(stat -c%s "$FILE_PATH" 2>/dev/null || stat -f%z "$FILE_PATH" 2>/dev/null || echo 'unknown') bytes"
             log_info "File type: $(file "$FILE_PATH" 2>/dev/null || echo 'unknown')"
             
-            # Create a temporary script to capture both stdout and stderr from curl
-            TEMP_SCRIPT="/tmp/curl_upload_$$.sh"
-            cat > "$TEMP_SCRIPT" << CURLEOF
-        #!/bin/bash
-        set -x
-        echo "[DEBUG] Starting curl command"
-        echo "[DEBUG] Working directory: \\$(pwd)"
-        echo "[DEBUG] File exists check: \\$(test -f '$FILE_PATH' && echo 'YES' || echo 'NO')"
-        
-        echo "[DEBUG] About to execute curl command:"
-        echo "curl -v -X POST '\${GITEA_API_URL}/releases/\${RELEASE_ID}/assets' -H 'Authorization: token [REDACTED]' -H 'Accept: application/json' -F 'attachment=@\$FILE_PATH'"
-        
-        # Execute the curl command with full verbosity - build URL properly
-        UPLOAD_URL="\${GITEA_API_URL}/releases/\${RELEASE_ID}/assets"
-        curl -v --max-time 60 --connect-timeout 10 -X POST "\$UPLOAD_URL" \\
-            -H "Authorization: token \$GITEA_TOKEN" \\
-            -H "Accept: application/json" \\
-            -F "attachment=@\$FILE_PATH" 2>&1
-        
-        echo "[DEBUG] Curl command completed with exit code: \\$?"
-        CURLEOF
+            # Direct curl upload with comprehensive error handling
+            log_info "Executing direct curl upload..."
             
-            chmod +x "$TEMP_SCRIPT"
+            # Build upload URL
+            UPLOAD_URL="${GITEA_API_URL}/releases/${RELEASE_ID}/assets"
+            log_info "Upload URL: $UPLOAD_URL"
             
-            log_info "Executing curl with full debugging..."
-            UPLOAD_OUTPUT=$(bash "$TEMP_SCRIPT" 2>&1 || echo "CURL_EXECUTION_FAILED")
+            # Execute curl command directly with verbose output
+            UPLOAD_OUTPUT=$(curl -v --max-time 60 --connect-timeout 10 \
+                -X POST "$UPLOAD_URL" \
+                -H "Authorization: token $GITEA_TOKEN" \
+                -H "Accept: application/json" \
+                -F "attachment=@$FILE_PATH" 2>&1 || echo "CURL_FAILED_EXIT_CODE_$?")
+            
             CURL_EXIT_CODE=$?
-            
-            # Clean up temp script
-            rm -f "$TEMP_SCRIPT"
             
             log_info "=== CURL OUTPUT START ==="
             echo "$UPLOAD_OUTPUT"
