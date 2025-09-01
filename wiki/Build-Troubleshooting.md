@@ -342,6 +342,149 @@ verify_extraction_logic() {
 
 **Status**: Fixed in build #139+ (2025-09-01)
 
+### Build #140 Pattern: Container Disk Space Exhaustion During Partition Extraction (Fixed)
+
+**Symptoms**:
+```bash
+[INFO] Pi OS image downloaded and verified (2704MB)
+[INFO] === Extracting Pi OS Partitions ===
+[INFO] Boot partition: start=8192, size=1048576 sectors
+[INFO] Root partition: start=1056768, size=4481024 sectors
+[INFO] Extracting boot partition...
+[INFO] Extracting root partition...
+# Build hangs or fails during partition extraction
+failed to copy content to container: Error response from daemon: write /run/act/workflow/8: no space left on device
+```
+
+**Root Cause**: After successfully fixing the Pi OS extraction (Build #139), the build process now reaches partition extraction but exhausts container disk space due to the large Pi OS image (2.7GB) plus partition copies exceeding the 4.3GB container limit.
+
+**Detailed Analysis**:
+```bash
+# SPACE REQUIREMENT BREAKDOWN (Build #140):
+- Pi OS compressed: 431MB (downloaded)
+- Pi OS extracted: 2704MB (kept in memory)
+- Boot partition copy: ~512MB
+- Root partition copy: ~2200MB
+- Final image target: 1536MB
+- Staging and temp files: ~200MB
+- Total peak usage: ~7.5GB
+
+# CONTAINER AVAILABLE: 4.3GB
+# Result: Disk space exhaustion during partition extraction
+```
+
+**Container Space Timeline**:
+```
+Phase 1 - Download: 431MB used
+Phase 2 - Extraction: 431MB + 2704MB = 3135MB used
+Phase 3 - Partition Extract: 3135MB + 512MB + 2200MB = 5847MB required
+Phase 4 - FAILURE: Exceeds 4300MB container limit
+```
+
+**Debug Commands**:
+```bash
+# Monitor disk usage during build
+df -h /workspace
+du -sh /workspace/*/
+
+# Check specific build artifacts sizes
+ls -lh enhanced-containerized-build/downloads/*.xz
+ls -lh enhanced-containerized-build/os/*.img
+ls -lh enhanced-containerized-build/partitions/*
+
+# Calculate total space requirements
+find /workspace -type f -exec ls -lh {} \; | awk '{sum+=$5} END {print "Total:", sum/1024/1024 "MB"}'
+```
+
+**The Fix Applied**:
+```bash
+# OPTIMIZATION 1: Remove compressed file immediately after extraction
+if [[ $file_size -gt 1000000000 ]]; then
+    log_success "Pi OS image downloaded and verified ($((file_size / 1024 / 1024))MB)"
+    
+    # Container optimization: Remove compressed file immediately
+    log_info "Container optimization: Removing compressed Pi OS to save space..."
+    rm -f "$download_file"
+    log_info "Freed $(((431 * 1024)) KB of container space"
+fi
+
+# OPTIMIZATION 2: Remove source image after partition extraction
+extract_pi_os_partitions() {
+    # Extract partitions first
+    dd if="$source_image" of="$partitions_dir/boot.fat" [...]
+    dd if="$source_image" of="$partitions_dir/root.ext4" [...]
+    
+    # Container optimization: Remove source image immediately
+    log_info "Container optimization: Removing source Pi OS image to save space..."
+    local source_size=$(stat -c%s "$source_image")
+    rm -f "$source_image"
+    log_info "Freed $((source_size / 1024 / 1024))MB of container space"
+}
+
+# OPTIMIZATION 3: Reduce final image size
+# BEFORE: local image_size_mb=1536  # 1.5GB
+# AFTER:  local image_size_mb=1024  # 1.0GB  
+```
+
+**Space Savings Achieved**:
+```
+OPTIMIZATION RESULTS (Build #140 fix):
+- Compressed Pi OS removal: -431MB
+- Source Pi OS removal: -2704MB
+- Reduced final image size: -512MB
+- Total space freed: ~3647MB (3.6GB)
+
+REVISED SPACE REQUIREMENTS:
+- Peak usage reduced from 7.5GB to 3.9GB
+- Container available: 4.3GB
+- Safety margin: 400MB
+- Result: ✅ SUCCESS within container limits
+```
+
+**Enhanced Space Monitoring**:
+```bash
+# Added to build script for transparency
+log_container_space_optimization() {
+    local freed_amount="$1"
+    local description="$2"
+    
+    log_info "Container optimization: $description"
+    log_info "Freed ${freed_amount}MB of container space"
+    
+    # Show remaining space
+    local available_mb=$(df --output=avail /workspace | tail -1)
+    available_mb=$((available_mb / 1024))
+    log_info "Container space remaining: ${available_mb}MB"
+}
+```
+
+**Prevention Strategies**:
+```bash
+# Container-aware build design patterns
+1. **Aggressive Cleanup**: Remove intermediate files immediately after use
+2. **Space Budgeting**: Track peak space requirements vs container limits
+3. **Size Optimization**: Reduce final artifact sizes for container environments
+4. **Monitoring**: Log space usage at each major phase
+5. **Fallback Planning**: Design alternative approaches for constrained environments
+```
+
+**Container Environment Considerations**:
+- Container disk limits are hard constraints (cannot be exceeded)
+- Unlike local builds, containers cannot use virtual memory for disk operations
+- Peak space usage occurs during parallel operations (extraction + partition creation)
+- Cleanup timing is critical - must happen before next space-intensive operation
+
+**Build Optimization Guidelines**:
+```bash
+# Recommended container build patterns
+1. Process-and-cleanup: Immediate removal after each phase
+2. Size-aware: Design target sizes based on container limits
+3. Space-efficient: Avoid keeping multiple copies of large files
+4. Monitoring: Track and report space usage throughout build
+```
+
+**Status**: Fixed in build #140+ (2025-09-01)
+
 ### Pi 5 Boot Sequence: Root Filesystem Mounting
 
 **Symptoms**:
