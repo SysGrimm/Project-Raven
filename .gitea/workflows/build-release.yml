@@ -113,15 +113,16 @@ jobs:
         # Create empty image file
         dd if=/dev/zero of="$IMAGE_FILE" bs=1M count=$IMAGE_SIZE_MB 2>/dev/null
         
-        # Create partition table
+        # Create partition table with larger boot partition for better FAT32 compatibility
         log_info "Creating partition table..."
         parted "$IMAGE_FILE" --script -- mklabel msdos
-        parted "$IMAGE_FILE" --script -- mkpart primary fat32 1MiB 32MiB
-        parted "$IMAGE_FILE" --script -- mkpart primary ext4 32MiB 100%
+        # Use 48MB for boot partition - ensures FAT32 compatibility
+        parted "$IMAGE_FILE" --script -- mkpart primary fat32 1MiB 49MiB
+        parted "$IMAGE_FILE" --script -- mkpart primary ext4 49MiB 100%
         parted "$IMAGE_FILE" --script -- set 1 boot on
         
-        # Create proper filesystems without requiring loop device mounting
-        log_info "Creating FAT32 and ext4 filesystems without loop device mounting..."
+        # Alternative approach: Format partitions directly in the disk image using loop device simulation
+        log_info "Creating FAT32 and ext4 filesystems using direct partition formatting..."
         
         # Get partition information
         PART_INFO=$(parted -s "$IMAGE_FILE" unit B print)
@@ -132,27 +133,34 @@ jobs:
         ROOT_END=$(echo "$PART_INFO" | grep "^ 2" | awk '{print $3}' | tr -d 'B')
         ROOT_SIZE=$((ROOT_END - ROOT_START))
         
-        log_info "Boot partition: start=$BOOT_START, size=$BOOT_SIZE bytes"
-        log_info "Root partition: start=$ROOT_START, size=$ROOT_SIZE bytes"
+        log_info "Boot partition: start=$BOOT_START, size=$BOOT_SIZE bytes ($(($BOOT_SIZE / 1024 / 1024))MB)"
+        log_info "Root partition: start=$ROOT_START, size=$ROOT_SIZE bytes ($(($ROOT_SIZE / 1024 / 1024))MB)"
         
-        # Create temporary directory for filesystem images
+        # Create temporary directory
         TEMP_FS_DIR=$(mktemp -d)
+        
+        # Method: Create clean FAT32 filesystem using known working approach
+        log_info "Creating clean FAT32 filesystem (48MB)..."
+        
+        # Calculate sectors (512 byte sectors)
+        BOOT_SECTORS=$(($BOOT_SIZE / 512))
+        log_info "Boot partition sectors: $BOOT_SECTORS"
+        
+        # Create the FAT32 filesystem directly in the partition area using offset
+        # Use simple FAT32 creation without complex parameters
+        log_info "Formatting boot partition with standard FAT32..."
+        
+        # Create temporary boot partition file for formatting
         BOOT_IMG="$TEMP_FS_DIR/boot.fat"
+        dd if=/dev/zero of="$BOOT_IMG" bs=512 count="$BOOT_SECTORS" 2>/dev/null
+        
+        # Use simple, reliable FAT32 formatting
+        mkfs.fat -F 32 -n "SOULBOX" "$BOOT_IMG"
+        
+        # Create temporary root partition file  
         ROOT_IMG="$TEMP_FS_DIR/root.ext4"
-        
-        # Extract partitions to separate files
-        dd if="$IMAGE_FILE" of="$BOOT_IMG" bs=1 skip="$BOOT_START" count="$BOOT_SIZE" 2>/dev/null
-        dd if="$IMAGE_FILE" of="$ROOT_IMG" bs=1 skip="$ROOT_START" count="$ROOT_SIZE" 2>/dev/null
-        
-        # Format boot partition with FAT32 using proper parameters
-        log_info "Formatting boot partition with FAT32..."
-        # Use specific FAT32 parameters to ensure compatibility
-        # -F 32: Force FAT32
-        # -n: Volume label  
-        # -f 2: Number of FATs (recommended for compatibility)
-        # -S 512: Bytes per sector
-        # -s 1: Sectors per cluster (for small volumes)
-        mkfs.fat -F 32 -f 2 -S 512 -s 1 -n "SOULBOX" "$BOOT_IMG"
+        ROOT_SECTORS=$(($ROOT_SIZE / 512))
+        dd if=/dev/zero of="$ROOT_IMG" bs=512 count="$ROOT_SECTORS" 2>/dev/null
         
         # Format root partition with ext4
         log_info "Formatting root partition with ext4..."
