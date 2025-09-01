@@ -183,12 +183,26 @@ create_gitea_release() {
     
     log_info "Creating Gitea release: $version"
     
-    # Prepare release data
+    # Step 1: Create git tag (required by Gitea before creating release)
+    if ! git rev-parse --verify "$version" >/dev/null 2>&1; then
+        log_info "Creating git tag: $version"
+        git tag -a "$version" -m "SoulBox release $version"
+        
+        # Push the tag to origin if possible
+        if git remote | grep -q "origin"; then
+            log_info "Pushing tag to origin..."
+            git push origin "$version" 2>/dev/null || log_warning "Failed to push tag (continuing anyway)"
+        fi
+    else
+        log_info "Git tag $version already exists"
+    fi
+    
+    # Step 2: Prepare release data
     local release_data
     release_data=$(cat <<EOF
 {
     "tag_name": "$version",
-    "name": "SoulBox Will-o'-Wisp $version",
+    "name": "SoulBox Media Center $version",
     "body": "$release_notes",
     "draft": false,
     "prerelease": false
@@ -292,7 +306,7 @@ generate_release_notes() {
     fi
     
     cat <<EOF
-# SoulBox Will-o'-Wisp Media Center $version
+# SoulBox Media Center $version
 
 🔥 **Container-Friendly Build System** - Built without privileged containers using LibreELEC-inspired approach
 
@@ -305,7 +319,7 @@ $(echo "$commit_log" | sed 's/^/- /')
 - **Kodi Media Center** with Raspberry Pi 5 optimizations
 - **Tailscale VPN Integration** for secure remote access  
 - **Automatic Setup** - first boot completes configuration
-- **Will-o'-Wisp Branding** with custom boot splash
+- **SoulBox Branding** with custom boot splash
 - **SSH Access** with default credentials
 - **Container-Built** using mtools and e2tools (no loop devices!)
 
