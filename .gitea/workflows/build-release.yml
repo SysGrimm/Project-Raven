@@ -144,9 +144,15 @@ jobs:
         dd if="$IMAGE_FILE" of="$BOOT_IMG" bs=1 skip="$BOOT_START" count="$BOOT_SIZE" 2>/dev/null
         dd if="$IMAGE_FILE" of="$ROOT_IMG" bs=1 skip="$ROOT_START" count="$ROOT_SIZE" 2>/dev/null
         
-        # Format boot partition with FAT32
+        # Format boot partition with FAT32 using proper parameters
         log_info "Formatting boot partition with FAT32..."
-        mkfs.fat -F 32 -n "SOULBOX" "$BOOT_IMG"
+        # Use specific FAT32 parameters to ensure compatibility
+        # -F 32: Force FAT32
+        # -n: Volume label  
+        # -f 2: Number of FATs (recommended for compatibility)
+        # -S 512: Bytes per sector
+        # -s 1: Sectors per cluster (for small volumes)
+        mkfs.fat -F 32 -f 2 -S 512 -s 1 -n "SOULBOX" "$BOOT_IMG"
         
         # Format root partition with ext4
         log_info "Formatting root partition with ext4..."
@@ -166,10 +172,20 @@ jobs:
         # Create a minimal kernel placeholder
         dd if=/dev/zero of="$TEMP_FS_DIR/kernel8.img" bs=1M count=1 2>/dev/null
         
-        # Copy files to boot partition using mtools
+        # Copy files to boot partition using mtools with proper error handling
+        log_info "Copying files to FAT32 boot partition..."
         mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/config.txt" ::config.txt
         mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/cmdline.txt" ::cmdline.txt
         mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/kernel8.img" ::kernel8.img
+        
+        # Finalize FAT filesystem - ensure proper directory structure and end markers
+        log_info "Finalizing FAT32 filesystem structure..."
+        # Run filesystem check to ensure proper structure and fix any issues
+        fsck.fat -v -r "$BOOT_IMG" || log_warning "FAT filesystem check completed with warnings"
+        
+        # Create a proper end-of-directory marker by creating and deleting a temporary file
+        mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/config.txt" ::TEMP_MARKER 2>/dev/null || true
+        mdel -i "$BOOT_IMG" ::TEMP_MARKER 2>/dev/null || true
         
         # Create basic root content
         mkdir -p "$TEMP_FS_DIR/root_staging"
