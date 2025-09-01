@@ -142,7 +142,7 @@ main() {
     create_soulbox_customizations
     build_soulbox_image
     
-    log_success "SoulBox build complete!"
+    log_success "Enhanced SoulBox build complete!"
     echo "Build artifacts created in: $WORK_DIR/output/"
     echo "SoulBox is ready for deployment!"
 }
