@@ -150,35 +150,67 @@ jobs:
                         
                         # Extract release ID for file upload
                         RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2)
+                        log_info "Extracted release ID: $RELEASE_ID"
+                        
+                        # Debug: Show file information
+                        log_info "Debug - Checking files for upload:"
+                        log_info "IMAGE_FILE: $IMAGE_FILE"
+                        log_info "CHECKSUM_FILE: $CHECKSUM_FILE"
+                        if [[ -f "$IMAGE_FILE" ]]; then
+                            log_info "Image file exists, size: $(ls -lh "$IMAGE_FILE" | awk '{print $5}')"
+                        else
+                            log_warning "Image file does not exist at: $IMAGE_FILE"
+                        fi
+                        if [[ -f "$CHECKSUM_FILE" ]]; then
+                            log_info "Checksum file exists, size: $(ls -lh "$CHECKSUM_FILE" | awk '{print $5}')"
+                        else
+                            log_warning "Checksum file does not exist at: $CHECKSUM_FILE"
+                        fi
                         
                         # Upload image file if it exists
                         if [[ -f "$IMAGE_FILE" ]]; then
                             log_info "Uploading image file: $IMAGE_FILE"
+                            log_info "Upload URL: ${GITEA_API_URL}/releases/${RELEASE_ID}/assets"
+                            
+                            # Try the upload with verbose error reporting
                             UPLOAD_RESPONSE=$(curl -s -X POST "${GITEA_API_URL}/releases/${RELEASE_ID}/assets" \
                                 -H "Authorization: token $GITEA_TOKEN" \
-                                -F "attachment=@$IMAGE_FILE" 2>/dev/null || echo '{"message":"Upload failed"}')
+                                -H "Accept: application/json" \
+                                -F "attachment=@$IMAGE_FILE")
                             
-                            if echo "$UPLOAD_RESPONSE" | grep -q '"name"'; then
+                            log_info "Raw upload response: $UPLOAD_RESPONSE"
+                            
+                            if echo "$UPLOAD_RESPONSE" | grep -q '"browser_download_url"'; then
                                 log_success "📁 Image file uploaded successfully"
+                                DOWNLOAD_URL=$(echo "$UPLOAD_RESPONSE" | grep -o '"browser_download_url":"[^"]*' | cut -d'"' -f4)
+                                log_info "Download URL: $DOWNLOAD_URL"
                             else
                                 log_warning "Failed to upload image file"
                                 log_info "Upload response: $UPLOAD_RESPONSE"
                             fi
+                        else
+                            log_warning "Skipping image upload - file not found: $IMAGE_FILE"
                         fi
                         
                         # Upload checksum file if it exists
                         if [[ -f "$CHECKSUM_FILE" ]]; then
                             log_info "Uploading checksum file: $CHECKSUM_FILE"
+                            
                             CHECKSUM_RESPONSE=$(curl -s -X POST "${GITEA_API_URL}/releases/${RELEASE_ID}/assets" \
                                 -H "Authorization: token $GITEA_TOKEN" \
-                                -F "attachment=@$CHECKSUM_FILE" 2>/dev/null || echo '{"message":"Upload failed"}')
+                                -H "Accept: application/json" \
+                                -F "attachment=@$CHECKSUM_FILE")
                             
-                            if echo "$CHECKSUM_RESPONSE" | grep -q '"name"'; then
+                            log_info "Raw checksum response: $CHECKSUM_RESPONSE"
+                            
+                            if echo "$CHECKSUM_RESPONSE" | grep -q '"browser_download_url"'; then
                                 log_success "📁 Checksum file uploaded successfully"
                             else
                                 log_warning "Failed to upload checksum file"
                                 log_info "Checksum response: $CHECKSUM_RESPONSE"
                             fi
+                        else
+                            log_warning "Skipping checksum upload - file not found: $CHECKSUM_FILE"
                         fi
                         
                         log_success "🔗 Release URL: $GITEA_SERVER/$GITEA_OWNER/$GITEA_REPO/releases/tag/$VERSION"
