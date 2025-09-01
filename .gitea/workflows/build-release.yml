@@ -114,8 +114,10 @@ jobs:
         echo "=== SoulBox Enhanced Build System Verification ==="
         
         # Check that we have the enhanced build scripts
-        if [[ -x "build-soulbox-enhanced-container.sh" ]]; then
+        if [[ -x "build-soulbox-enhanced-container-complete.sh" ]]; then
             echo "✅ Enhanced container build script found"
+        elif [[ -x "build-soulbox-enhanced-container.sh" ]]; then
+            echo "✅ Enhanced container build script found (legacy name)"
         else
             echo "❌ Enhanced container build script missing"
             echo "Available build scripts:"
@@ -295,7 +297,7 @@ jobs:
         fi
         
         # Run enhanced container-friendly build (no loop devices needed)
-        ./build-soulbox-enhanced-container.sh --version "$VERSION" --clean
+        ./build-soulbox-enhanced-container-complete.sh --version "$VERSION" --clean
         
         # Create artifacts directory and copy all formats
         mkdir -p artifacts

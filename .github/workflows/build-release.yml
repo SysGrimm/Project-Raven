@@ -1,4 +1,4 @@
-name: Build SoulBox Will-o'-Wisp Media Center (Enhanced)
+name: Build SoulBox Media Center
 
 on:
   push:
@@ -29,7 +29,7 @@ jobs:
         echo "=== Repository Checkout (Local IP Method) ==="
         CLONE_SUCCESS=false
         
-        # Method 1: Authenticated clone using Gitea token (most reliable)
+        # Method 1: Authenticated clone using Gitea token
         if [[ -n "$GITOKEN" ]]; then
             echo "Trying authenticated clone with token..."
             if git clone --depth 1 "http://oauth2:${GITOKEN}@192.168.176.113:3000/reaper/soulbox.git" . 2>/dev/null; then
@@ -38,7 +38,7 @@ jobs:
             fi
         fi
         
-        # Method 2: Local IP HTTP clone (anonymous)
+        # Method 2: Anonymous HTTP clone fallback
         if [[ "$CLONE_SUCCESS" != "true" ]]; then
             echo "Trying anonymous HTTP clone..."
             if git clone --depth 1 http://192.168.176.113:3000/reaper/soulbox.git . 2>/dev/null; then
@@ -47,57 +47,53 @@ jobs:
             fi
         fi
         
-        # Method 3: Fallback to minimal build environment  
+        # Method 3: Create minimal build environment for testing
         if [[ "$CLONE_SUCCESS" != "true" ]]; then
             echo "❌ All clone methods failed - creating minimal build environment"
             echo "Network diagnostics:"
             ping -c 3 192.168.176.113 2>/dev/null || echo "Cannot ping Gitea server"
             curl -I http://192.168.176.113:3000 2>/dev/null || echo "Can reach Gitea HTTP"
             
-            # Create essential build files for testing (from wiki)
             echo "Creating minimal build environment..."
-            cat > build-soulbox-enhanced-container.sh << 'BUILDSCRIPT'
-#!/bin/bash
-echo "SoulBox enhanced container build script (minimal version for CI testing)"
-VERSION="v0.1.0"
-while [[ \$# -gt 0 ]]; do
-  case \$1 in
-    --version) VERSION="\$2"; shift 2 ;;
-    --clean) echo "Clean build requested"; shift ;;
-    *) echo "Unknown option: \$1"; shift ;;
-  esac
-done
-echo "Version: \$VERSION"
-echo "This is a minimal build to test CI infrastructure"
-mkdir -p enhanced-containerized-build/output
-echo "Test SoulBox enhanced image content - Build \$(date)" > "enhanced-containerized-build/output/soulbox-\$VERSION.img"
-sha256sum "enhanced-containerized-build/output/soulbox-\$VERSION.img" > "enhanced-containerized-build/output/soulbox-\$VERSION.img.sha256"
-cp "enhanced-containerized-build/output/"* .
-echo "Minimal build artifacts created:"
-ls -la soulbox-*
-BUILDSCRIPT
             
+            # Create build script using printf to avoid heredoc issues
+            printf '#!/bin/bash\n' > build-soulbox-enhanced-container.sh
+            printf 'echo "SoulBox enhanced container build script (minimal version for CI testing)"\n' >> build-soulbox-enhanced-container.sh
+            printf 'VERSION="v0.1.0"\n' >> build-soulbox-enhanced-container.sh
+            printf 'while [[ $# -gt 0 ]]; do\n' >> build-soulbox-enhanced-container.sh
+            printf '  case $1 in\n' >> build-soulbox-enhanced-container.sh
+            printf '    --version) VERSION="$2"; shift 2 ;;\n' >> build-soulbox-enhanced-container.sh
+            printf '    --clean) echo "Clean build requested"; shift ;;\n' >> build-soulbox-enhanced-container.sh
+            printf '    *) echo "Unknown option: $1"; shift ;;\n' >> build-soulbox-enhanced-container.sh
+            printf '  esac\n' >> build-soulbox-enhanced-container.sh
+            printf 'done\n' >> build-soulbox-enhanced-container.sh
+            printf 'echo "Version: $VERSION"\n' >> build-soulbox-enhanced-container.sh
+            printf 'echo "This is a minimal build to test CI infrastructure"\n' >> build-soulbox-enhanced-container.sh
+            printf 'mkdir -p enhanced-containerized-build/output\n' >> build-soulbox-enhanced-container.sh
+            printf 'echo "Test SoulBox enhanced image content - Build $(date)" > "enhanced-containerized-build/output/soulbox-$VERSION.img"\n' >> build-soulbox-enhanced-container.sh
+            printf 'sha256sum "enhanced-containerized-build/output/soulbox-$VERSION.img" > "enhanced-containerized-build/output/soulbox-$VERSION.img.sha256"\n' >> build-soulbox-enhanced-container.sh
+            printf 'cp "enhanced-containerized-build/output/"* .\n' >> build-soulbox-enhanced-container.sh
+            printf 'echo "Minimal build artifacts created:"\n' >> build-soulbox-enhanced-container.sh
+            printf 'ls -la soulbox-*\n' >> build-soulbox-enhanced-container.sh
             chmod +x build-soulbox-enhanced-container.sh
             
-            # Create minimal version manager
+            # Create version manager
             mkdir -p scripts
-            cat > scripts/gitea-version-manager.sh << 'VERSIONSCRIPT'
-#!/bin/bash
-case "\$1" in
-    auto)
-        echo "v0.3.\$(date +%s)"
-        ;;
-    create-release)
-        echo "[TEST MODE] Would create release: \$2"
-        echo "[TEST MODE] Release creation simulated - no actual release created"
-        exit 0
-        ;;
-    *)
-        echo "Test version manager - minimal mode"
-        exit 1
-        ;;
-esac
-VERSIONSCRIPT
+            printf '#!/bin/bash\n' > scripts/gitea-version-manager.sh
+            printf 'case "$1" in\n' >> scripts/gitea-version-manager.sh
+            printf '    auto)\n' >> scripts/gitea-version-manager.sh
+            printf '        echo "v0.3.$(date +%%s)"\n' >> scripts/gitea-version-manager.sh
+            printf '        ;;\n' >> scripts/gitea-version-manager.sh
+            printf '    create-release)\n' >> scripts/gitea-version-manager.sh
+            printf '        echo "[TEST MODE] Would create release: $2"\n' >> scripts/gitea-version-manager.sh
+            printf '        echo "[TEST MODE] Release creation simulated - no actual release created"\n' >> scripts/gitea-version-manager.sh
+            printf '        exit 0\n' >> scripts/gitea-version-manager.sh
+            printf '        ;;\n' >> scripts/gitea-version-manager.sh
+            printf '    *)\n' >> scripts/gitea-version-manager.sh
+            printf '        echo "Test version manager - minimal mode"\n' >> scripts/gitea-version-manager.sh
+            printf '        exit 1\n' >> scripts/gitea-version-manager.sh
+            printf '        ;;\n' >> scripts/gitea-version-manager.sh
+            printf 'esac\n' >> scripts/gitea-version-manager.sh
             chmod +x scripts/gitea-version-manager.sh
             
             CLONE_SUCCESS=true
@@ -118,8 +114,10 @@ VERSIONSCRIPT
         echo "=== SoulBox Enhanced Build System Verification ==="
         
         # Check that we have the enhanced build scripts
-        if [[ -x "build-soulbox-enhanced-container.sh" ]]; then
+        if [[ -x "build-soulbox-enhanced-container-complete.sh" ]]; then
             echo "✅ Enhanced container build script found"
+        elif [[ -x "build-soulbox-enhanced-container.sh" ]]; then
+            echo "✅ Enhanced container build script found (legacy name)"
         else
             echo "❌ Enhanced container build script missing"
             echo "Available build scripts:"
@@ -191,8 +189,8 @@ VERSIONSCRIPT
             
             # Fix the hardcoded debugfs path to use system debugfs
             echo "🔧 Patching populatefs to use system debugfs..."
-            sudo sed -i 's|\"\$CONTRIB_DIR/../debugfs/debugfs\"|debugfs|g' /usr/local/bin/populatefs
-            sudo sed -i 's|\$CONTRIB_DIR/../debugfs/debugfs|debugfs|g' /usr/local/bin/populatefs
+            sudo sed -i 's|\"$CONTRIB_DIR/../debugfs/debugfs\"|debugfs|g' /usr/local/bin/populatefs
+            sudo sed -i 's|$CONTRIB_DIR/../debugfs/debugfs|debugfs|g' /usr/local/bin/populatefs
             echo "📝 Verifying populatefs patch applied correctly..."
             grep -n "debugfs" /usr/local/bin/populatefs || echo "No debugfs references found"
             
@@ -271,7 +269,7 @@ VERSIONSCRIPT
       env:
         TSAUTH: ${{ secrets.TSAUTH }}
       run: |
-        echo "=== Building SoulBox Will-o'-Wisp Media Center ==="
+        echo "=== Building SoulBox Media Center ==="
         set -e
         set -x
         
@@ -299,7 +297,7 @@ VERSIONSCRIPT
         fi
         
         # Run enhanced container-friendly build (no loop devices needed)
-        ./build-soulbox-enhanced-container.sh --version "$VERSION" --clean
+        ./build-soulbox-enhanced-container-complete.sh --version "$VERSION" --clean
         
         # Create artifacts directory and copy all formats
         mkdir -p artifacts
@@ -385,8 +383,8 @@ VERSIONSCRIPT
     - name: Build Summary
       if: success()
       run: |
-        echo "SoulBox Will-o'-Wisp Media Center Build Complete!"
-        echo "================================================"
+        echo "SoulBox Media Center Build Complete!"
+        echo "====================================="
         echo ""
         echo "Image created:"
         ls -la artifacts/
@@ -398,7 +396,7 @@ VERSIONSCRIPT
         echo "   - Complete systemd service configuration"
         echo "   - SSH enabled with default credentials"
         echo "   - Pre-configured media directories"
-        echo "   - Will-o'-wisp branding and theming"
+        echo "   - SoulBox branding and theming"
         echo ""
         echo "Ready to deploy:"
         echo "   1. Download the .img file from artifacts"
@@ -411,5 +409,4 @@ VERSIONSCRIPT
         echo "   - pi:soulbox (compatibility)"
         echo "   - root:soulbox (admin access)"
         echo ""
-        echo "The blue flame burns bright and awaits deployment!"
-
+        echo "SoulBox is ready for deployment!"
