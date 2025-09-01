@@ -120,34 +120,89 @@ jobs:
         parted "$IMAGE_FILE" --script -- mkpart primary ext4 32MiB 100%
         parted "$IMAGE_FILE" --script -- set 1 boot on
         
-        # Create loop device for partitioning (if available, otherwise skip detailed setup)
-        if command -v losetup >/dev/null 2>&1 && [[ -w /dev ]]; then
-            log_info "Setting up filesystems with full loop device support..."
-            
-            # This would set up proper filesystems, but requires loop device access
-            # For CI container environment, we'll create a basic valid image
-            
-            # Create basic FAT32 boot partition content
-            mkdir -p boot_content
-            echo "# SoulBox $VERSION - Minimal Test Boot" > boot_content/config.txt
-            echo "# This is a test image for CI verification" >> boot_content/config.txt
-            echo "# Features: Kodi + Tailscale + Pi 5 optimizations" >> boot_content/config.txt
-            
-            # Create basic root filesystem content
-            mkdir -p root_content
-            echo "SoulBox $VERSION Test Image" > root_content/README.txt
-            echo "Built: $(date)" >> root_content/README.txt
-            echo "Features:" >> root_content/README.txt
-            echo "- Kodi Media Center" >> root_content/README.txt
-            echo "- Tailscale VPN" >> root_content/README.txt
-            echo "- Raspberry Pi 5 optimizations" >> root_content/README.txt
+        # Create proper filesystems without requiring loop device mounting
+        log_info "Creating FAT32 and ext4 filesystems without loop device mounting..."
+        
+        # Get partition information
+        PART_INFO=$(parted -s "$IMAGE_FILE" unit B print)
+        BOOT_START=$(echo "$PART_INFO" | grep "^ 1" | awk '{print $2}' | tr -d 'B')
+        BOOT_END=$(echo "$PART_INFO" | grep "^ 1" | awk '{print $3}' | tr -d 'B')
+        BOOT_SIZE=$((BOOT_END - BOOT_START))
+        ROOT_START=$(echo "$PART_INFO" | grep "^ 2" | awk '{print $2}' | tr -d 'B')
+        ROOT_END=$(echo "$PART_INFO" | grep "^ 2" | awk '{print $3}' | tr -d 'B')
+        ROOT_SIZE=$((ROOT_END - ROOT_START))
+        
+        log_info "Boot partition: start=$BOOT_START, size=$BOOT_SIZE bytes"
+        log_info "Root partition: start=$ROOT_START, size=$ROOT_SIZE bytes"
+        
+        # Create temporary directory for filesystem images
+        TEMP_FS_DIR=$(mktemp -d)
+        BOOT_IMG="$TEMP_FS_DIR/boot.fat"
+        ROOT_IMG="$TEMP_FS_DIR/root.ext4"
+        
+        # Extract partitions to separate files
+        dd if="$IMAGE_FILE" of="$BOOT_IMG" bs=1 skip="$BOOT_START" count="$BOOT_SIZE" 2>/dev/null
+        dd if="$IMAGE_FILE" of="$ROOT_IMG" bs=1 skip="$ROOT_START" count="$ROOT_SIZE" 2>/dev/null
+        
+        # Format boot partition with FAT32
+        log_info "Formatting boot partition with FAT32..."
+        mkfs.fat -F 32 -n "SOULBOX" "$BOOT_IMG"
+        
+        # Format root partition with ext4
+        log_info "Formatting root partition with ext4..."
+        mkfs.ext4 -F -L "soulbox-root" "$ROOT_IMG"
+        
+        # Create basic boot content using mtools
+        log_info "Creating boot content..."
+        echo "# SoulBox $VERSION - Minimal Test Boot" > "$TEMP_FS_DIR/config.txt"
+        echo "# This is a test image for CI verification" >> "$TEMP_FS_DIR/config.txt"
+        echo "# Features: Kodi + Tailscale + Pi 5 optimizations" >> "$TEMP_FS_DIR/config.txt"
+        echo "arm_64bit=1" >> "$TEMP_FS_DIR/config.txt"
+        echo "dtparam=audio=on" >> "$TEMP_FS_DIR/config.txt"
+        echo "dtoverlay=vc4-kms-v3d" >> "$TEMP_FS_DIR/config.txt"
+        
+        echo "console=serial0,115200 console=tty1 root=LABEL=soulbox-root rootfstype=ext4 rootwait" > "$TEMP_FS_DIR/cmdline.txt"
+        
+        # Create a minimal kernel placeholder
+        dd if=/dev/zero of="$TEMP_FS_DIR/kernel8.img" bs=1M count=1 2>/dev/null
+        
+        # Copy files to boot partition using mtools
+        mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/config.txt" ::config.txt
+        mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/cmdline.txt" ::cmdline.txt
+        mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/kernel8.img" ::kernel8.img
+        
+        # Create basic root content
+        mkdir -p "$TEMP_FS_DIR/root_staging"
+        echo "SoulBox $VERSION Test Image" > "$TEMP_FS_DIR/root_staging/README.txt"
+        echo "Built: $(date)" >> "$TEMP_FS_DIR/root_staging/README.txt"
+        echo "Features:" >> "$TEMP_FS_DIR/root_staging/README.txt"
+        echo "- Kodi Media Center" >> "$TEMP_FS_DIR/root_staging/README.txt"
+        echo "- Tailscale VPN" >> "$TEMP_FS_DIR/root_staging/README.txt"
+        echo "- Raspberry Pi 5 optimizations" >> "$TEMP_FS_DIR/root_staging/README.txt"
+        
+        # Copy root content to ext4 using e2tools (if available) or create empty filesystem
+        if command -v e2cp >/dev/null 2>&1; then
+            log_info "Adding root content with e2tools..."
+            e2cp "$TEMP_FS_DIR/root_staging/README.txt" "$ROOT_IMG:/README.txt" 2>/dev/null || true
         else
-            log_warning "Loop device support not available - creating basic valid image"
-            # In container environment, just ensure we have a valid disk image structure
-            
-            # Write basic MBR boot sector
-            printf '\x55\xaa' | dd of="$IMAGE_FILE" bs=1 seek=510 count=2 conv=notrunc 2>/dev/null
+            log_info "e2tools not available - creating empty root filesystem"
         fi
+        
+        # Verify boot partition contents
+        log_info "Verifying boot partition contents:"
+        mdir -i "$BOOT_IMG" :: 2>/dev/null || log_warning "Could not list boot partition contents"
+        
+        # Write filesystems back to image
+        log_info "Writing FAT32 filesystem back to boot partition..."
+        dd if="$BOOT_IMG" of="$IMAGE_FILE" bs=1 seek="$BOOT_START" conv=notrunc 2>/dev/null
+        
+        log_info "Writing ext4 filesystem back to root partition..."
+        dd if="$ROOT_IMG" of="$IMAGE_FILE" bs=1 seek="$ROOT_START" conv=notrunc 2>/dev/null
+        
+        # Cleanup
+        rm -rf "$TEMP_FS_DIR"
+        
+        log_success "✅ Created valid disk image with proper FAT32 and ext4 filesystems"
         
         # Verify we created a valid disk image
         ACTUAL_SIZE=$(stat -c%s "$IMAGE_FILE" 2>/dev/null || stat -f%z "$IMAGE_FILE" 2>/dev/null)
