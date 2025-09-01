@@ -1,4 +1,4 @@
-name: Build SoulBox Will-o'-Wisp Media Center
+name: Build SoulBox Will-o'-Wisp Media Center (Enhanced)
 
 on:
   push:
@@ -16,532 +16,43 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-components:
+  build-soulbox:
     runs-on: ubuntu-latest
-    # NOTE: This job uses container-friendly build approach (no loop devices needed)
-    # Based on LibreELEC's methodology using mtools and e2tools
+    # NOTE: Uses enhanced container-friendly build with real Pi firmware and OS
+    # No loop devices required - optimized for CI/CD environments
     
     steps:
-    - name: Checkout repository (manual clone from local IP)
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+      
+    - name: Verify enhanced build system
       run: |
-        echo "=== Manual Repository Checkout ==="
+        echo "=== SoulBox Enhanced Build System Verification ==="
         
-        # CI runner can't resolve gitea.osiris-adelie.ts.net (Tailscale hostname)
-        # Use local IP with multiple fallback methods
-        
-        # Try cloning with different methods
-        CLONE_SUCCESS=false
-        
-        # Method 1: HTTP clone from local IP
-        echo "Trying HTTP clone from local IP..."
-        if git clone --depth 0 http://192.168.176.113:3000/reaper/soulbox.git . 2>/dev/null; then
-            echo "✅ HTTP clone successful"
-            CLONE_SUCCESS=true
+        # Check that we have the enhanced build scripts
+        if [[ -x "build-soulbox-enhanced-container.sh" ]]; then
+            echo "✅ Enhanced container build script found"
         else
-            echo "❌ HTTP clone failed"
-        fi
-        
-        # Method 2: Try anonymous clone if authenticated failed
-        if [ "$CLONE_SUCCESS" = "false" ]; then
-            echo "Trying anonymous HTTP clone..."
-            if git clone --depth 0 --no-single-branch http://192.168.176.113:3000/reaper/soulbox.git . 2>/dev/null; then
-                echo "✅ Anonymous clone successful"
-                CLONE_SUCCESS=true
-            else
-                echo "❌ Anonymous clone failed"
-            fi
-        fi
-        
-        # Method 3: Create minimal build files if repository access fails
-        if [ "$CLONE_SUCCESS" = "false" ]; then
-            echo "Repository clone failed - creating minimal build environment..."
-            
-            # Create a containerized build script for CI testing
-            echo "Creating containerized build script..."
-            cat > build-soulbox-containerized.sh << 'BUILDSCRIPT'
-        #!/bin/bash
-        
-        # SoulBox Container-Friendly Build System (CI Version)
-        # Creates actual bootable disk images using standard tools
-        
-        set -e
-        
-        # Colors
-        BLUE='\033[0;34m'
-        GREEN='\033[0;32m'
-        YELLOW='\033[1;33m'
-        RED='\033[0;31m'
-        NC='\033[0m'
-        
-        log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-        log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-        log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
-        log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-        
-        # Parse arguments
-        VERSION='v0.1.0'
-        CLEAN=false
-        while [[ $# -gt 0 ]]; do
-          case $1 in
-            --version)
-              VERSION="$2"
-              shift 2
-              ;;
-            --clean)
-              CLEAN=true
-              log_info 'Clean build requested'
-              shift
-              ;;
-            *)
-              log_warning "Unknown option: $1"
-              shift
-              ;;
-          esac
-        done
-        
-        log_info "Building SoulBox $VERSION using containerized approach"
-        
-        # For CI testing, create a proper minimal disk image (not just text)
-        # This creates a small but valid disk image that can be flashed
-        
-        log_info "Creating minimal bootable disk image for testing..."
-        
-        # Create a 64MB disk image (minimal but valid)
-        IMAGE_SIZE_MB=64
-        IMAGE_FILE="soulbox-$VERSION.img"
-        
-        # Create empty image file
-        dd if=/dev/zero of="$IMAGE_FILE" bs=1M count=$IMAGE_SIZE_MB 2>/dev/null
-        
-        # Create partition table with larger boot partition for better FAT32 compatibility
-        log_info "Creating partition table..."
-        parted "$IMAGE_FILE" --script -- mklabel msdos
-        # Use 48MB for boot partition - ensures FAT32 compatibility
-        parted "$IMAGE_FILE" --script -- mkpart primary fat32 1MiB 49MiB
-        parted "$IMAGE_FILE" --script -- mkpart primary ext4 49MiB 100%
-        parted "$IMAGE_FILE" --script -- set 1 boot on
-        
-        # Alternative approach: Format partitions directly in the disk image using loop device simulation
-        log_info "Creating FAT32 and ext4 filesystems using direct partition formatting..."
-        
-        # Get partition information
-        PART_INFO=$(parted -s "$IMAGE_FILE" unit B print)
-        BOOT_START=$(echo "$PART_INFO" | grep "^ 1" | awk '{print $2}' | tr -d 'B')
-        BOOT_END=$(echo "$PART_INFO" | grep "^ 1" | awk '{print $3}' | tr -d 'B')
-        BOOT_SIZE=$((BOOT_END - BOOT_START))
-        ROOT_START=$(echo "$PART_INFO" | grep "^ 2" | awk '{print $2}' | tr -d 'B')
-        ROOT_END=$(echo "$PART_INFO" | grep "^ 2" | awk '{print $3}' | tr -d 'B')
-        ROOT_SIZE=$((ROOT_END - ROOT_START))
-        
-        log_info "Boot partition: start=$BOOT_START, size=$BOOT_SIZE bytes ($(($BOOT_SIZE / 1024 / 1024))MB)"
-        log_info "Root partition: start=$ROOT_START, size=$ROOT_SIZE bytes ($(($ROOT_SIZE / 1024 / 1024))MB)"
-        
-        # Create temporary directory
-        TEMP_FS_DIR=$(mktemp -d)
-        
-        # Method: Create clean FAT32 filesystem using known working approach
-        log_info "Creating clean FAT32 filesystem (48MB)..."
-        
-        # Calculate sectors (512 byte sectors)
-        BOOT_SECTORS=$(($BOOT_SIZE / 512))
-        log_info "Boot partition sectors: $BOOT_SECTORS"
-        
-        # Create the FAT32 filesystem directly in the partition area using offset
-        # Use simple FAT32 creation without complex parameters
-        log_info "Formatting boot partition with standard FAT32..."
-        
-        # Create temporary boot partition file for formatting
-        BOOT_IMG="$TEMP_FS_DIR/boot.fat"
-        dd if=/dev/zero of="$BOOT_IMG" bs=512 count="$BOOT_SECTORS" 2>/dev/null
-        
-        # Use simple, reliable FAT32 formatting
-        mkfs.fat -F 32 -n "SOULBOX" "$BOOT_IMG"
-        
-        # Create temporary root partition file  
-        ROOT_IMG="$TEMP_FS_DIR/root.ext4"
-        ROOT_SECTORS=$(($ROOT_SIZE / 512))
-        dd if=/dev/zero of="$ROOT_IMG" bs=512 count="$ROOT_SECTORS" 2>/dev/null
-        
-        # Format root partition with ext4
-        log_info "Formatting root partition with ext4..."
-        mkfs.ext4 -F -L "soulbox-root" "$ROOT_IMG"
-        
-        # Create basic boot content using mtools
-        log_info "Creating boot content..."
-        echo "# SoulBox $VERSION - Minimal Test Boot" > "$TEMP_FS_DIR/config.txt"
-        echo "# This is a test image for CI verification" >> "$TEMP_FS_DIR/config.txt"
-        echo "# Features: Kodi + Tailscale + Pi 5 optimizations" >> "$TEMP_FS_DIR/config.txt"
-        echo "arm_64bit=1" >> "$TEMP_FS_DIR/config.txt"
-        echo "dtparam=audio=on" >> "$TEMP_FS_DIR/config.txt"
-        echo "dtoverlay=vc4-kms-v3d" >> "$TEMP_FS_DIR/config.txt"
-        
-        echo "console=serial0,115200 console=tty1 root=LABEL=soulbox-root rootfstype=ext4 rootwait" > "$TEMP_FS_DIR/cmdline.txt"
-        
-        # Create a minimal kernel placeholder
-        dd if=/dev/zero of="$TEMP_FS_DIR/kernel8.img" bs=1M count=1 2>/dev/null
-        
-        # Copy files to boot partition using mtools with proper error handling
-        log_info "Copying files to FAT32 boot partition..."
-        mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/config.txt" ::config.txt
-        mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/cmdline.txt" ::cmdline.txt
-        mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/kernel8.img" ::kernel8.img
-        
-        # Finalize FAT filesystem - ensure proper directory structure and end markers
-        log_info "Finalizing FAT32 filesystem structure..."
-        # Run filesystem check to ensure proper structure and fix any issues
-        fsck.fat -v -r "$BOOT_IMG" || log_warning "FAT filesystem check completed with warnings"
-        
-        # Create a proper end-of-directory marker by creating and deleting a temporary file
-        mcopy -i "$BOOT_IMG" "$TEMP_FS_DIR/config.txt" ::TEMP_MARKER 2>/dev/null || true
-        mdel -i "$BOOT_IMG" ::TEMP_MARKER 2>/dev/null || true
-        
-        # Create basic root content
-        mkdir -p "$TEMP_FS_DIR/root_staging"
-        echo "SoulBox $VERSION Test Image" > "$TEMP_FS_DIR/root_staging/README.txt"
-        echo "Built: $(date)" >> "$TEMP_FS_DIR/root_staging/README.txt"
-        echo "Features:" >> "$TEMP_FS_DIR/root_staging/README.txt"
-        echo "- Kodi Media Center" >> "$TEMP_FS_DIR/root_staging/README.txt"
-        echo "- Tailscale VPN" >> "$TEMP_FS_DIR/root_staging/README.txt"
-        echo "- Raspberry Pi 5 optimizations" >> "$TEMP_FS_DIR/root_staging/README.txt"
-        
-        # Copy root content to ext4 using e2tools (if available) or create empty filesystem
-        if command -v e2cp >/dev/null 2>&1; then
-            log_info "Adding root content with e2tools..."
-            e2cp "$TEMP_FS_DIR/root_staging/README.txt" "$ROOT_IMG:/README.txt" 2>/dev/null || true
-        else
-            log_info "e2tools not available - creating empty root filesystem"
-        fi
-        
-        # Verify boot partition contents
-        log_info "Verifying boot partition contents:"
-        mdir -i "$BOOT_IMG" :: 2>/dev/null || log_warning "Could not list boot partition contents"
-        
-        # Write filesystems back to image
-        log_info "Writing FAT32 filesystem back to boot partition..."
-        dd if="$BOOT_IMG" of="$IMAGE_FILE" bs=1 seek="$BOOT_START" conv=notrunc 2>/dev/null
-        
-        log_info "Writing ext4 filesystem back to root partition..."
-        dd if="$ROOT_IMG" of="$IMAGE_FILE" bs=1 seek="$ROOT_START" conv=notrunc 2>/dev/null
-        
-        # Cleanup
-        rm -rf "$TEMP_FS_DIR"
-        
-        log_success "✅ Created valid disk image with proper FAT32 and ext4 filesystems"
-        
-        # Verify we created a valid disk image
-        ACTUAL_SIZE=$(stat -c%s "$IMAGE_FILE" 2>/dev/null || stat -f%z "$IMAGE_FILE" 2>/dev/null)
-        EXPECTED_SIZE=$((IMAGE_SIZE_MB * 1024 * 1024))
-        
-        if [[ "$ACTUAL_SIZE" -eq "$EXPECTED_SIZE" ]]; then
-            log_success "✅ Created valid disk image: $IMAGE_FILE ($IMAGE_SIZE_MB MB)"
-        else
-            log_error "❌ Disk image size mismatch: expected $EXPECTED_SIZE, got $ACTUAL_SIZE"
+            echo "❌ Enhanced container build script missing"
+            echo "Available build scripts:"
+            ls -la build-soulbox*.sh
             exit 1
         fi
         
-        # Create checksum
-        sha256sum "$IMAGE_FILE" > "$IMAGE_FILE.sha256"
-        
-        # Create compressed version
-        if command -v xz >/dev/null 2>&1; then
-            log_info "Creating compressed version..."
-            cp "$IMAGE_FILE" "$IMAGE_FILE.backup"
-            xz -1 "$IMAGE_FILE.backup"
-            mv "$IMAGE_FILE.backup.xz" "$IMAGE_FILE.xz"
-        fi
-        
-        log_success 'SoulBox image build completed successfully!'
-        echo 'Build artifacts created:'
-        ls -la soulbox-*
-        
-        # Verify image is flashable
-        if [[ $(stat -c%s "$IMAGE_FILE" 2>/dev/null || stat -f%z "$IMAGE_FILE" 2>/dev/null) -gt 1048576 ]]; then
-            log_success "Image size verification passed - should be flashable to SD card"
+        # Verify version management
+        if [[ -x "scripts/gitea-version-manager.sh" ]]; then
+            echo "✅ Version management script found"
         else
-            log_error "Image too small to be valid"
+            echo "❌ Version management script missing"
             exit 1
         fi
-        BUILDSCRIPT
-            
-            chmod +x build-soulbox-containerized.sh
-            
-            # Create comprehensive debug version manager script  
-            echo "Creating comprehensive debug version manager..."
-            mkdir -p scripts
-            cat > scripts/gitea-version-manager.sh << 'VERSIONSCRIPT'
-        #!/bin/bash
         
-        # Comprehensive debug Gitea version manager for CI testing
-        # This version provides detailed logging and error diagnostics
-        
-        set -e
-        
-        # Configuration with local IP fallback
-        if command -v nslookup >/dev/null 2>&1 && nslookup gitea.osiris-adelie.ts.net >/dev/null 2>&1; then
-            GITEA_SERVER="https://gitea.osiris-adelie.ts.net"
-        else
-            GITEA_SERVER="http://192.168.176.113:3000"
-        fi
-        GITEA_OWNER="reaper"
-        GITEA_REPO="soulbox"
-        GITEA_API_URL="${GITEA_SERVER}/api/v1/repos/${GITEA_OWNER}/${GITEA_REPO}"
-        GITEA_TOKEN="${GITOKEN:-}"
-        
-        log_info() { echo "[INFO] $1"; }
-        log_success() { echo "[SUCCESS] $1"; }
-        log_warning() { echo "[WARNING] $1"; }
-        log_error() { echo "[ERROR] $1"; }
-        
-        # Function to test connection
-        test_connection() {
-            log_info "Testing connection to Gitea server..."
-            
-            # Test basic connectivity
-            if curl -s --max-time 10 --connect-timeout 5 "$GITEA_SERVER" > /dev/null 2>&1; then
-                log_success "✅ Basic connectivity to $GITEA_SERVER: OK"
-            else
-                log_error "❌ Cannot connect to $GITEA_SERVER"
-                return 1
-            fi
-            
-            # Test API endpoint
-            API_TEST=$(curl -s --max-time 10 -H "Authorization: token $GITEA_TOKEN" "${GITEA_API_URL}" 2>/dev/null || echo "API_ERROR")
-            if echo "$API_TEST" | grep -q '"full_name"'; then
-                log_success "✅ API authentication: OK"
-                return 0
-            else
-                log_error "❌ API authentication failed"
-                log_info "API response: $API_TEST"
-                return 1
-            fi
-        }
-        
-        # Function to upload file with comprehensive error handling
-        upload_file_debug() {
-            local FILE_PATH="$1"
-            local FILE_TYPE="$2"
-            local RELEASE_ID="$3"
-            
-            log_info "=== Starting $FILE_TYPE upload ==="
-            log_info "File path: $FILE_PATH"
-            log_info "Release ID: $RELEASE_ID"
-            log_info "Upload endpoint: \${GITEA_API_URL}/releases/\${RELEASE_ID}/assets"
-            
-            if [[ ! -f "$FILE_PATH" ]]; then
-                log_error "File does not exist: $FILE_PATH"
-                return 1
-            fi
-            
-            # Show file details
-            log_info "File details:"
-            ls -la "$FILE_PATH"
-            log_info "File size: $(stat -c%s "$FILE_PATH" 2>/dev/null || stat -f%z "$FILE_PATH" 2>/dev/null || echo 'unknown') bytes"
-            log_info "File type: $(file "$FILE_PATH" 2>/dev/null || echo 'unknown')"
-            
-            # Direct curl upload with comprehensive error handling
-            log_info "Executing direct curl upload..."
-            
-            # Build upload URL
-            UPLOAD_URL="${GITEA_API_URL}/releases/${RELEASE_ID}/assets"
-            log_info "Upload URL: $UPLOAD_URL"
-            
-            # Execute curl command directly with verbose output
-            log_info "Attempting method 1: Standard multipart upload"
-            UPLOAD_OUTPUT=$(curl -v --max-time 60 --connect-timeout 10 \
-                -X POST "$UPLOAD_URL" \
-                -H "Authorization: token $GITEA_TOKEN" \
-                -H "Accept: application/json" \
-                -F "attachment=@$FILE_PATH" 2>&1 || echo "CURL_FAILED_EXIT_CODE_$?")
-            
-            # If that fails, try alternative method
-            if echo "$UPLOAD_OUTPUT" | grep -q "CURL_FAILED_EXIT_CODE"; then
-                log_info "Method 1 failed, trying method 2: Different content-type"
-                UPLOAD_OUTPUT=$(curl -v --max-time 60 --connect-timeout 10 \
-                    -X POST "$UPLOAD_URL" \
-                    -H "Authorization: token $GITEA_TOKEN" \
-                    -H "Content-Type: multipart/form-data" \
-                    -F "attachment=@$FILE_PATH" 2>&1 || echo "CURL_FAILED_EXIT_CODE_$?")
-            fi
-            
-            # If that also fails, try method 3: Different form field name
-            if echo "$UPLOAD_OUTPUT" | grep -q "CURL_FAILED_EXIT_CODE"; then
-                log_info "Method 2 failed, trying method 3: Different field name"
-                UPLOAD_OUTPUT=$(curl -v --max-time 60 --connect-timeout 10 \
-                    -X POST "$UPLOAD_URL" \
-                    -H "Authorization: token $GITEA_TOKEN" \
-                    -H "Accept: application/json" \
-                    -F "file=@$FILE_PATH" 2>&1 || echo "CURL_FAILED_EXIT_CODE_$?")
-            fi
-            
-            CURL_EXIT_CODE=$?
-            
-            log_info "=== CURL OUTPUT START ==="
-            echo "$UPLOAD_OUTPUT"
-            log_info "=== CURL OUTPUT END ==="
-            log_info "Curl exit code: $CURL_EXIT_CODE"
-            
-            # Try to extract JSON response from the verbose output
-            JSON_RESPONSE=$(echo "$UPLOAD_OUTPUT" | grep -o '{.*}' | tail -1 || echo "NO_JSON_FOUND")
-            log_info "Extracted JSON: $JSON_RESPONSE"
-            
-            # Check for success indicators
-            if echo "$JSON_RESPONSE" | grep -q '"browser_download_url"'; then
-                log_success "✅ $FILE_TYPE uploaded successfully"
-                DOWNLOAD_URL=$(echo "$JSON_RESPONSE" | grep -o '"browser_download_url":"[^"]*' | cut -d'"' -f4)
-                log_info "Download URL: $DOWNLOAD_URL"
-                return 0
-            elif echo "$UPLOAD_OUTPUT" | grep -q '"name"'; then
-                log_success "✅ $FILE_TYPE uploaded (partial success - name field found)"
-                return 0
-            else
-                log_error "❌ Failed to upload $FILE_TYPE"
-                
-                # Analyze common error patterns
-                if echo "$UPLOAD_OUTPUT" | grep -qi "timeout"; then
-                    log_error "Upload failed due to timeout"
-                elif echo "$UPLOAD_OUTPUT" | grep -qi "connection refused"; then
-                    log_error "Upload failed - connection refused"
-                elif echo "$UPLOAD_OUTPUT" | grep -qi "unauthorized"; then
-                    log_error "Upload failed - authorization error"
-                elif echo "$UPLOAD_OUTPUT" | grep -qi "not found"; then
-                    log_error "Upload failed - endpoint not found (possibly wrong release ID?)"
-                else
-                    log_error "Upload failed - unknown error pattern"
-                fi
-                
-                return 1
-            fi
-        }
-        
-        case "$1" in
-            "auto")
-                # Generate version based on timestamp
-                echo "v0.2.$(date +%s)"
-                ;;
-            "create-release")
-                VERSION="$2"
-                IMAGE_FILE="$3"
-                CHECKSUM_FILE="$4"
-                
-                log_info "=== Starting Gitea Release Creation ==="
-                log_info "Version: $VERSION"
-                log_info "Server: $GITEA_SERVER"
-                log_info "Image file: $IMAGE_FILE"
-                log_info "Checksum file: $CHECKSUM_FILE"
-                
-                # Validate inputs
-                if [[ -z "$VERSION" ]] || [[ -z "$IMAGE_FILE" ]] || [[ -z "$CHECKSUM_FILE" ]]; then
-                    log_error "Missing required parameters"
-                    log_info "Usage: $0 create-release VERSION IMAGE_FILE CHECKSUM_FILE"
-                    exit 1
-                fi
-                
-                # Check token availability
-                if [[ -z "$GITEA_TOKEN" ]]; then
-                    log_error "GITEA_TOKEN not set - cannot create release"
-                    exit 1
-                fi
-                
-                # Test connection first
-                if ! test_connection; then
-                    log_error "Connection test failed - aborting"
-                    exit 1
-                fi
-                
-                # Create release
-                log_info "Creating Gitea release..."
-                RELEASE_DATA="{\"tag_name\":\"$VERSION\",\"name\":\"SoulBox Will-o'-Wisp $VERSION\",\"body\":\"Automated release from CI build\\n\\nFeatures:\\n- Kodi Media Center\\n- Tailscale VPN\\n- Raspberry Pi 5 optimizations\",\"draft\":false,\"prerelease\":false}"
-                
-                log_info "Release API URL: ${GITEA_API_URL}/releases"
-                log_info "Release data: $RELEASE_DATA"
-                
-                RESPONSE=$(curl -s --max-time 30 -X POST "${GITEA_API_URL}/releases" \
-                    -H "Authorization: token $GITEA_TOKEN" \
-                    -H "Content-Type: application/json" \
-                    -d "$RELEASE_DATA" 2>&1 || echo '{"message":"Release API call failed"}')
-                
-                log_info "Release creation response: $RESPONSE"
-                
-                if echo "$RESPONSE" | grep -q '"id"'; then
-                    log_success "✅ Gitea release created successfully!"
-                    
-                    # Extract release ID (get the first numeric ID from the response)
-                    RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2 | head -1 | tr -d '\n\r')
-                    log_info "Extracted release ID: $RELEASE_ID"
-                    
-                    if [[ -z "$RELEASE_ID" || "$RELEASE_ID" == "" ]]; then
-                        log_error "Failed to extract release ID from response"
-                        exit 1
-                    fi
-                    
-                    # Upload files with comprehensive debugging
-                    UPLOAD_SUCCESS=true
-                    
-                    if [[ -f "$IMAGE_FILE" ]]; then
-                        if ! upload_file_debug "$IMAGE_FILE" "image" "$RELEASE_ID"; then
-                            UPLOAD_SUCCESS=false
-                        fi
-                    else
-                        log_warning "Image file not found: $IMAGE_FILE"
-                        UPLOAD_SUCCESS=false
-                    fi
-                    
-                    if [[ -f "$CHECKSUM_FILE" ]]; then
-                        if ! upload_file_debug "$CHECKSUM_FILE" "checksum" "$RELEASE_ID"; then
-                            UPLOAD_SUCCESS=false
-                        fi
-                    else
-                        log_warning "Checksum file not found: $CHECKSUM_FILE"
-                        UPLOAD_SUCCESS=false
-                    fi
-                    
-                    if [[ "$UPLOAD_SUCCESS" == "true" ]]; then
-                        log_success "🎉 Release created and files uploaded successfully!"
-                        log_success "🔗 Release URL: $GITEA_SERVER/$GITEA_OWNER/$GITEA_REPO/releases/tag/$VERSION"
-                        exit 0
-                    else
-                        log_warning "⚠️ Release created but file upload had issues"
-                        log_info "🔗 Release URL: $GITEA_SERVER/$GITEA_OWNER/$GITEA_REPO/releases/tag/$VERSION"
-                        exit 1
-                    fi
-                else
-                    log_error "❌ Failed to create Gitea release"
-                    log_info "Response: $RESPONSE"
-                    exit 1
-                fi
-                ;;
-            *)
-                echo "Comprehensive Debug Gitea Version Manager"
-                echo "Usage: $0 {auto|create-release VERSION IMAGE_FILE CHECKSUM_FILE}"
-                echo "Current mode: DEBUG (with detailed logging)"
-                exit 1
-                ;;
-        esac
-        VERSIONSCRIPT
-            
-            chmod +x scripts/gitea-version-manager.sh
-            
-            CLONE_SUCCESS=true
-            echo "✅ Minimal build environment created successfully"
-        fi
-        
-        if [ "$CLONE_SUCCESS" = "true" ]; then
-            echo "Repository checkout completed successfully"
-            echo "Files in workspace:"
-            ls -la
-            
-            # Verify we have the essential files
-            if [ -f "build-soulbox-containerized.sh" ] && [ -f "scripts/gitea-version-manager.sh" ]; then
-                echo "✅ Essential build files found"
-                chmod +x build-soulbox-containerized.sh
-                chmod +x scripts/gitea-version-manager.sh
-            else
-                echo "❌ Essential files still missing after all methods"
-                exit 1
-            fi
-        else
-            echo "❌ All methods failed - this should not happen"
-            exit 1
+        # Show build system status
+        if [[ -x "build-status.sh" ]]; then
+            echo "\n=== Build System Status ==="
+            ./build-status.sh || true
         fi
       
     - name: Install build dependencies
@@ -701,8 +212,8 @@ jobs:
             echo "No Tailscale auth key provided - manual authentication will be required"
         fi
         
-        # Run container-friendly build (no loop devices needed)
-        ./build-soulbox-containerized.sh --version "$VERSION" --clean
+        # Run enhanced container-friendly build (no loop devices needed)
+        ./build-soulbox-enhanced-container.sh --version "$VERSION" --clean
         
         # Create artifacts directory and copy all formats
         mkdir -p artifacts
@@ -815,5 +326,4 @@ jobs:
         echo "   - root:soulbox (admin access)"
         echo ""
         echo "The blue flame burns bright and awaits deployment!"
-
 
