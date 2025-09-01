@@ -29,7 +29,7 @@ jobs:
         echo "=== Repository Checkout (Local IP Method) ==="
         CLONE_SUCCESS=false
         
-        # Method 1: Authenticated clone using Gitea token (most reliable)
+        # Method 1: Authenticated clone using Gitea token
         if [[ -n "$GITOKEN" ]]; then
             echo "Trying authenticated clone with token..."
             if git clone --depth 1 "http://oauth2:${GITOKEN}@192.168.176.113:3000/reaper/soulbox.git" . 2>/dev/null; then
@@ -38,7 +38,7 @@ jobs:
             fi
         fi
         
-        # Method 2: Local IP HTTP clone (anonymous)
+        # Method 2: Anonymous HTTP clone fallback
         if [[ "$CLONE_SUCCESS" != "true" ]]; then
             echo "Trying anonymous HTTP clone..."
             if git clone --depth 1 http://192.168.176.113:3000/reaper/soulbox.git . 2>/dev/null; then
@@ -47,48 +47,47 @@ jobs:
             fi
         fi
         
-        # Method 3: Fallback to minimal build environment  
+        # Method 3: Create minimal build environment for testing
         if [[ "$CLONE_SUCCESS" != "true" ]]; then
             echo "❌ All clone methods failed - creating minimal build environment"
             echo "Network diagnostics:"
             ping -c 3 192.168.176.113 2>/dev/null || echo "Cannot ping Gitea server"
             curl -I http://192.168.176.113:3000 2>/dev/null || echo "Can reach Gitea HTTP"
             
-            # Create essential build files for testing (from wiki)
             echo "Creating minimal build environment..."
-            cat > build-soulbox-enhanced-container.sh << 'EOF'
+            # Create build script
+            cat > build-soulbox-enhanced-container.sh <<BUILDEOF
 #!/bin/bash
 echo "SoulBox enhanced container build script (minimal version for CI testing)"
 VERSION="v0.1.0"
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --version) VERSION="$2"; shift 2 ;;
+while [[ \$# -gt 0 ]]; do
+  case \$1 in
+    --version) VERSION="\$2"; shift 2 ;;
     --clean) echo "Clean build requested"; shift ;;
-    *) echo "Unknown option: $1"; shift ;;
+    *) echo "Unknown option: \$1"; shift ;;
   esac
 done
-echo "Version: $VERSION"
+echo "Version: \$VERSION"
 echo "This is a minimal build to test CI infrastructure"
 mkdir -p enhanced-containerized-build/output
-echo "Test SoulBox enhanced image content - Build $(date)" > "enhanced-containerized-build/output/soulbox-$VERSION.img"
-sha256sum "enhanced-containerized-build/output/soulbox-$VERSION.img" > "enhanced-containerized-build/output/soulbox-$VERSION.img.sha256"
+echo "Test SoulBox enhanced image content - Build \$(date)" > "enhanced-containerized-build/output/soulbox-\$VERSION.img"
+sha256sum "enhanced-containerized-build/output/soulbox-\$VERSION.img" > "enhanced-containerized-build/output/soulbox-\$VERSION.img.sha256"
 cp "enhanced-containerized-build/output/"* .
 echo "Minimal build artifacts created:"
 ls -la soulbox-*
-EOF
-            
+BUILDEOF
             chmod +x build-soulbox-enhanced-container.sh
             
-            # Create minimal version manager
+            # Create version manager
             mkdir -p scripts
-            cat > scripts/gitea-version-manager.sh << 'EOF'
+            cat > scripts/gitea-version-manager.sh <<VERSIONEOF
 #!/bin/bash
-case "$1" in
+case "\$1" in
     auto)
-        echo "v0.3.$(date +%s)"
+        echo "v0.3.\$(date +%s)"
         ;;
     create-release)
-        echo "[TEST MODE] Would create release: $2"
+        echo "[TEST MODE] Would create release: \$2"
         echo "[TEST MODE] Release creation simulated - no actual release created"
         exit 0
         ;;
@@ -97,7 +96,7 @@ case "$1" in
         exit 1
         ;;
 esac
-EOF
+VERSIONEOF
             chmod +x scripts/gitea-version-manager.sh
             
             CLONE_SUCCESS=true
