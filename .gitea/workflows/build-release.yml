@@ -147,6 +147,40 @@ jobs:
                     
                     if echo "$RESPONSE" | grep -q '"id"'; then
                         log_success "✅ Gitea release created successfully!"
+                        
+                        # Extract release ID for file upload
+                        RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2)
+                        
+                        # Upload image file if it exists
+                        if [[ -f "$IMAGE_FILE" ]]; then
+                            log_info "Uploading image file: $IMAGE_FILE"
+                            UPLOAD_RESPONSE=$(curl -s -X POST "${GITEA_API_URL}/releases/${RELEASE_ID}/assets" \
+                                -H "Authorization: token $GITEA_TOKEN" \
+                                -F "attachment=@$IMAGE_FILE" 2>/dev/null || echo '{"message":"Upload failed"}')
+                            
+                            if echo "$UPLOAD_RESPONSE" | grep -q '"name"'; then
+                                log_success "📁 Image file uploaded successfully"
+                            else
+                                log_warning "Failed to upload image file"
+                                log_info "Upload response: $UPLOAD_RESPONSE"
+                            fi
+                        fi
+                        
+                        # Upload checksum file if it exists
+                        if [[ -f "$CHECKSUM_FILE" ]]; then
+                            log_info "Uploading checksum file: $CHECKSUM_FILE"
+                            CHECKSUM_RESPONSE=$(curl -s -X POST "${GITEA_API_URL}/releases/${RELEASE_ID}/assets" \
+                                -H "Authorization: token $GITEA_TOKEN" \
+                                -F "attachment=@$CHECKSUM_FILE" 2>/dev/null || echo '{"message":"Upload failed"}')
+                            
+                            if echo "$CHECKSUM_RESPONSE" | grep -q '"name"'; then
+                                log_success "📁 Checksum file uploaded successfully"
+                            else
+                                log_warning "Failed to upload checksum file"
+                                log_info "Checksum response: $CHECKSUM_RESPONSE"
+                            fi
+                        fi
+                        
                         log_success "🔗 Release URL: $GITEA_SERVER/$GITEA_OWNER/$GITEA_REPO/releases/tag/$VERSION"
                         exit 0
                     else
