@@ -22,10 +22,34 @@ jobs:
     # No loop devices required - optimized for CI/CD environments
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
+    - name: Checkout repository (DNS-resistant method)
+      run: |
+        echo "=== Repository Checkout (Local IP Method) ==="
+        CLONE_SUCCESS=false
+        
+        # Method 1: Local IP HTTP clone (works around Tailscale DNS issues)
+        if git clone --depth 1 http://192.168.176.113:3000/reaper/soulbox.git . 2>/dev/null; then
+            echo "✅ Local IP HTTP clone successful"
+            CLONE_SUCCESS=true
+        
+        # Method 2: Anonymous clone fallback
+        elif git clone --depth 1 --no-single-branch http://192.168.176.113:3000/reaper/soulbox.git . 2>/dev/null; then
+            echo "✅ Anonymous clone successful"
+            CLONE_SUCCESS=true
+        
+        else
+            echo "❌ All clone methods failed"
+            echo "Network diagnostics:"
+            ping -c 3 192.168.176.113 2>/dev/null || echo "Cannot ping Gitea server"
+            curl -I http://192.168.176.113:3000 2>/dev/null || echo "Cannot reach Gitea HTTP"
+            exit 1
+        fi
+        
+        if [ "$CLONE_SUCCESS" = "true" ]; then
+            echo "Repository checkout completed successfully"
+            echo "Repository contents:"
+            ls -la
+        fi
       
     - name: Verify enhanced build system
       run: |
