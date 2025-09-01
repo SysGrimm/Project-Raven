@@ -236,6 +236,112 @@ RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2 | head -1 
 
 **Status**: Fixed in build #130+ (2025-09-01)
 
+### Build #139 Pattern: Pi OS Image Extraction Failure (Fixed)
+
+**Symptoms**:
+```bash
+[INFO] Downloading Raspberry Pi OS Lite...
+# 431MB Pi OS image downloads successfully
+[INFO] Extracting Pi OS image...
+# Build appears to continue but then fails
+[ERROR] Failed to extract Pi OS image
+```
+
+**Root Cause**: The xz extraction logic in the `download_pi_os()` function had inadequate error handling and incorrect file path resolution for the extracted .img file.
+
+**Detailed Analysis**:
+```bash
+# PROBLEMATIC CODE (Build #139):
+cd "$os_dir"
+xz -d -k "$download_file"         # Extracts to downloads/ directory
+mv *.img raspios-lite.img 2>/dev/null || true  # Looks for .img in wrong directory
+```
+
+**Issues Identified**:
+1. **Silent xz failure**: No error checking if xz command succeeded
+2. **Wrong directory**: xz extracts to downloads/ but script looks in os/ 
+3. **Masked errors**: `|| true` hides mv command failures
+4. **No verification**: Script continues even if extraction fails
+
+**Debug Commands**:
+```bash
+# Check if Pi OS download succeeded
+ls -lh /workspace/.../downloads/raspios-lite.img.xz
+
+# Test xz extraction manually
+cd /workspace/.../os/
+xz -d -k /workspace/.../downloads/raspios-lite.img.xz
+echo "xz exit code: $?"
+
+# Check where extracted file actually goes
+find /workspace -name "*.img" -type f 2>/dev/null
+
+# Verify file paths and sizes
+ls -la /workspace/.../downloads/
+ls -la /workspace/.../os/
+```
+
+**The Fix Applied**:
+```bash
+# CORRECT IMPLEMENTATION (Build #139 fix):
+if [[ ! -f "$extracted_img" ]]; then
+    log_info "Extracting Pi OS image..."
+    cd "$os_dir"
+    
+    # Extract with explicit error handling
+    log_info "Running: xz -d -k $download_file"
+    if ! xz -d -k "$download_file"; then
+        log_error "Failed to decompress Pi OS image with xz"
+        return 1
+    fi
+    
+    # Find extracted file in correct location and move properly
+    local extracted_files=("$WORK_DIR/downloads/"*.img)
+    if [[ ${#extracted_files[@]} -eq 1 && -f "${extracted_files[0]}" ]]; then
+        log_info "Moving extracted image: ${extracted_files[0]} -> $extracted_img"
+        mv "${extracted_files[0]}" "$extracted_img"
+    else
+        log_error "Expected exactly 1 .img file, found: ${#extracted_files[@]}"
+        ls -la "$WORK_DIR/downloads/"*.img 2>/dev/null || log_error "No .img files found"
+        return 1
+    fi
+fi
+```
+
+**Key Improvements**:
+- ✅ **Explicit error checking**: `if ! xz -d -k` catches extraction failures
+- ✅ **Correct path resolution**: Look for extracted files in downloads/ directory
+- ✅ **Array-based file handling**: Properly handle extracted file discovery
+- ✅ **Comprehensive error reporting**: Log actual file counts and locations
+- ✅ **Early failure**: Return immediately on any step failure
+
+**Prevention**:
+```bash
+# Enhanced verification can be added to catch similar issues
+verify_extraction_logic() {
+    log_info "Testing extraction logic..."
+    
+    # Test with small file first
+    local test_file="/tmp/test.txt.xz"
+    echo "test" | xz > "$test_file"
+    
+    if xz -d -k "$test_file"; then
+        log_success "xz extraction works"
+        rm -f "$test_file" "/tmp/test.txt"
+    else
+        log_error "xz extraction failed in test"
+        return 1
+    fi
+}
+```
+
+**Container Environment Considerations**:
+- Container environments may have different default working directories
+- Path resolution can be affected by container filesystem layout
+- Error masking (`|| true`) is particularly dangerous in containers where debugging is harder
+
+**Status**: Fixed in build #139+ (2025-09-01)
+
 ### Pi 5 Boot Sequence: Root Filesystem Mounting
 
 **Symptoms**:
