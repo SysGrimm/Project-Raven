@@ -64,7 +64,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-log_info "🔥 SoulBox Enhanced Container Build - $VERSION"
+log_info "SoulBox Enhanced Container Build - $VERSION"
 
 # Check required tools
 check_required_tools() {
@@ -506,12 +506,12 @@ build_enhanced_image() {
         log_success "Compressed image created"
     fi
     
-    log_success "🎉 Enhanced SoulBox image build completed successfully!"
+    log_success "Enhanced SoulBox image build completed successfully!"
 }
 
 # Main execution
 main() {
-    log_info "🔥 Starting enhanced SoulBox containerized build..."
+    log_info "Starting enhanced SoulBox containerized build..."
     
     check_required_tools
     setup_work_dir
@@ -521,7 +521,7 @@ main() {
     extract_pi_os_partitions
     build_enhanced_image
     
-    log_success "🎯 Enhanced SoulBox build complete!"
+    log_success "Enhanced SoulBox build complete!"
     echo
     echo "Build artifacts created in: $WORK_DIR/output/"
     ls -lh "$WORK_DIR/output/"
@@ -531,7 +531,7 @@ main() {
     echo "2. Use soulbox-$VERSION.img.xz for compressed transfer"
     echo "3. Verify with corresponding .sha256 files"
     echo
-    echo "The blue flame burns bright! 🔥"
+    echo "The blue flame burns bright!"
 }
 
 # Execute main function
