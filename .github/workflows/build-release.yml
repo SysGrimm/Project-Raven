@@ -74,7 +74,34 @@ jobs:
         mkdir -p scripts
         cat > scripts/gitea-version-manager.sh << 'EOF'
         #!/bin/bash
-        echo "v0.2.$(date +%s)"
+        
+        # Test version manager script with proper argument handling
+        
+        case "$1" in
+            auto)
+                # Generate test version
+                echo "v0.2.$(date +%s)"
+                ;;
+            create-release)
+                # Simulate release creation (test mode)
+                VERSION="$2"
+                IMAGE_FILE="$3"
+                CHECKSUM_FILE="$4"
+                
+                echo "[TEST MODE] Would create release: $VERSION"
+                echo "[TEST MODE] Image file: $IMAGE_FILE"
+                echo "[TEST MODE] Checksum file: $CHECKSUM_FILE"
+                echo "[TEST MODE] Release creation simulated - no actual release created"
+                
+                # Return success for test workflow
+                exit 0
+                ;;
+            *)
+                echo "Test version manager - Usage: $0 {auto|create-release VERSION IMAGE_FILE CHECKSUM_FILE}"
+                echo "Current mode: TEST (no real releases created)"
+                exit 1
+                ;;
+        esac
         EOF
         
         chmod +x scripts/gitea-version-manager.sh
