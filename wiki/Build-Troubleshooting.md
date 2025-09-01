@@ -189,6 +189,53 @@ esac
 - ⚠️ Always distinguish between "test success" and "actual success" in logs
 - 📝 Test infrastructure should validate workflow logic, not create false confidence
 
+### Build #130 Pattern: Gitea Release Asset Upload URL Malformation (Fixed)
+
+**Symptoms**:
+```bash
+[INFO] Upload URL: http://192.168.176.113:3000/api/v1/repos/reaper/soulbox/releases/21
+1/assets
+* URL rejected: Malformed input to a URL function
+curl: (3) URL rejected: Malformed input to a URL function
+❌ Failed to upload image
+```
+
+**Root Cause**: Release ID extraction from JSON response contained newlines when multiple "id" fields existed, corrupting the upload URL construction.
+
+**Debug Commands**:
+```bash
+# Check release ID extraction
+echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2
+
+# Look for multiple ID matches that could cause newlines
+echo "$RESPONSE" | grep -o '"id":[0-9]*'
+
+# Test URL construction with extracted ID
+RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2)
+echo "URL would be: ${GITEA_API_URL}/releases/${RELEASE_ID}/assets"
+```
+
+**Wrong Fix (Causes Multi-line Issues)**:
+```bash
+# BROKEN - can return multiple IDs with newlines
+RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2)
+```
+
+**Correct Fix (Applied)**:
+```bash
+# FIXED - ensures single clean numeric ID
+RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2 | head -1 | tr -d '\n\r')
+```
+
+**Key Points**:
+- ✅ Always sanitize extracted values that will be used in URLs
+- ✅ Use `head -1` to ensure single result from grep operations
+- ✅ Use `tr -d '\n\r'` to remove any whitespace characters
+- ⚠️ JSON responses may contain multiple "id" fields (user id, release id, etc.)
+- 📝 URL construction requires clean, single-line values
+
+**Status**: Fixed in build #130+ (2025-09-01)
+
 ### Pi 5 Boot Sequence: Root Filesystem Mounting
 
 **Symptoms**:

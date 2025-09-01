@@ -177,11 +177,32 @@ jobs:
             log_info "Upload URL: $UPLOAD_URL"
             
             # Execute curl command directly with verbose output
+            log_info "Attempting method 1: Standard multipart upload"
             UPLOAD_OUTPUT=$(curl -v --max-time 60 --connect-timeout 10 \
                 -X POST "$UPLOAD_URL" \
                 -H "Authorization: token $GITEA_TOKEN" \
                 -H "Accept: application/json" \
                 -F "attachment=@$FILE_PATH" 2>&1 || echo "CURL_FAILED_EXIT_CODE_$?")
+            
+            # If that fails, try alternative method
+            if echo "$UPLOAD_OUTPUT" | grep -q "CURL_FAILED_EXIT_CODE"; then
+                log_info "Method 1 failed, trying method 2: Different content-type"
+                UPLOAD_OUTPUT=$(curl -v --max-time 60 --connect-timeout 10 \
+                    -X POST "$UPLOAD_URL" \
+                    -H "Authorization: token $GITEA_TOKEN" \
+                    -H "Content-Type: multipart/form-data" \
+                    -F "attachment=@$FILE_PATH" 2>&1 || echo "CURL_FAILED_EXIT_CODE_$?")
+            fi
+            
+            # If that also fails, try method 3: Different form field name
+            if echo "$UPLOAD_OUTPUT" | grep -q "CURL_FAILED_EXIT_CODE"; then
+                log_info "Method 2 failed, trying method 3: Different field name"
+                UPLOAD_OUTPUT=$(curl -v --max-time 60 --connect-timeout 10 \
+                    -X POST "$UPLOAD_URL" \
+                    -H "Authorization: token $GITEA_TOKEN" \
+                    -H "Accept: application/json" \
+                    -F "file=@$FILE_PATH" 2>&1 || echo "CURL_FAILED_EXIT_CODE_$?")
+            fi
             
             CURL_EXIT_CODE=$?
             
@@ -275,8 +296,8 @@ jobs:
                 if echo "$RESPONSE" | grep -q '"id"'; then
                     log_success "✅ Gitea release created successfully!"
                     
-                    # Extract release ID
-                    RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2)
+                    # Extract release ID (get the first numeric ID from the response)
+                    RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2 | head -1 | tr -d '\n\r')
                     log_info "Extracted release ID: $RELEASE_ID"
                     
                     if [[ -z "$RELEASE_ID" || "$RELEASE_ID" == "" ]]; then
