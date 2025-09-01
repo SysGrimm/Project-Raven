@@ -1,6 +1,6 @@
-# SoulBox Enhanced Build System 🔥
+# SoulBox Enhanced Build System
 
-The SoulBox Will-o'-Wisp Media Center now has a complete build system that creates fully functional bootable disk images with real Raspberry Pi firmware, kernel, and operating system.
+The SoulBox Media Center now has a complete build system that creates fully functional bootable disk images with real Raspberry Pi firmware, kernel, and operating system.
 
 ## Build Scripts Overview
 
@@ -253,6 +253,4 @@ set -x
 
 ---
 
-**The blue flame burns bright!** 🔥 
-
-SoulBox Will-o'-Wisp Media Center - Ready to guide your media streaming experience.
+SoulBox Media Center - Ready for your media streaming experience.

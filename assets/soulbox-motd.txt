@@ -5,7 +5,7 @@
      ___) | (_) | |_| | | |_) | (_) >  < 
     |____/ \___/ \__,_|_|____/ \___/_/\_\
     
-    Will-o'-Wisp Media Center ~ OpenELEC Style
+    Raspberry Pi Media Center
     
     Default credentials:
     - soulbox:soulbox (media center user)
@@ -24,10 +24,10 @@
     - Audio: Hardware audio enabled
     
     Quick Start:
-    1. Kodi starts automatically (OpenELEC style)
+    1. Kodi starts automatically
     2. Connect to Tailscale: sudo tailscale up
     3. SSH access available locally and via Tailscale
     4. Media directories: ~/Videos, ~/Music, ~/Pictures
     
-    The blue flame guides your media journey...
+    Ready for your media streaming experience.
     

@@ -1,8 +1,8 @@
 <div align="center">
   <img src="assets/logos/soulbox-logo-1024.png" alt="SoulBox Logo" width="200"/>
   <h1>SoulBox</h1>
-  <h3>Will-o'-Wisp Media Center</h3>
-  <p><em>A turnkey media center solution for ARM64 devices</em></p>
+  <h3>Raspberry Pi 5 Media Center</h3>
+  <p><em>A simple, ready-to-use media center OS for Raspberry Pi</em></p>
 
   <p>
     <a href="#quick-start">Quick Start</a> •
@@ -16,14 +16,14 @@
 
 ## What is SoulBox?
 
-SoulBox is a **ready-to-use media center operating system** built specifically for ARM64 devices like the Raspberry Pi 5. It combines a lightweight Debian base with a fully configured Kodi media center, creating an appliance-like experience that just works.
+SoulBox is a **ready-to-use media center operating system** built specifically for the Raspberry Pi 5. It combines a lightweight Debian base with a fully configured Kodi media center, creating an appliance-like experience that just works.
 
-**✨ Revolutionary Container-Friendly Build System**
-- 🔥 **Battle-Tested**: Proven through extensive production debugging (builds #78-82)
-- 🏗️ **Zero Privileges Required**: No loop devices, no mounting, no sudo needed
-- 🐳 **Universal Container Support**: Works in GitHub Actions, Gitea Actions, Docker, Unraid
-- ⚡ **LibreELEC Inspired**: Based on proven embedded Linux build methodology
-- 🛡️ **Production Ready**: Successfully building 700MB functional images
+**Key Features:**
+- **Simple Setup**: Flash and boot - no configuration needed
+- **Container-Friendly Builds**: No privileges required, works anywhere
+- **Kodi Media Center**: Pre-configured and ready to use
+- **Debian Base**: Stable, secure, and well-supported
+- **Lightweight**: Optimized for Pi 5 performance
 
 **Perfect for:**
 - Home media servers and entertainment centers
@@ -202,5 +202,5 @@ This project is open source. See LICENSE file for details.
 
 **Build Status**: ![Build Status](https://gitea.osiris-adelie.ts.net/reaper/soulbox/workflows/Build%20SoulBox%20SD%20Card%20Image/badge.svg)
 
-Ready to flash and boot! 🔥
+Ready to flash and boot!
 # Build test Sun Aug 31 17:53:20 CDT 2025

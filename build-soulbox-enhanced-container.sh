@@ -36,4 +36,4 @@ done
 
 echo "[SUCCESS] Script syntax is valid"
 echo "Build artifacts would be created for version: $VERSION"
-echo "The blue flame burns bright!"
+echo "SoulBox build ready!"

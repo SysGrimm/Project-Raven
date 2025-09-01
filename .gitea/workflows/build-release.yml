@@ -1,4 +1,4 @@
-name: Build SoulBox Will-o'-Wisp Media Center (Enhanced)
+name: Build SoulBox Media Center
 
 on:
   push:
@@ -267,7 +267,7 @@ jobs:
       env:
         TSAUTH: ${{ secrets.TSAUTH }}
       run: |
-        echo "=== Building SoulBox Will-o'-Wisp Media Center ==="
+        echo "=== Building SoulBox Media Center ==="
         set -e
         set -x
         
@@ -381,8 +381,8 @@ jobs:
     - name: Build Summary
       if: success()
       run: |
-        echo "SoulBox Will-o'-Wisp Media Center Build Complete!"
-        echo "================================================"
+        echo "SoulBox Media Center Build Complete!"
+        echo "====================================="
         echo ""
         echo "Image created:"
         ls -la artifacts/
@@ -394,7 +394,7 @@ jobs:
         echo "   - Complete systemd service configuration"
         echo "   - SSH enabled with default credentials"
         echo "   - Pre-configured media directories"
-        echo "   - Will-o'-wisp branding and theming"
+        echo "   - SoulBox branding and theming"
         echo ""
         echo "Ready to deploy:"
         echo "   1. Download the .img file from artifacts"
@@ -407,4 +407,4 @@ jobs:
         echo "   - pi:soulbox (compatibility)"
         echo "   - root:soulbox (admin access)"
         echo ""
-        echo "The blue flame burns bright and awaits deployment!"
+        echo "SoulBox is ready for deployment!"
