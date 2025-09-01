@@ -327,17 +327,17 @@ cat > /etc/motd << 'MOTD'
 
     Will-o'-Wisp Media Center
     
-    🔥 The blue flame burns bright! 🔥
+    The blue flame burns bright!
     
     Features:
-    • Kodi Media Center (auto-start)
-    • SSH enabled
-    • Optimized for Pi 5
+    - Kodi Media Center (auto-start)
+    - SSH enabled
+    - Optimized for Pi 5
     
     Default credentials:
-    • soulbox:soulbox (media user)
-    • pi:soulbox (compatibility)
-    • root:soulbox (admin)
+    - soulbox:soulbox (media user)
+    - pi:soulbox (compatibility)
+    - root:soulbox (admin)
     
     Ready to stream your media!
 
