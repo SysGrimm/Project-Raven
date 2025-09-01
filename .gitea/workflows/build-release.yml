@@ -55,48 +55,45 @@ jobs:
             curl -I http://192.168.176.113:3000 2>/dev/null || echo "Can reach Gitea HTTP"
             
             echo "Creating minimal build environment..."
-            # Create build script
-            cat > build-soulbox-enhanced-container.sh <<BUILDEOF
-#!/bin/bash
-echo "SoulBox enhanced container build script (minimal version for CI testing)"
-VERSION="v0.1.0"
-while [[ \$# -gt 0 ]]; do
-  case \$1 in
-    --version) VERSION="\$2"; shift 2 ;;
-    --clean) echo "Clean build requested"; shift ;;
-    *) echo "Unknown option: \$1"; shift ;;
-  esac
-done
-echo "Version: \$VERSION"
-echo "This is a minimal build to test CI infrastructure"
-mkdir -p enhanced-containerized-build/output
-echo "Test SoulBox enhanced image content - Build \$(date)" > "enhanced-containerized-build/output/soulbox-\$VERSION.img"
-sha256sum "enhanced-containerized-build/output/soulbox-\$VERSION.img" > "enhanced-containerized-build/output/soulbox-\$VERSION.img.sha256"
-cp "enhanced-containerized-build/output/"* .
-echo "Minimal build artifacts created:"
-ls -la soulbox-*
-BUILDEOF
+            
+            # Create build script using printf to avoid heredoc issues
+            printf '#!/bin/bash\n' > build-soulbox-enhanced-container.sh
+            printf 'echo "SoulBox enhanced container build script (minimal version for CI testing)"\n' >> build-soulbox-enhanced-container.sh
+            printf 'VERSION="v0.1.0"\n' >> build-soulbox-enhanced-container.sh
+            printf 'while [[ $# -gt 0 ]]; do\n' >> build-soulbox-enhanced-container.sh
+            printf '  case $1 in\n' >> build-soulbox-enhanced-container.sh
+            printf '    --version) VERSION="$2"; shift 2 ;;\n' >> build-soulbox-enhanced-container.sh
+            printf '    --clean) echo "Clean build requested"; shift ;;\n' >> build-soulbox-enhanced-container.sh
+            printf '    *) echo "Unknown option: $1"; shift ;;\n' >> build-soulbox-enhanced-container.sh
+            printf '  esac\n' >> build-soulbox-enhanced-container.sh
+            printf 'done\n' >> build-soulbox-enhanced-container.sh
+            printf 'echo "Version: $VERSION"\n' >> build-soulbox-enhanced-container.sh
+            printf 'echo "This is a minimal build to test CI infrastructure"\n' >> build-soulbox-enhanced-container.sh
+            printf 'mkdir -p enhanced-containerized-build/output\n' >> build-soulbox-enhanced-container.sh
+            printf 'echo "Test SoulBox enhanced image content - Build $(date)" > "enhanced-containerized-build/output/soulbox-$VERSION.img"\n' >> build-soulbox-enhanced-container.sh
+            printf 'sha256sum "enhanced-containerized-build/output/soulbox-$VERSION.img" > "enhanced-containerized-build/output/soulbox-$VERSION.img.sha256"\n' >> build-soulbox-enhanced-container.sh
+            printf 'cp "enhanced-containerized-build/output/"* .\n' >> build-soulbox-enhanced-container.sh
+            printf 'echo "Minimal build artifacts created:"\n' >> build-soulbox-enhanced-container.sh
+            printf 'ls -la soulbox-*\n' >> build-soulbox-enhanced-container.sh
             chmod +x build-soulbox-enhanced-container.sh
             
             # Create version manager
             mkdir -p scripts
-            cat > scripts/gitea-version-manager.sh <<VERSIONEOF
-#!/bin/bash
-case "\$1" in
-    auto)
-        echo "v0.3.\$(date +%s)"
-        ;;
-    create-release)
-        echo "[TEST MODE] Would create release: \$2"
-        echo "[TEST MODE] Release creation simulated - no actual release created"
-        exit 0
-        ;;
-    *)
-        echo "Test version manager - minimal mode"
-        exit 1
-        ;;
-esac
-VERSIONEOF
+            printf '#!/bin/bash\n' > scripts/gitea-version-manager.sh
+            printf 'case "$1" in\n' >> scripts/gitea-version-manager.sh
+            printf '    auto)\n' >> scripts/gitea-version-manager.sh
+            printf '        echo "v0.3.$(date +%%s)"\n' >> scripts/gitea-version-manager.sh
+            printf '        ;;\n' >> scripts/gitea-version-manager.sh
+            printf '    create-release)\n' >> scripts/gitea-version-manager.sh
+            printf '        echo "[TEST MODE] Would create release: $2"\n' >> scripts/gitea-version-manager.sh
+            printf '        echo "[TEST MODE] Release creation simulated - no actual release created"\n' >> scripts/gitea-version-manager.sh
+            printf '        exit 0\n' >> scripts/gitea-version-manager.sh
+            printf '        ;;\n' >> scripts/gitea-version-manager.sh
+            printf '    *)\n' >> scripts/gitea-version-manager.sh
+            printf '        echo "Test version manager - minimal mode"\n' >> scripts/gitea-version-manager.sh
+            printf '        exit 1\n' >> scripts/gitea-version-manager.sh
+            printf '        ;;\n' >> scripts/gitea-version-manager.sh
+            printf 'esac\n' >> scripts/gitea-version-manager.sh
             chmod +x scripts/gitea-version-manager.sh
             
             CLONE_SUCCESS=true
@@ -190,8 +187,8 @@ VERSIONEOF
             
             # Fix the hardcoded debugfs path to use system debugfs
             echo "🔧 Patching populatefs to use system debugfs..."
-            sudo sed -i 's|\"\$CONTRIB_DIR/../debugfs/debugfs\"|debugfs|g' /usr/local/bin/populatefs
-            sudo sed -i 's|\$CONTRIB_DIR/../debugfs/debugfs|debugfs|g' /usr/local/bin/populatefs
+            sudo sed -i 's|\"$CONTRIB_DIR/../debugfs/debugfs\"|debugfs|g' /usr/local/bin/populatefs
+            sudo sed -i 's|$CONTRIB_DIR/../debugfs/debugfs|debugfs|g' /usr/local/bin/populatefs
             echo "📝 Verifying populatefs patch applied correctly..."
             grep -n "debugfs" /usr/local/bin/populatefs || echo "No debugfs references found"
             
@@ -411,4 +408,3 @@ VERSIONEOF
         echo "   - root:soulbox (admin access)"
         echo ""
         echo "The blue flame burns bright and awaits deployment!"
-
