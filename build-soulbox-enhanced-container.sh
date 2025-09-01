@@ -149,8 +149,24 @@ download_pi_os() {
     if [[ ! -f "$extracted_img" ]]; then
         log_info "Extracting Pi OS image..."
         cd "$os_dir"
-        xz -d -k "$download_file"
-        mv *.img raspios-lite.img 2>/dev/null || true
+        
+        # Extract with explicit error handling and path management
+        log_info "Running: xz -d -k $download_file"
+        if ! xz -d -k "$download_file"; then
+            log_error "Failed to decompress Pi OS image with xz"
+            return 1
+        fi
+        
+        # Find the extracted .img file and move it properly
+        local extracted_files=("$WORK_DIR/downloads/"*.img)
+        if [[ ${#extracted_files[@]} -eq 1 && -f "${extracted_files[0]}" ]]; then
+            log_info "Moving extracted image: ${extracted_files[0]} -> $extracted_img"
+            mv "${extracted_files[0]}" "$extracted_img"
+        else
+            log_error "Expected exactly 1 .img file, found: ${#extracted_files[@]}"
+            ls -la "$WORK_DIR/downloads/"*.img 2>/dev/null || log_error "No .img files found"
+            return 1
+        fi
     else
         log_info "Using cached Pi OS image"
     fi
