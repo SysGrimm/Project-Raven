@@ -96,14 +96,14 @@ jobs:
             
             chmod +x build-soulbox-containerized.sh
             
-            # Create minimal version manager script  
-            echo "Creating minimal version manager..."
+            # Create comprehensive debug version manager script  
+            echo "Creating comprehensive debug version manager..."
             mkdir -p scripts
             cat > scripts/gitea-version-manager.sh << 'VERSIONSCRIPT'
         #!/bin/bash
         
-        # Minimal Gitea version manager for CI testing
-        # This will attempt real API calls but gracefully handle failures
+        # Comprehensive debug Gitea version manager for CI testing
+        # This version provides detailed logging and error diagnostics
         
         set -e
         
@@ -123,6 +123,120 @@ jobs:
         log_warning() { echo "[WARNING] $1"; }
         log_error() { echo "[ERROR] $1"; }
         
+        # Function to test connection
+        test_connection() {
+            log_info "Testing connection to Gitea server..."
+            
+            # Test basic connectivity
+            if curl -s --max-time 10 --connect-timeout 5 "$GITEA_SERVER" > /dev/null 2>&1; then
+                log_success "✅ Basic connectivity to $GITEA_SERVER: OK"
+            else
+                log_error "❌ Cannot connect to $GITEA_SERVER"
+                return 1
+            fi
+            
+            # Test API endpoint
+            API_TEST=$(curl -s --max-time 10 -H "Authorization: token $GITEA_TOKEN" "${GITEA_API_URL}" 2>/dev/null || echo "API_ERROR")
+            if echo "$API_TEST" | grep -q '"full_name"'; then
+                log_success "✅ API authentication: OK"
+                return 0
+            else
+                log_error "❌ API authentication failed"
+                log_info "API response: $API_TEST"
+                return 1
+            fi
+        }
+        
+        # Function to upload file with comprehensive error handling
+        upload_file_debug() {
+            local FILE_PATH="$1"
+            local FILE_TYPE="$2"
+            local RELEASE_ID="$3"
+            
+            log_info "=== Starting $FILE_TYPE upload ==="
+            log_info "File path: $FILE_PATH"
+            log_info "Release ID: $RELEASE_ID"
+            log_info "Upload endpoint: ${GITEA_API_URL}/releases/${RELEASE_ID}/assets"
+            
+            if [[ ! -f "$FILE_PATH" ]]; then
+                log_error "File does not exist: $FILE_PATH"
+                return 1
+            fi
+            
+            # Show file details
+            log_info "File details:"
+            ls -la "$FILE_PATH"
+            log_info "File size: $(stat -c%s "$FILE_PATH" 2>/dev/null || stat -f%z "$FILE_PATH" 2>/dev/null || echo 'unknown') bytes"
+            log_info "File type: $(file "$FILE_PATH" 2>/dev/null || echo 'unknown')"
+            
+            # Create a temporary script to capture both stdout and stderr from curl
+            TEMP_SCRIPT="/tmp/curl_upload_$$.sh"
+            cat > "$TEMP_SCRIPT" << CURLEOF
+        #!/bin/bash
+        set -x
+        echo "[DEBUG] Starting curl command"
+        echo "[DEBUG] Working directory: \\$(pwd)"
+        echo "[DEBUG] File exists check: \\$(test -f '$FILE_PATH' && echo 'YES' || echo 'NO')"
+        
+        echo "[DEBUG] About to execute curl command:"
+        echo "curl -v -X POST '${GITEA_API_URL}/releases/${RELEASE_ID}/assets' -H 'Authorization: token [REDACTED]' -H 'Accept: application/json' -F 'attachment=@$FILE_PATH'"
+        
+        # Execute the curl command with full verbosity
+        curl -v --max-time 60 --connect-timeout 10 -X POST "${GITEA_API_URL}/releases/${RELEASE_ID}/assets" \\
+            -H "Authorization: token $GITEA_TOKEN" \\
+            -H "Accept: application/json" \\
+            -F "attachment=@$FILE_PATH" 2>&1
+        
+        echo "[DEBUG] Curl command completed with exit code: \\$?"
+        CURLEOF
+            
+            chmod +x "$TEMP_SCRIPT"
+            
+            log_info "Executing curl with full debugging..."
+            UPLOAD_OUTPUT=$(bash "$TEMP_SCRIPT" 2>&1 || echo "CURL_EXECUTION_FAILED")
+            CURL_EXIT_CODE=$?
+            
+            # Clean up temp script
+            rm -f "$TEMP_SCRIPT"
+            
+            log_info "=== CURL OUTPUT START ==="
+            echo "$UPLOAD_OUTPUT"
+            log_info "=== CURL OUTPUT END ==="
+            log_info "Curl exit code: $CURL_EXIT_CODE"
+            
+            # Try to extract JSON response from the verbose output
+            JSON_RESPONSE=$(echo "$UPLOAD_OUTPUT" | grep -o '{.*}' | tail -1 || echo "NO_JSON_FOUND")
+            log_info "Extracted JSON: $JSON_RESPONSE"
+            
+            # Check for success indicators
+            if echo "$JSON_RESPONSE" | grep -q '"browser_download_url"'; then
+                log_success "✅ $FILE_TYPE uploaded successfully"
+                DOWNLOAD_URL=$(echo "$JSON_RESPONSE" | grep -o '"browser_download_url":"[^"]*' | cut -d'"' -f4)
+                log_info "Download URL: $DOWNLOAD_URL"
+                return 0
+            elif echo "$UPLOAD_OUTPUT" | grep -q '"name"'; then
+                log_success "✅ $FILE_TYPE uploaded (partial success - name field found)"
+                return 0
+            else
+                log_error "❌ Failed to upload $FILE_TYPE"
+                
+                # Analyze common error patterns
+                if echo "$UPLOAD_OUTPUT" | grep -qi "timeout"; then
+                    log_error "Upload failed due to timeout"
+                elif echo "$UPLOAD_OUTPUT" | grep -qi "connection refused"; then
+                    log_error "Upload failed - connection refused"
+                elif echo "$UPLOAD_OUTPUT" | grep -qi "unauthorized"; then
+                    log_error "Upload failed - authorization error"
+                elif echo "$UPLOAD_OUTPUT" | grep -qi "not found"; then
+                    log_error "Upload failed - endpoint not found (possibly wrong release ID?)"
+                else
+                    log_error "Upload failed - unknown error pattern"
+                fi
+                
+                return 1
+            fi
+        }
+        
         case "$1" in
             "auto")
                 # Generate version based on timestamp
@@ -133,103 +247,97 @@ jobs:
                 IMAGE_FILE="$3"
                 CHECKSUM_FILE="$4"
                 
-                log_info "Attempting to create Gitea release: $VERSION"
+                log_info "=== Starting Gitea Release Creation ==="
+                log_info "Version: $VERSION"
                 log_info "Server: $GITEA_SERVER"
+                log_info "Image file: $IMAGE_FILE"
+                log_info "Checksum file: $CHECKSUM_FILE"
                 
-                # Try to create release via API
-                if [[ -n "$GITEA_TOKEN" ]] && command -v curl >/dev/null 2>&1; then
-                    RELEASE_DATA="{\"tag_name\":\"$VERSION\",\"name\":\"SoulBox Will-o'-Wisp $VERSION\",\"body\":\"Automated release from CI build\\n\\nFeatures:\\n- Kodi Media Center\\n- Tailscale VPN\\n- Raspberry Pi 5 optimizations\",\"draft\":false,\"prerelease\":false}"
+                # Validate inputs
+                if [[ -z "$VERSION" ]] || [[ -z "$IMAGE_FILE" ]] || [[ -z "$CHECKSUM_FILE" ]]; then
+                    log_error "Missing required parameters"
+                    log_info "Usage: $0 create-release VERSION IMAGE_FILE CHECKSUM_FILE"
+                    exit 1
+                fi
+                
+                # Check token availability
+                if [[ -z "$GITEA_TOKEN" ]]; then
+                    log_error "GITEA_TOKEN not set - cannot create release"
+                    exit 1
+                fi
+                
+                # Test connection first
+                if ! test_connection; then
+                    log_error "Connection test failed - aborting"
+                    exit 1
+                fi
+                
+                # Create release
+                log_info "Creating Gitea release..."
+                RELEASE_DATA="{\"tag_name\":\"$VERSION\",\"name\":\"SoulBox Will-o'-Wisp $VERSION\",\"body\":\"Automated release from CI build\\n\\nFeatures:\\n- Kodi Media Center\\n- Tailscale VPN\\n- Raspberry Pi 5 optimizations\",\"draft\":false,\"prerelease\":false}"
+                
+                log_info "Release API URL: ${GITEA_API_URL}/releases"
+                log_info "Release data: $RELEASE_DATA"
+                
+                RESPONSE=$(curl -s --max-time 30 -X POST "${GITEA_API_URL}/releases" \
+                    -H "Authorization: token $GITEA_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d "$RELEASE_DATA" 2>&1 || echo '{"message":"Release API call failed"}')
+                
+                log_info "Release creation response: $RESPONSE"
+                
+                if echo "$RESPONSE" | grep -q '"id"'; then
+                    log_success "✅ Gitea release created successfully!"
                     
-                    RESPONSE=$(curl -s -X POST "${GITEA_API_URL}/releases" \
-                        -H "Authorization: token $GITEA_TOKEN" \
-                        -H "Content-Type: application/json" \
-                        -d "$RELEASE_DATA" 2>/dev/null || echo '{"message":"API call failed"}')
+                    # Extract release ID
+                    RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2)
+                    log_info "Extracted release ID: $RELEASE_ID"
                     
-                    if echo "$RESPONSE" | grep -q '"id"'; then
-                        log_success "✅ Gitea release created successfully!"
-                        
-                        # Extract release ID for file upload
-                        RELEASE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2)
-                        log_info "Extracted release ID: $RELEASE_ID"
-                        
-                        # Debug: Show file information
-                        log_info "Debug - Checking files for upload:"
-                        log_info "IMAGE_FILE: $IMAGE_FILE"
-                        log_info "CHECKSUM_FILE: $CHECKSUM_FILE"
-                        if [[ -f "$IMAGE_FILE" ]]; then
-                            log_info "Image file exists, size: $(ls -lh "$IMAGE_FILE" | awk '{print $5}')"
-                        else
-                            log_warning "Image file does not exist at: $IMAGE_FILE"
+                    if [[ -z "$RELEASE_ID" || "$RELEASE_ID" == "" ]]; then
+                        log_error "Failed to extract release ID from response"
+                        exit 1
+                    fi
+                    
+                    # Upload files with comprehensive debugging
+                    UPLOAD_SUCCESS=true
+                    
+                    if [[ -f "$IMAGE_FILE" ]]; then
+                        if ! upload_file_debug "$IMAGE_FILE" "image" "$RELEASE_ID"; then
+                            UPLOAD_SUCCESS=false
                         fi
-                        if [[ -f "$CHECKSUM_FILE" ]]; then
-                            log_info "Checksum file exists, size: $(ls -lh "$CHECKSUM_FILE" | awk '{print $5}')"
-                        else
-                            log_warning "Checksum file does not exist at: $CHECKSUM_FILE"
+                    else
+                        log_warning "Image file not found: $IMAGE_FILE"
+                        UPLOAD_SUCCESS=false
+                    fi
+                    
+                    if [[ -f "$CHECKSUM_FILE" ]]; then
+                        if ! upload_file_debug "$CHECKSUM_FILE" "checksum" "$RELEASE_ID"; then
+                            UPLOAD_SUCCESS=false
                         fi
-                        
-                        # Upload image file if it exists
-                        if [[ -f "$IMAGE_FILE" ]]; then
-                            log_info "Uploading image file: $IMAGE_FILE"
-                            log_info "Upload URL: ${GITEA_API_URL}/releases/${RELEASE_ID}/assets"
-                            
-                            # Try the upload with verbose error reporting
-                            UPLOAD_RESPONSE=$(curl -s -X POST "${GITEA_API_URL}/releases/${RELEASE_ID}/assets" \
-                                -H "Authorization: token $GITEA_TOKEN" \
-                                -H "Accept: application/json" \
-                                -F "attachment=@$IMAGE_FILE")
-                            
-                            log_info "Raw upload response: $UPLOAD_RESPONSE"
-                            
-                            if echo "$UPLOAD_RESPONSE" | grep -q '"browser_download_url"'; then
-                                log_success "📁 Image file uploaded successfully"
-                                DOWNLOAD_URL=$(echo "$UPLOAD_RESPONSE" | grep -o '"browser_download_url":"[^"]*' | cut -d'"' -f4)
-                                log_info "Download URL: $DOWNLOAD_URL"
-                            else
-                                log_warning "Failed to upload image file"
-                                log_info "Upload response: $UPLOAD_RESPONSE"
-                            fi
-                        else
-                            log_warning "Skipping image upload - file not found: $IMAGE_FILE"
-                        fi
-                        
-                        # Upload checksum file if it exists
-                        if [[ -f "$CHECKSUM_FILE" ]]; then
-                            log_info "Uploading checksum file: $CHECKSUM_FILE"
-                            
-                            CHECKSUM_RESPONSE=$(curl -s -X POST "${GITEA_API_URL}/releases/${RELEASE_ID}/assets" \
-                                -H "Authorization: token $GITEA_TOKEN" \
-                                -H "Accept: application/json" \
-                                -F "attachment=@$CHECKSUM_FILE")
-                            
-                            log_info "Raw checksum response: $CHECKSUM_RESPONSE"
-                            
-                            if echo "$CHECKSUM_RESPONSE" | grep -q '"browser_download_url"'; then
-                                log_success "📁 Checksum file uploaded successfully"
-                            else
-                                log_warning "Failed to upload checksum file"
-                                log_info "Checksum response: $CHECKSUM_RESPONSE"
-                            fi
-                        else
-                            log_warning "Skipping checksum upload - file not found: $CHECKSUM_FILE"
-                        fi
-                        
+                    else
+                        log_warning "Checksum file not found: $CHECKSUM_FILE"
+                        UPLOAD_SUCCESS=false
+                    fi
+                    
+                    if [[ "$UPLOAD_SUCCESS" == "true" ]]; then
+                        log_success "🎉 Release created and files uploaded successfully!"
                         log_success "🔗 Release URL: $GITEA_SERVER/$GITEA_OWNER/$GITEA_REPO/releases/tag/$VERSION"
                         exit 0
                     else
-                        log_warning "Failed to create Gitea release via API"
-                        log_info "Response: $RESPONSE"
+                        log_warning "⚠️ Release created but file upload had issues"
+                        log_info "🔗 Release URL: $GITEA_SERVER/$GITEA_OWNER/$GITEA_REPO/releases/tag/$VERSION"
                         exit 1
                     fi
                 else
-                    log_warning "No Gitea token or curl not available - cannot create release"
-                    log_info "Would create release: $VERSION"
-                    log_info "Image: $IMAGE_FILE"
-                    log_info "Checksum: $CHECKSUM_FILE"
+                    log_error "❌ Failed to create Gitea release"
+                    log_info "Response: $RESPONSE"
                     exit 1
                 fi
                 ;;
             *)
-                echo "Minimal Gitea Version Manager - Usage: $0 {auto|create-release VERSION IMAGE_FILE CHECKSUM_FILE}"
+                echo "Comprehensive Debug Gitea Version Manager"
+                echo "Usage: $0 {auto|create-release VERSION IMAGE_FILE CHECKSUM_FILE}"
+                echo "Current mode: DEBUG (with detailed logging)"
                 exit 1
                 ;;
         esac
