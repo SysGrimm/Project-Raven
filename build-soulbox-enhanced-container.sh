@@ -176,6 +176,11 @@ download_pi_os() {
         local file_size=$(stat -c%s "$extracted_img" 2>/dev/null || stat -f%z "$extracted_img" 2>/dev/null)
         if [[ $file_size -gt 1000000000 ]]; then  # > 1GB
             log_success "Pi OS image downloaded and verified ($((file_size / 1024 / 1024))MB)"
+            
+            # Container optimization: Remove compressed file immediately after extraction
+            log_info "Container optimization: Removing compressed Pi OS to save space..."
+            rm -f "$download_file"
+            log_info "Freed $(((431 * 1024)) KB of container space"
         else
             log_error "Pi OS image too small ($((file_size / 1024 / 1024))MB)"
             return 1
@@ -373,6 +378,12 @@ extract_pi_os_partitions() {
     log_info "Extracting root partition..."
     dd if="$source_image" of="$partitions_dir/root.ext4" bs=512 skip="$root_start" count="$root_size" 2>/dev/null
     
+    # Container optimization: Remove source image immediately after partition extraction
+    log_info "Container optimization: Removing source Pi OS image to save space..."
+    local source_size=$(stat -c%s "$source_image" 2>/dev/null || stat -f%z "$source_image" 2>/dev/null)
+    rm -f "$source_image"
+    log_info "Freed $((source_size / 1024 / 1024))MB of container space"
+    
     # Verify partitions
     if fsck.fat -v "$partitions_dir/boot.fat" >/dev/null 2>&1; then
         log_success "Boot partition extracted successfully"
@@ -398,8 +409,8 @@ build_enhanced_image() {
     local partitions_dir="$WORK_DIR/partitions"
     local staging_dir="$WORK_DIR/staging"
     
-    # Calculate image size (1.5GB for container compatibility)
-    local image_size_mb=1536
+    # Calculate image size (1.0GB for container compatibility) 
+    local image_size_mb=1024
     
     log_info "Creating ${image_size_mb}MB disk image..."
     dd if=/dev/zero of="$output_image" bs=1M count=0 seek=$image_size_mb 2>/dev/null
