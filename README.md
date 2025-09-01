@@ -30,6 +30,7 @@ SoulBox is a **ready-to-use media center operating system** built specifically f
 - Digital signage displays
 - Anyone wanting Kodi without configuration hassle
 - Developers seeking container-friendly ARM64 image creation
+- Easy Raspberry Pi media center deployment
 
 ## Quick Start
 
