@@ -156,7 +156,7 @@ jobs:
             log_info "=== Starting $FILE_TYPE upload ==="
             log_info "File path: $FILE_PATH"
             log_info "Release ID: $RELEASE_ID"
-            log_info "Upload endpoint: ${GITEA_API_URL}/releases/${RELEASE_ID}/assets"
+            log_info "Upload endpoint: \${GITEA_API_URL}/releases/\${RELEASE_ID}/assets"
             
             if [[ ! -f "$FILE_PATH" ]]; then
                 log_error "File does not exist: $FILE_PATH"
@@ -179,13 +179,14 @@ jobs:
         echo "[DEBUG] File exists check: \\$(test -f '$FILE_PATH' && echo 'YES' || echo 'NO')"
         
         echo "[DEBUG] About to execute curl command:"
-        echo "curl -v -X POST '${GITEA_API_URL}/releases/${RELEASE_ID}/assets' -H 'Authorization: token [REDACTED]' -H 'Accept: application/json' -F 'attachment=@$FILE_PATH'"
+        echo "curl -v -X POST '\${GITEA_API_URL}/releases/\${RELEASE_ID}/assets' -H 'Authorization: token [REDACTED]' -H 'Accept: application/json' -F 'attachment=@\$FILE_PATH'"
         
-        # Execute the curl command with full verbosity
-        curl -v --max-time 60 --connect-timeout 10 -X POST "${GITEA_API_URL}/releases/${RELEASE_ID}/assets" \\
-            -H "Authorization: token $GITEA_TOKEN" \\
+        # Execute the curl command with full verbosity - build URL properly
+        UPLOAD_URL="\${GITEA_API_URL}/releases/\${RELEASE_ID}/assets"
+        curl -v --max-time 60 --connect-timeout 10 -X POST "\$UPLOAD_URL" \\
+            -H "Authorization: token \$GITEA_TOKEN" \\
             -H "Accept: application/json" \\
-            -F "attachment=@$FILE_PATH" 2>&1
+            -F "attachment=@\$FILE_PATH" 2>&1
         
         echo "[DEBUG] Curl command completed with exit code: \\$?"
         CURLEOF
