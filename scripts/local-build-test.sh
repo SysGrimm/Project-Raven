@@ -23,15 +23,15 @@ log() {
 }
 
 success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    echo -e "${GREEN}[PASS] $1${NC}"
 }
 
 warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    echo -e "${YELLOW}[WARN] $1${NC}"
 }
 
 error() {
-    echo -e "${RED}❌ $1${NC}"
+    echo -e "${RED}[FAIL] $1${NC}"
     exit 1
 }
 

@@ -1,4 +1,8 @@
-# Project Raven 🐦‍⬛
+<div align="center">
+  <img src="assets/logo.png" alt="Project Raven Logo" width="200" />
+</div>
+
+# Project Raven
 
 **Automated Raspberry Pi OS builds with Kodi & Tailscale**
 
@@ -8,10 +12,10 @@
 
 Project Raven automatically builds custom Raspberry Pi OS images that include:
 
-- 🎬 **Kodi Media Center** - Auto-starting entertainment system
-- 🔐 **Tailscale VPN** - Secure remote access out of the box
-- 🏠 **Headless Ready** - Perfect for media centers and home servers
-- 🚀 **Zero Configuration** - Flash and boot, that's it!
+- **Kodi Media Center** - Auto-starting entertainment system
+- **Tailscale VPN** - Secure remote access out of the box
+- **Headless Ready** - Perfect for media centers and home servers
+- **Zero Configuration** - Flash and boot, that's it!
 
 ## Quick Start
 
@@ -37,19 +41,19 @@ sudo tailscale up
 
 ## Features
 
-### 🎬 Kodi Media Center
+### Kodi Media Center
 - **Auto-starts on boot** - No manual intervention needed
 - **Hardware acceleration** - Optimized for Raspberry Pi performance
 - **Audio/video drivers** - Pre-configured for best compatibility
 - **Web interface** - Access at `http://your-pi-ip:8080`
 
-### 🔐 Tailscale VPN
+### Tailscale VPN
 - **Pre-installed** - Ready to configure with one command
 - **Secure remote access** - Access your media center from anywhere
 - **Zero-config networking** - No port forwarding or firewall setup needed
 - **Cross-platform** - Works with all your devices
 
-### 🛠️ System Optimization
+### System Optimization
 - **SSH enabled** - Remote access ready out of the box
 - **Headless operation** - No monitor required after setup
 - **Auto-login** - Seamless user experience
@@ -59,10 +63,10 @@ sudo tailscale up
 
 | Device | Status | Notes |
 |--------|--------|-------|
-| Raspberry Pi 5 | ✅ Full support | Best performance |
-| Raspberry Pi 4 | ✅ Full support | All variants (2GB/4GB/8GB) |
-| Raspberry Pi Zero 2 W | ✅ Limited support | Slower performance, WiFi only |
-| Raspberry Pi 3 | ❌ Not supported | ARM64 architecture required |
+| Raspberry Pi 5 | Full support | Best performance |
+| Raspberry Pi 4 | Full support | All variants (2GB/4GB/8GB) |
+| Raspberry Pi Zero 2 W | Limited support | Slower performance, WiFi only |
+| Raspberry Pi 3 | Not supported | ARM64 architecture required |
 
 ### Storage Requirements
 - **Minimum:** 8GB Class 10 SD card
@@ -85,13 +89,13 @@ sudo tailscale up
 
 Project Raven includes sophisticated automation:
 
-### 🔄 Scheduled Builds
+### Scheduled Builds
 - **Weekly checks** - Every Monday at 6 AM UTC
 - **New release detection** - Automatically detects Pi OS updates
 - **Version tagging** - Clean versioning based on Pi OS release dates
 - **Artifact management** - Automatic release creation with checksums
 
-### 🛠️ Manual Builds
+### Manual Builds
 Trigger builds manually via GitHub Actions:
 
 1. Go to [Actions](../../actions) tab
@@ -99,7 +103,7 @@ Trigger builds manually via GitHub Actions:
 3. Click "Run workflow"
 4. Optionally specify version or force rebuild
 
-### 🧪 Local Testing
+### Local Testing
 Test builds on your own machine:
 
 ```bash
@@ -271,10 +275,10 @@ This project is open source and includes:
 
 ## Support
 
-- 📖 **Documentation:** Check the [Wiki](../../wiki) (coming soon)
-- 🐛 **Bug Reports:** [Issues](../../issues)
-- 💬 **Questions:** [Discussions](../../discussions)
-- 🚀 **Feature Requests:** [Issues](../../issues) with enhancement label
+- **Documentation:** Check the [Wiki](../../wiki) (coming soon)
+- **Bug Reports:** [Issues](../../issues)
+- **Questions:** [Discussions](../../discussions)
+- **Feature Requests:** [Issues](../../issues) with enhancement label
 
 ## Acknowledgments
 
@@ -285,6 +289,6 @@ This project is open source and includes:
 
 ---
 
-**Built with ❤️ for the Raspberry Pi community**
+**Built with care for the Raspberry Pi community**
 
-*Ready to flash and boot!* 🚀
+*Ready to flash and boot!*

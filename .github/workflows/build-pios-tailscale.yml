@@ -355,10 +355,10 @@ jobs:
             
             ## What's Included
             
-            - 🏠 **Kodi Media Center** - Automatically starts on boot
-            - 🔐 **Tailscale VPN** - Ready to configure
-            - 🎯 **Optimized** - For headless media center use
-            - 🚀 **Ready to Flash** - Just burn to SD card and boot
+            - **Kodi Media Center** - Automatically starts on boot
+            - **Tailscale VPN** - Ready to configure
+            - **Optimized** - For headless media center use
+            - **Ready to Flash** - Just burn to SD card and boot
             
             ## Quick Start
             
@@ -394,7 +394,7 @@ jobs:
       - name: Update README
         run: |
           cat > README.md << 'EOF'
-          # Project Raven 🐦‍⬛
+          # Project Raven
           
           **Automated Raspberry Pi OS builds with Kodi & Tailscale**
           
@@ -402,10 +402,10 @@ jobs:
           
           Project Raven automatically builds custom Raspberry Pi OS images that include:
           
-          - 🎬 **Kodi Media Center** - Auto-starting entertainment system
-          - 🔐 **Tailscale VPN** - Secure remote access out of the box
-          - 🏠 **Headless Ready** - Perfect for media centers and home servers
-          - 🚀 **Zero Configuration** - Flash and boot, that's it!
+          - **Kodi Media Center** - Auto-starting entertainment system
+          - **Tailscale VPN** - Secure remote access out of the box
+          - **Headless Ready** - Perfect for media centers and home servers
+          - **Zero Configuration** - Flash and boot, that's it!
           
           ## Quick Start
           
@@ -422,18 +422,18 @@ jobs:
           
           ## Features
           
-          ### 🎬 Kodi Media Center
+          ### Kodi Media Center
           - Auto-starts on boot
           - Hardware acceleration enabled
           - Optimized for Raspberry Pi performance
           - Audio/video drivers pre-configured
           
-          ### 🔐 Tailscale VPN
+          ### Tailscale VPN
           - Pre-installed and ready to configure
           - Secure remote access to your media center
           - Easy setup with `sudo tailscale up`
           
-          ### 🛠️ System Configuration
+          ### System Configuration
           - SSH enabled by default
           - Headless operation optimized
           - 128MB GPU memory allocation
@@ -467,10 +467,10 @@ jobs:
           ## Automation
           
           Project Raven automatically:
-          - 🔍 **Monitors** for new Raspberry Pi OS releases every Monday
-          - 🏗️ **Builds** custom images with latest security updates
-          - 📦 **Publishes** releases with checksums and documentation
-          - 🔄 **Version tags** for easy tracking and rollbacks
+          - **Monitors** for new Raspberry Pi OS releases every Monday
+          - **Builds** custom images with latest security updates
+          - **Publishes** releases with checksums and documentation
+          - **Version tags** for easy tracking and rollbacks
           
           ## Manual Build
           
@@ -483,10 +483,10 @@ jobs:
           ## System Requirements
           
           ### Raspberry Pi Models
-          - ✅ Raspberry Pi 4 (all variants)
-          - ✅ Raspberry Pi 5
-          - ✅ Raspberry Pi Zero 2 W
-          - ❌ Raspberry Pi 3 and older (ARM64 required)
+          - Raspberry Pi 4 (all variants)
+          - Raspberry Pi 5
+          - Raspberry Pi Zero 2 W
+          - Raspberry Pi 3 and older (ARM64 required)
           
           ### SD Card
           - **Minimum:** 8GB Class 10
@@ -537,13 +537,13 @@ jobs:
           
           ## Support
           
-          - 📖 **Documentation:** Check the [Wiki](../../wiki)
-          - 🐛 **Issues:** Report bugs in [Issues](../../issues)
-          - 💬 **Discussions:** General questions in [Discussions](../../discussions)
+          - **Documentation:** Check the [Wiki](../../wiki)
+          - **Issues:** Report bugs in [Issues](../../issues)
+          - **Discussions:** General questions in [Discussions](../../discussions)
           
           ---
           
-          **Built with ❤️ for the Raspberry Pi community**
+          **Built with care for the Raspberry Pi community**
           EOF
           
           git add README.md
