@@ -45,17 +45,28 @@ jobs:
           latest_info=$(curl -s "https://api.github.com/repos/RPi-Distro/pi-gen/releases/latest")
           latest_tag=$(echo "$latest_info" | jq -r '.tag_name')
           
-          # Alternative: scrape the downloads page for the actual latest image
-          latest_image=$(curl -s "$BASE_URL/" | grep -oE 'raspios_lite_arm64-[0-9]{4}-[0-9]{2}-[0-9]{2}' | sort -u | tail -1)
+          # Alternative: scrape the downloads page for the actual latest image directory
+          latest_image_dir=$(curl -s "$BASE_URL/" | grep -oE 'raspios_lite_arm64-[0-9]{4}-[0-9]{2}-[0-9]{2}' | sort -u | tail -1)
           
-          if [ -n "$latest_image" ]; then
-            version_date=$(echo "$latest_image" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
-            download_url="$BASE_URL/$latest_image/$latest_image.img.xz"
-            echo "Found latest image: $latest_image"
-            echo "Version date: $version_date"
-            echo "Download URL: $download_url"
+          if [ -n "$latest_image_dir" ]; then
+            version_date=$(echo "$latest_image_dir" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+            
+            # Get the actual filename from the directory
+            actual_filename=$(curl -s "$BASE_URL/$latest_image_dir/" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-raspios-bookworm-arm64-lite\.img\.xz' | head -1)
+            
+            if [ -n "$actual_filename" ]; then
+              download_url="$BASE_URL/$latest_image_dir/$actual_filename"
+              echo "Found latest image directory: $latest_image_dir"
+              echo "Found latest image file: $actual_filename"
+              echo "Version date: $version_date"
+              echo "Download URL: $download_url"
+            else
+              echo "Could not find image file in directory, using fallback"
+              version_date=$(date +%Y-%m-%d)
+              download_url="https://downloads.raspberrypi.org/raspios_lite_arm64_latest"
+            fi
           else
-            echo "Could not find latest image, using fallback"
+            echo "Could not find latest image directory, using fallback"
             version_date=$(date +%Y-%m-%d)
             download_url="https://downloads.raspberrypi.org/raspios_lite_arm64_latest"
           fi
