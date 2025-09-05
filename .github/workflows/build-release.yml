@@ -1,0 +1,119 @@
+name: Build SoulBox NixOS Media Center
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'wiki/**'
+      - 'CRUSH.md'
+      - 'docs/**'
+      - 'README*.md'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - 'wiki/**'
+      - 'CRUSH.md'
+      - 'docs/**'
+      - 'README*.md'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix with flakes and cross-compilation
+        uses: cachix/install-nix-action@v25
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            extra-platforms = aarch64-linux
+            system-features = nixos-test benchmark big-parallel kvm
+            max-jobs = 1
+            cores = 2
+            sandbox = true
+            auto-optimise-store = false
+            min-free = 4294967296
+            max-free = 6442450944
+            keep-outputs = false
+            keep-derivations = false
+            build-use-sandbox = false
+            sandbox-fallback = false
+
+      - name: Aggressive disk cleanup
+        run: |
+          sudo apt-get remove --purge -y '^dotnet-.*' '^llvm-.*' '^mongodb-.*' '^mysql-.*' '^postgresql-.*' '^node.*' '^php.*' '^ruby.*' '^python3-.*' azure-cli google-chrome-stable firefox powershell mono-devel snapd docker-ce containerd.io buildah podman || true
+          sudo apt-get autoremove -y
+          sudo apt-get autoclean
+          sudo apt-get clean
+          sudo rm -rf /usr/share/dotnet /usr/share/swift /usr/local/share/boost /usr/local/graalvm /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/android /usr/local/.ghcup /opt/ghc /opt/az /opt/microsoft /opt/google /opt/hostedtoolcache /home/runner/.dotnet /home/runner/.cargo /home/runner/.rustup /home/runner/.local/share/powershell ${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache} /var/lib/snapd /snap || true
+          sudo docker system prune -af --volumes 2>/dev/null || true
+          sudo rm -rf /var/cache/apt/archives/* /tmp/* /var/tmp/*
+          sudo journalctl --vacuum-time=1d || true
+
+      - name: Setup QEMU for ARM emulation
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qemu-user-static binfmt-support
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes 2>/dev/null || true
+
+      - name: Build SoulBox NixOS Image for Pi 5
+        run: |
+          set -e
+          VERSION="v1.0.0-nixos"
+          if [ -f "scripts/gitea-version-manager.sh" ]; then
+            VERSION=$(./scripts/gitea-version-manager.sh auto || echo "v1.0.0-nixos")
+          fi
+          echo "Building SoulBox NixOS $VERSION for Pi 5"
+          chmod +x build-soulbox-nixos-pi5.sh
+          mkdir -p nixos-build
+          nix build .#packages.x86_64-linux.soulbox-pi5-image --max-jobs 1 --cores 2 --show-trace
+          image_path=$(find result/sd-image -name "*.img" 2>/dev/null | head -1)
+          final_image="nixos-build/soulbox-pi5-nixos-$VERSION.img"
+          cp "$image_path" "$final_image"
+          (cd nixos-build && sha256sum "soulbox-pi5-nixos-$VERSION.img" > "soulbox-pi5-nixos-$VERSION.img.sha256")
+          cp "nixos-build/soulbox-pi5-nixos-$VERSION.img" "."
+          cp "nixos-build/soulbox-pi5-nixos-$VERSION.img.sha256" "."
+          mkdir -p artifacts
+          cp soulbox-pi5-nixos-*.img artifacts/ 2>/dev/null || true
+          cp soulbox-pi5-nixos-*.img.sha256 artifacts/ 2>/dev/null || true
+          echo "$VERSION" > artifacts/version.txt
+
+      - name: Build SoulBox NixOS Image for Pi Zero 2W (Optional)
+        continue-on-error: true
+        run: |
+          if [[ -f "soulbox-zero2w-configuration.nix" ]]; then
+            echo "Building SoulBox NixOS for Pi Zero 2W"
+            # Add actual build command for Zero 2W here when ready
+            # Example:
+            # nix build .#packages.x86_64-linux.soulbox-zero2w-image --max-jobs 1 --cores 2 --show-trace
+            echo "[SUCCESS] Pi Zero 2W configuration ready (build logic to be implemented)"
+          else
+            echo "[WARNING] Pi Zero 2W configuration not found, skipping"
+          fi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: soulbox-nixos-artifacts
+          path: |
+            artifacts/
+            soulbox-pi5-nixos-*.img
+            soulbox-pi5-nixos-*.img.sha256
+
+      - name: Archive Build Logs
+        if: always()
+        run: |
+          if [ -d "nixos-build" ]; then
+            tar -czf soulbox-nixos-build-logs.tar.gz nixos-build/ 2>/dev/null || true
+          fi
+
+      - name: Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soulbox-nixos-build-logs
+          path: soulbox-nixos-build-logs.tar.gz
