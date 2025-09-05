@@ -294,7 +294,7 @@ jobs:
           systemctl reboot
           EOF
           
-          chmod +x boot/firstboot.sh
+          sudo chmod +x boot/firstboot.sh
           
           # Create systemd service to run firstboot script
           sudo tee rootfs/etc/systemd/system/firstboot.service << 'EOF'
