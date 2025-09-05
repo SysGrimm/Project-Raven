@@ -5,8 +5,27 @@ on:
     branches: [ main ]
     paths: 
       - '.github/workflows/build-libreelec.yml'
-      - 'libreelec-custom-build/**'
-      - 'libreelec-tailscale-addon/**'
+      - 'libreelec-custom-build/      - name: Build LibreELEC image
+        timeout-minutes: 180  # 3 hours timeout
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          export CCACHE_DIR="${{ github.workspace }}/.ccache"
+          
+          echo "Current directory: $(pwd)"
+          echo "Available LibreELEC projects:"
+          ls -la projects/
+          
+          if [ "${{ github.event.inputs.force_clean }}" = "true" ]; then
+            make clean
+          fi
+          
+          echo "Starting LibreELEC build for ${{ matrix.full_name }}"
+          echo "Build command: make PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image"
+          
+          # Set timeout for wget operations to prevent hanging
+          export WGET_OPTIONS="--timeout=30 --tries=3"
+          
+          make PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} imageeelec-tailscale-addon/**'
   workflow_dispatch:
     inputs:
       device:
@@ -142,6 +161,24 @@ jobs:
           cd libreelec-custom-build/LibreELEC.tv
           echo "Setting up LibreELEC build for ${{ matrix.full_name }}"
           echo "PROJECT=${{ matrix.project }}, DEVICE=${{ matrix.libreelec_device }}, ARCH=${{ matrix.arch }}"
+
+      - name: Pre-download sources
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          echo "Pre-downloading sources that commonly fail..."
+          mkdir -p sources
+          
+          # Pre-download gettext from alternative mirrors
+          echo "Downloading gettext-0.22.5.tar.xz..."
+          wget -O sources/gettext-0.22.5.tar.xz https://mirror.keystealth.org/gnu/gettext/gettext-0.22.5.tar.xz || \
+          wget -O sources/gettext-0.22.5.tar.xz https://mirror.koddos.net/gnu/gettext/gettext-0.22.5.tar.xz || \
+          wget -O sources/gettext-0.22.5.tar.xz https://ftp.wayne.edu/gnu/gettext/gettext-0.22.5.tar.xz || \
+          echo "gettext download failed from all mirrors, will try during build"
+          
+          if [ -f "sources/gettext-0.22.5.tar.xz" ]; then
+            echo "gettext source successfully pre-downloaded"
+            ls -la sources/gettext-0.22.5.tar.xz
+          fi
 
       - name: Build LibreELEC image
         run: |
