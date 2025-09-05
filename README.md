@@ -2,8 +2,6 @@
   <img src="assets/logo.png" alt="Project Raven Logo" width="400" />
 </div>
 
-# Project Raven
-
 **Automated Raspberry Pi OS builds with Kodi & Tailscale**
 
 [![Build Status](https://github.com/SysGrimm/Project-Raven/workflows/Build%20Raspberry%20Pi%20OS%20with%20Tailscale%20%26%20Kodi/badge.svg)](https://github.com/SysGrimm/Project-Raven/actions)
