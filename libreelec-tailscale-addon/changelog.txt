@@ -1,0 +1,9 @@
+1.82.1.1
+- Initial release for LibreELEC
+- Tailscale v1.82.1 integration
+- Support for Raspberry Pi platforms (ARM/ARM64)
+- Automatic daemon management
+- Web-based authentication support
+- Configurable network settings
+- Exit node and subnet routing support
+- Status monitoring and reset functionality

@@ -1,0 +1,136 @@
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2025-present Team LibreELEC (https://libreelec.tv)
+
+msgid ""
+msgstr ""
+"Project-Id-Version: service.tailscale\n"
+"Report-Msgid-Bugs-To: https://github.com/SysGrimm/Project-Raven\n"
+"POT-Creation-Date: 2025-09-05 12:00+0000\n"
+"PO-Revision-Date: 2025-09-05 12:00+0000\n"
+"Last-Translator: Team LibreELEC\n"
+"Language-Team: English\n"
+"Language: en_GB\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgctxt "#32001"
+msgid "General"
+msgstr ""
+
+msgctxt "#32002"
+msgid "Advanced"
+msgstr ""
+
+msgctxt "#32010"
+msgid "Basic Settings"
+msgstr ""
+
+msgctxt "#32011"
+msgid "Auto-login on startup"
+msgstr ""
+
+msgctxt "#32012"
+msgid "Automatically authenticate with Tailscale when the service starts"
+msgstr ""
+
+msgctxt "#32013"
+msgid "Device hostname"
+msgstr ""
+
+msgctxt "#32014"
+msgid "Hostname to use for this device on the Tailscale network"
+msgstr ""
+
+msgctxt "#32015"
+msgid "Daemon port"
+msgstr ""
+
+msgctxt "#32016"
+msgid "Port number for the Tailscale daemon (default: 41641)"
+msgstr ""
+
+msgctxt "#32017"
+msgid "Tailscale Auth Key"
+msgstr ""
+
+msgctxt "#32018"
+msgid "Authentication key for automatic connection to Tailscale network"
+msgstr ""
+
+msgctxt "#32020"
+msgid "Network Settings"
+msgstr ""
+
+msgctxt "#32021"
+msgid "Accept subnet routes"
+msgstr ""
+
+msgctxt "#32022"
+msgid "Accept subnet routes advertised by other nodes"
+msgstr ""
+
+msgctxt "#32023"
+msgid "Accept DNS configuration"
+msgstr ""
+
+msgctxt "#32024"
+msgid "Use DNS servers provided by Tailscale"
+msgstr ""
+
+msgctxt "#32025"
+msgid "Shields up mode"
+msgstr ""
+
+msgctxt "#32026"
+msgid "Block incoming connections from other Tailscale users"
+msgstr ""
+
+msgctxt "#32030"
+msgid "Routing"
+msgstr ""
+
+msgctxt "#32031"
+msgid "Exit node"
+msgstr ""
+
+msgctxt "#32032"
+msgid "Route all traffic through this exit node (hostname or IP)"
+msgstr ""
+
+msgctxt "#32033"
+msgid "Advertise routes"
+msgstr ""
+
+msgctxt "#32034"
+msgid "Comma-separated list of subnets to advertise (e.g., 192.168.1.0/24)"
+msgstr ""
+
+msgctxt "#32035"
+msgid "SNAT subnet routes"
+msgstr ""
+
+msgctxt "#32036"
+msgid "Use source NAT for advertised subnet routes"
+msgstr ""
+
+msgctxt "#32040"
+msgid "Actions"
+msgstr ""
+
+msgctxt "#32041"
+msgid "Reset authentication"
+msgstr ""
+
+msgctxt "#32042"
+msgid "Log out and reset authentication state"
+msgstr ""
+
+msgctxt "#32043"
+msgid "Show status"
+msgstr ""
+
+msgctxt "#32044"
+msgid "Display current Tailscale status and connection information"
+msgstr ""
