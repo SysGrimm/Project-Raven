@@ -95,6 +95,28 @@ jobs:
         with:
           key: libreelec-${{ matrix.device }}-${{ github.sha }}
 
+      - name: Pre-download critical dependencies
+        run: |
+          # Create sources directory for LibreELEC
+          mkdir -p /home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources
+          cd /home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources
+          
+          # Download GMP from alternative mirrors
+          echo "Downloading GMP from alternative sources..."
+          wget -c -T 30 -t 3 "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz" || \
+          wget -c -T 30 -t 3 "https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz" || \
+          wget -c -T 30 -t 3 "https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz" || \
+          echo "Warning: Could not pre-download GMP, build will try original sources"
+          
+          # Download other potentially problematic dependencies
+          echo "Pre-downloading other critical dependencies..."
+          wget -c -T 30 -t 3 "https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz" || echo "MPFR pre-download failed"
+          wget -c -T 30 -t 3 "https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz" || echo "MPC pre-download failed"
+          
+          # List downloaded files
+          echo "Pre-downloaded dependencies:"
+          ls -la
+
       - name: Clone LibreELEC source
         run: |
           # Ensure the directory exists and is accessible
@@ -111,6 +133,22 @@ jobs:
           
           echo "LibreELEC directory contents:"
           ls -la LibreELEC.tv/
+
+      - name: Apply download reliability patches
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          
+          # Configure wget to be more resilient to network issues
+          echo "timeout = 30" > ~/.wgetrc
+          echo "tries = 5" >> ~/.wgetrc
+          echo "retry_connrefused = on" >> ~/.wgetrc
+          echo "waitretry = 3" >> ~/.wgetrc
+          
+          # Apply network timeout and retry patches to scripts
+          find scripts/ -name "get" -type f -exec sed -i.bak \
+            's/wget /wget --timeout=30 --tries=5 --retry-connrefused --waitretry=3 /g' {} \;
+          
+          echo "Download reliability patches applied"
 
       - name: Copy custom packages
         run: |
@@ -231,9 +269,9 @@ jobs:
           
           # Create LibreELEC sources directory and copy our pre-downloaded files
           mkdir -p sources
-          if [ -d /tmp/sources ]; then
-            echo "Copying pre-downloaded sources to LibreELEC sources directory..."
-            cp -v /tmp/sources/* sources/ 2>/dev/null || echo "No pre-downloaded sources to copy"
+          if [ -f "/home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources/gmp-6.3.0.tar.xz" ]; then
+            echo "Copying pre-downloaded GMP to LibreELEC sources directory..."
+            cp -v "/home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources/"*.tar.* sources/ 2>/dev/null || echo "No pre-downloaded sources to copy"
             ls -la sources/
           fi
           
@@ -251,14 +289,49 @@ jobs:
           # Set timeout for wget operations to prevent hanging
           export WGET_OPTIONS="--timeout=30 --tries=3"
           
+          # Add alternative GNU mirrors to help with download issues
+          export GNU_MIRROR_LIST="https://ftp.gnu.org/gnu https://mirrors.kernel.org/gnu https://ftpmirror.gnu.org"
+          
           # Optimize build performance
           export MAKEFLAGS="-j$(nproc)"
           export NINJA_STATUS="[%f/%t] "
           export CCACHE_COMPRESS=1
           export CCACHE_MAXSIZE=2G
           
-          # Build for the specific device with parallel jobs
-          make -j$(nproc) PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image
+          # Set environment variables for robust network downloads
+          export HTTP_TIMEOUT=60
+          export WGET_TIMEOUT=60
+          export CURL_TIMEOUT=60
+          
+          # Try to use pre-downloaded sources by creating symbolic links
+          if [ -f "sources/gmp-6.3.0.tar.xz" ]; then
+            echo "Using pre-downloaded GMP source"
+            # Create build cache directory structure
+            mkdir -p build.LibreELEC-${{ matrix.libreelec_device }}.${{ matrix.arch }}-12.0-devel/gmp-6.3.0/
+          fi
+          
+          # Build for the specific device with parallel jobs and robust error handling
+          set -e  # Exit on any error
+          echo "Starting LibreELEC build with enhanced error handling..."
+          
+          # Run the build with timeout and retry logic
+          for attempt in 1 2 3; do
+            echo "Build attempt $attempt of 3"
+            if timeout 3600 make -j$(nproc) PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image; then
+              echo "Build completed successfully on attempt $attempt"
+              break
+            else
+              exit_code=$?
+              echo "Build attempt $attempt failed with exit code $exit_code"
+              if [ $attempt -eq 3 ]; then
+                echo "All build attempts failed"
+                exit $exit_code
+              else
+                echo "Retrying build in 30 seconds..."
+                sleep 30
+              fi
+            fi
+          done
 
       - name: Prepare release artifacts
         run: |
