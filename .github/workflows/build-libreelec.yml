@@ -31,20 +31,16 @@ env:
 jobs:
   build-libreelec:
     runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours timeout for LibreELEC build
     strategy:
       matrix:
-        device: [RPi5, RPiZero2]
+        device: [RPi5]  # Temporarily build only RPi5 to speed up testing
         include:
           - device: RPi5
             project: RPi
             arch: arm
             full_name: "Raspberry Pi 5"
             libreelec_device: "RPi5"
-          - device: RPiZero2
-            project: RPi
-            arch: arm
-            full_name: "Raspberry Pi Zero 2 W"
-            libreelec_device: "RPi2"
     
     steps:
       - name: Maximize build space
@@ -255,8 +251,14 @@ jobs:
           # Set timeout for wget operations to prevent hanging
           export WGET_OPTIONS="--timeout=30 --tries=3"
           
-          # Build for the specific device
-          make PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image
+          # Optimize build performance
+          export MAKEFLAGS="-j$(nproc)"
+          export NINJA_STATUS="[%f/%t] "
+          export CCACHE_COMPRESS=1
+          export CCACHE_MAXSIZE=2G
+          
+          # Build for the specific device with parallel jobs
+          make -j$(nproc) PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image
 
       - name: Prepare release artifacts
         run: |
@@ -346,6 +348,7 @@ jobs:
           path: artifacts
 
       - name: Prepare release
+        id: release_prep
         run: |
           mkdir -p release
           
@@ -358,8 +361,12 @@ jobs:
           
           # Create release tag
           RELEASE_TAG="v2.0-$(date +%Y%m%d-%H%M)"
+          RELEASE_NAME="Project-Raven LibreELEC v2.0 - $(date +%Y-%m-%d)"
+          
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
-          echo "RELEASE_NAME=Project-Raven LibreELEC v2.0 - $(date +%Y-%m-%d)" >> $GITHUB_ENV
+          echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "release_name=$RELEASE_NAME" >> $GITHUB_OUTPUT
           
           echo "Release contents:"
           ls -la release/
@@ -367,8 +374,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_NAME }}
+          tag_name: ${{ steps.release_prep.outputs.release_tag }}
+          name: ${{ steps.release_prep.outputs.release_name }}
           body_path: release/RELEASE_NOTES.md
           files: release/*
           draft: false
