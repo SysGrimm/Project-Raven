@@ -123,16 +123,22 @@ jobs:
           ls -la libreelec-custom-build/
           cd libreelec-custom-build
           
-          if [ ! -d "LibreELEC.tv" ]; then
-            echo "Cloning LibreELEC source..."
-            git clone --depth 1 --branch libreelec-12.0 \
-              https://github.com/LibreELEC/LibreELEC.tv.git
-          else
-            echo "LibreELEC.tv directory already exists"
+          # Remove any incomplete clone and start fresh
+          if [ -d "LibreELEC.tv" ]; then
+            echo "Removing incomplete LibreELEC.tv directory..."
+            rm -rf LibreELEC.tv
           fi
+          
+          echo "Cloning LibreELEC source..."
+          git clone --depth 1 --branch libreelec-12.0 \
+            https://github.com/LibreELEC/LibreELEC.tv.git
           
           echo "LibreELEC directory contents:"
           ls -la LibreELEC.tv/
+          
+          echo "Checking for essential directories:"
+          ls -la LibreELEC.tv/scripts/ || echo "Warning: scripts directory not found"
+          ls -la LibreELEC.tv/packages/ || echo "Warning: packages directory not found"
 
       - name: Apply download reliability patches
         run: |
@@ -144,11 +150,24 @@ jobs:
           echo "retry_connrefused = on" >> ~/.wgetrc
           echo "waitretry = 3" >> ~/.wgetrc
           
-          # Apply network timeout and retry patches to scripts
-          find scripts/ -name "get" -type f -exec sed -i.bak \
-            's/wget /wget --timeout=30 --tries=5 --retry-connrefused --waitretry=3 /g' {} \;
+          # Verify scripts directory exists before patching
+          if [ -d "scripts/" ]; then
+            echo "Applying network timeout and retry patches to scripts..."
+            # Apply network timeout and retry patches to scripts
+            find scripts/ -name "get" -type f -exec sed -i.bak \
+              's/wget /wget --timeout=30 --tries=5 --retry-connrefused --waitretry=3 /g' {} \;
+            echo "Download reliability patches applied to get scripts"
+          else
+            echo "Warning: scripts directory not found, skipping get script patches"
+          fi
           
-          echo "Download reliability patches applied"
+          # Check for and patch any Makefile downloads
+          if [ -f "Makefile" ]; then
+            echo "Patching Makefile for download reliability..."
+            sed -i.bak 's/wget /wget --timeout=30 --tries=5 --retry-connrefused --waitretry=3 /g' Makefile || true
+          fi
+          
+          echo "Download reliability configuration completed"
 
       - name: Copy custom packages
         run: |
