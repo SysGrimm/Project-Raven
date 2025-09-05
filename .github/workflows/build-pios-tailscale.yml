@@ -102,13 +102,19 @@ jobs:
 
       - name: Free up disk space
         run: |
-          # Remove unnecessary packages to free up space
-          sudo apt-get remove -y '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' '^mysql-.*' azure-cli google-cloud-sdk hhvm google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri
+          # Remove unnecessary packages to free up space (ignore errors for missing packages)
+          sudo apt-get remove -y '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' '^mysql-.*' azure-cli google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri || true
+          
+          # Try removing individual packages that may or may not exist
+          for pkg in google-cloud-sdk hhvm; do
+            sudo apt-get remove -y "$pkg" 2>/dev/null || true
+          done
+          
           sudo apt-get autoremove -y
           sudo apt-get clean
           
-          # Remove unnecessary files
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/graalvm /usr/local/.ghcup /usr/local/share/chrom* /usr/local/lib/android /usr/local/lib/node_modules
+          # Remove unnecessary files (ignore errors for missing directories)
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/graalvm /usr/local/.ghcup /usr/local/share/chrom* /usr/local/lib/android /usr/local/lib/node_modules 2>/dev/null || true
           
           df -h
 
