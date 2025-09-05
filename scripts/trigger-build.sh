@@ -61,9 +61,9 @@ check_version() {
             # Use GitHub CLI if available
             LATEST_RELEASE=$(gh release list --repo SysGrimm/Project-Raven --limit 1 | head -1 | cut -f3)
             if [ "v$VERSION_DATE" = "$LATEST_RELEASE" ]; then
-                echo -e "${GREEN}✅ Version v$VERSION_DATE is already built and released${NC}"
+                echo -e "${GREEN}[PASS] Version v$VERSION_DATE is already built and released${NC}"
             else
-                echo -e "${YELLOW}⚠️  Version v$VERSION_DATE is not yet built${NC}"
+                echo -e "${YELLOW}[WARN] Version v$VERSION_DATE is not yet built${NC}"
                 echo -e "   Latest release: $LATEST_RELEASE"
                 echo -e "   Consider triggering a manual build!"
             fi
