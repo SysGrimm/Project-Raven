@@ -87,7 +87,13 @@ jobs:
             lzop \
             libc6-dev \
             libncurses5-dev \
-            pkg-config
+            pkg-config \
+            xfonts-utils \
+            rdfind \
+            libparse-yapp-perl \
+            gperf \
+            libxml-parser-perl \
+            patchutils
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -96,22 +102,39 @@ jobs:
 
       - name: Clone LibreELEC source
         run: |
+          # Ensure the directory exists and is accessible
+          ls -la libreelec-custom-build/
           cd libreelec-custom-build
+          
           if [ ! -d "LibreELEC.tv" ]; then
+            echo "Cloning LibreELEC source..."
             git clone --depth 1 --branch libreelec-12.0 \
               https://github.com/LibreELEC/LibreELEC.tv.git
+          else
+            echo "LibreELEC.tv directory already exists"
           fi
+          
+          echo "LibreELEC directory contents:"
+          ls -la LibreELEC.tv/
 
       - name: Copy custom packages
         run: |
           cd libreelec-custom-build
+          
+          echo "Copying Tailscale add-on..."
           # Copy Tailscale add-on
           mkdir -p LibreELEC.tv/packages/addons/service/tailscale
           cp -r ../libreelec-tailscale-addon/* LibreELEC.tv/packages/addons/service/tailscale/
           
+          echo "Tailscale add-on copied:"
+          ls -la LibreELEC.tv/packages/addons/service/tailscale/
+          
           # Copy other custom packages
           if [ -d "packages" ]; then
+            echo "Copying additional custom packages..."
             cp -r packages/* LibreELEC.tv/packages/
+          else
+            echo "No additional packages directory found"
           fi
 
       - name: Configure build
@@ -125,9 +148,16 @@ jobs:
           cd libreelec-custom-build/LibreELEC.tv
           export CCACHE_DIR="${{ github.workspace }}/.ccache"
           
+          echo "Current directory: $(pwd)"
+          echo "Available LibreELEC projects:"
+          ls -la projects/
+          
           if [ "${{ github.event.inputs.force_clean }}" = "true" ]; then
             make clean
           fi
+          
+          echo "Starting LibreELEC build for ${{ matrix.full_name }}"
+          echo "Build command: make PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image"
           
           # Build for the specific device
           make PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image
