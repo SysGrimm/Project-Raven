@@ -213,7 +213,7 @@ rm -f /etc/systemd/system/raven-firstboot.service
 shutdown -r +1 "Raven Pi setup complete. Rebooting in 1 minute..."
 EOF
 
-chmod +x boot/raven-install.sh
+sudo chmod +x boot/raven-install.sh
 
 # Create systemd service to run installation on first boot
 sudo tee rootfs/etc/systemd/system/raven-firstboot.service << 'EOF'
