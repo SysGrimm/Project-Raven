@@ -102,12 +102,6 @@ jobs:
               https://github.com/LibreELEC/LibreELEC.tv.git
           fi
 
-      - name: Setup build environment
-        run: |
-          cd libreelec-custom-build/LibreELEC.tv
-          PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} \
-            ./scripts/install
-
       - name: Copy custom packages
         run: |
           cd libreelec-custom-build
@@ -123,30 +117,20 @@ jobs:
       - name: Configure build
         run: |
           cd libreelec-custom-build/LibreELEC.tv
-          export PROJECT=${{ matrix.project }}
-          export DEVICE=${{ matrix.libreelec_device }}
-          export ARCH=${{ matrix.arch }}
-          export BUILDER_NAME="Project-Raven"
-          export BUILDER_VERSION="2.0"
-          
-          # Apply custom configurations
-          if [ -f "../config/addon-bundles.conf" ]; then
-            echo "Applying add-on bundle configuration..."
-            # Custom configuration application logic here
-          fi
+          echo "Setting up LibreELEC build for ${{ matrix.full_name }}"
+          echo "PROJECT=${{ matrix.project }}, DEVICE=${{ matrix.libreelec_device }}, ARCH=${{ matrix.arch }}"
 
       - name: Build LibreELEC image
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           export CCACHE_DIR="${{ github.workspace }}/.ccache"
-          export USE_CCACHE=yes
           
           if [ "${{ github.event.inputs.force_clean }}" = "true" ]; then
             make clean
           fi
           
-          PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} \
-            make image
+          # Build for the specific device
+          make PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image
 
       - name: Prepare release artifacts
         run: |
