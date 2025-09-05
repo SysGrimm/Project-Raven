@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main ]
     paths: 
+      - '.github/workflows/build-libreelec.yml'
       - 'libreelec-custom-build/**'
       - 'libreelec-tailscale-addon/**'
   workflow_dispatch:
@@ -32,16 +33,18 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        device: [RPi4, RPi5]
+        device: [RPi5, RPiZero2]
         include:
-          - device: RPi4
-            project: RPi
-            arch: arm
-            full_name: "Raspberry Pi 4"
           - device: RPi5
             project: RPi
             arch: arm
             full_name: "Raspberry Pi 5"
+            libreelec_device: "RPi5"
+          - device: RPiZero2
+            project: RPi
+            arch: arm
+            full_name: "Raspberry Pi Zero 2 W"
+            libreelec_device: "RPi2"
     
     steps:
       - name: Maximize build space
@@ -75,16 +78,21 @@ jobs:
             xsltproc \
             default-jre-headless \
             python3 \
-            python3-distutils \
             python3-setuptools \
+            python3-dev \
             rsync \
             bc \
-            gawk
+            gawk \
+            file \
+            lzop \
+            libc6-dev \
+            libncurses5-dev \
+            pkg-config
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: libreelec-${{ matrix.device }}
+          key: libreelec-${{ matrix.device }}-${{ github.sha }}
 
       - name: Clone LibreELEC source
         run: |
@@ -97,7 +105,7 @@ jobs:
       - name: Setup build environment
         run: |
           cd libreelec-custom-build/LibreELEC.tv
-          PROJECT=${{ matrix.project }} DEVICE=${{ matrix.device }} ARCH=${{ matrix.arch }} \
+          PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} \
             ./scripts/install
 
       - name: Copy custom packages
@@ -116,7 +124,7 @@ jobs:
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           export PROJECT=${{ matrix.project }}
-          export DEVICE=${{ matrix.device }}
+          export DEVICE=${{ matrix.libreelec_device }}
           export ARCH=${{ matrix.arch }}
           export BUILDER_NAME="Project-Raven"
           export BUILDER_VERSION="2.0"
@@ -137,7 +145,7 @@ jobs:
             make clean
           fi
           
-          PROJECT=${{ matrix.project }} DEVICE=${{ matrix.device }} ARCH=${{ matrix.arch }} \
+          PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} \
             make image
 
       - name: Prepare release artifacts
@@ -148,7 +156,7 @@ jobs:
           # Find the built image
           IMAGE_FILE=$(find target -name "*.img.gz" | head -1)
           if [ -n "$IMAGE_FILE" ]; then
-            RELEASE_NAME="LibreELEC-${{ matrix.project }}.${{ matrix.device }}-raven-$(date +%Y%m%d).img.gz"
+            RELEASE_NAME="LibreELEC-${{ matrix.project }}.${{ matrix.libreelec_device }}-raven-$(date +%Y%m%d).img.gz"
             cp "$IMAGE_FILE" "../../release-artifacts/$RELEASE_NAME"
             
             # Generate checksums
@@ -241,6 +249,7 @@ jobs:
           # Create release tag
           RELEASE_TAG="v2.0-$(date +%Y%m%d-%H%M)"
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+          echo "RELEASE_NAME=Project-Raven LibreELEC v2.0 - $(date +%Y-%m-%d)" >> $GITHUB_ENV
           
           echo "Release contents:"
           ls -la release/
@@ -249,7 +258,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: "Project-Raven LibreELEC v2.0 - $(date +%Y%m%d)"
+          name: ${{ env.RELEASE_NAME }}
           body_path: release/RELEASE_NOTES.md
           files: release/*
           draft: false
