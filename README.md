@@ -1,12 +1,16 @@
 <div align="center">
   <img src="assets/logo.png" alt="Project Raven Logo" width="400" />
+  
+  <h1>Project Raven</h1>
+  
+  <strong>Automated Raspberry Pi OS builds with Kodi & Tailscale</strong>
+  
+  <br><br>
+  
+  <a href="https://github.com/SysGrimm/Project-Raven/actions">
+    <img src="https://github.com/SysGrimm/Project-Raven/workflows/Build%20Raspberry%20Pi%20OS%20with%20Tailscale%20%26%20Kodi/badge.svg" alt="Build Status" />
+  </a>
 </div>
-
-# Project Raven
-
-**Automated Raspberry Pi OS builds with Kodi & Tailscale**
-
-[![Build Status](https://github.com/SysGrimm/Project-Raven/workflows/Build%20Raspberry%20Pi%20OS%20with%20Tailscale%20%26%20Kodi/badge.svg)](https://github.com/SysGrimm/Project-Raven/actions)
 
 ## What is Project Raven?
 
