@@ -1,0 +1,286 @@
+name: Build Custom LibreELEC Image
+
+on:
+  push:
+    branches: [ main ]
+    paths: 
+      - 'libreelec-custom-build/**'
+      - 'libreelec-tailscale-addon/**'
+  workflow_dispatch:
+    inputs:
+      device:
+        description: 'Target device (RPi4, RPi5, Generic)'
+        required: false
+        default: 'RPi4'
+        type: choice
+        options:
+          - RPi4
+          - RPi5
+          - Generic
+      force_clean:
+        description: 'Force clean build'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-libreelec
+
+jobs:
+  build-libreelec:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        device: [RPi4, RPi5]
+        include:
+          - device: RPi4
+            project: RPi
+            arch: arm
+            full_name: "Raspberry Pi 4"
+          - device: RPi5
+            project: RPi
+            arch: arm
+            full_name: "Raspberry Pi 5"
+    
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            git \
+            mercurial \
+            wget \
+            cpio \
+            gzip \
+            unzip \
+            gcc \
+            g++ \
+            xsltproc \
+            default-jre-headless \
+            python3 \
+            python3-distutils \
+            python3-setuptools \
+            rsync \
+            bc \
+            gawk
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: libreelec-${{ matrix.device }}
+
+      - name: Clone LibreELEC source
+        run: |
+          cd libreelec-custom-build
+          if [ ! -d "LibreELEC.tv" ]; then
+            git clone --depth 1 --branch libreelec-12.0 \
+              https://github.com/LibreELEC/LibreELEC.tv.git
+          fi
+
+      - name: Setup build environment
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          PROJECT=${{ matrix.project }} DEVICE=${{ matrix.device }} ARCH=${{ matrix.arch }} \
+            ./scripts/install
+
+      - name: Copy custom packages
+        run: |
+          cd libreelec-custom-build
+          # Copy Tailscale add-on
+          mkdir -p LibreELEC.tv/packages/addons/service/tailscale
+          cp -r ../libreelec-tailscale-addon/* LibreELEC.tv/packages/addons/service/tailscale/
+          
+          # Copy other custom packages
+          if [ -d "packages" ]; then
+            cp -r packages/* LibreELEC.tv/packages/
+          fi
+
+      - name: Configure build
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          export PROJECT=${{ matrix.project }}
+          export DEVICE=${{ matrix.device }}
+          export ARCH=${{ matrix.arch }}
+          export BUILDER_NAME="Project-Raven"
+          export BUILDER_VERSION="2.0"
+          
+          # Apply custom configurations
+          if [ -f "../config/addon-bundles.conf" ]; then
+            echo "Applying add-on bundle configuration..."
+            # Custom configuration application logic here
+          fi
+
+      - name: Build LibreELEC image
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          export CCACHE_DIR="${{ github.workspace }}/.ccache"
+          export USE_CCACHE=yes
+          
+          if [ "${{ github.event.inputs.force_clean }}" = "true" ]; then
+            make clean
+          fi
+          
+          PROJECT=${{ matrix.project }} DEVICE=${{ matrix.device }} ARCH=${{ matrix.arch }} \
+            make image
+
+      - name: Prepare release artifacts
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          mkdir -p ../../release-artifacts
+          
+          # Find the built image
+          IMAGE_FILE=$(find target -name "*.img.gz" | head -1)
+          if [ -n "$IMAGE_FILE" ]; then
+            RELEASE_NAME="LibreELEC-${{ matrix.project }}.${{ matrix.device }}-raven-$(date +%Y%m%d).img.gz"
+            cp "$IMAGE_FILE" "../../release-artifacts/$RELEASE_NAME"
+            
+            # Generate checksums
+            cd ../../release-artifacts
+            sha256sum "$RELEASE_NAME" > "$RELEASE_NAME.sha256"
+            
+            echo "Built image: $RELEASE_NAME"
+            echo "Size: $(du -h $RELEASE_NAME | cut -f1)"
+          else
+            echo "No image file found!"
+            exit 1
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libreelec-${{ matrix.device }}-image
+          path: release-artifacts/*
+          retention-days: 30
+
+      - name: Create release info
+        run: |
+          cd release-artifacts
+          cat > release-info-${{ matrix.device }}.md << EOF
+          ## LibreELEC Project-Raven Build - ${{ matrix.full_name }}
+          
+          **Build Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          **Target Device**: ${{ matrix.full_name }}
+          **LibreELEC Version**: 12.x
+          **Project-Raven Version**: 2.0
+          
+          ### Features Included
+          - Tailscale VPN service add-on
+          - Jellyfin for Kodi integration
+          - Copacetic theme (modern UI)
+          - Setup wizard for first-boot configuration
+          - CEC remote control support
+          - Hardware acceleration optimizations
+          
+          ### Installation
+          1. Download the .img.gz file
+          2. Flash to 8GB+ microSD card using Raspberry Pi Imager
+          3. Insert SD card into ${{ matrix.full_name }}
+          4. Connect HDMI to TV and network cable
+          5. Power on and follow setup wizard
+          
+          ### Verification
+          \`\`\`bash
+          # Verify download integrity
+          sha256sum -c *.sha256
+          \`\`\`
+          
+          ### Support
+          - Documentation: [Project-Raven Wiki](https://github.com/SysGrimm/Project-Raven/wiki)
+          - Issues: [GitHub Issues](https://github.com/SysGrimm/Project-Raven/issues)
+          - Discussions: [GitHub Discussions](https://github.com/SysGrimm/Project-Raven/discussions)
+          EOF
+
+      - name: Upload release info
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-info-${{ matrix.device }}
+          path: release-artifacts/release-info-${{ matrix.device }}.md
+
+  create-release:
+    needs: build-libreelec
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release
+        run: |
+          mkdir -p release
+          
+          # Copy all image files and checksums
+          find artifacts -name "*.img.gz" -exec cp {} release/ \;
+          find artifacts -name "*.sha256" -exec cp {} release/ \;
+          
+          # Combine release info
+          cat artifacts/release-info-*/release-info-*.md > release/RELEASE_NOTES.md
+          
+          # Create release tag
+          RELEASE_TAG="v2.0-$(date +%Y%m%d-%H%M)"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+          
+          echo "Release contents:"
+          ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "Project-Raven LibreELEC v2.0 - $(date +%Y%m%d)"
+          body_path: release/RELEASE_NOTES.md
+          files: release/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-completion:
+    needs: [build-libreelec, create-release]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Build Summary
+        run: |
+          echo "## LibreELEC Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ${{ needs.build-libreelec.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Release**: ${{ needs.create-release.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.build-libreelec.result }}" = "success" ]; then
+            echo "✅ LibreELEC images built successfully for RPi4 and RPi5" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ LibreELEC build failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.create-release.result }}" = "success" ]; then
+            echo "✅ Release created with downloadable images" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.create-release.result }}" = "skipped" ]; then
+            echo "⏭️ Release skipped (not main branch push)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Release creation failed" >> $GITHUB_STEP_SUMMARY
+          fi

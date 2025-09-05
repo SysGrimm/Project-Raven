@@ -1,0 +1,26 @@
+#!/bin/sh
+
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2025-present Team LibreELEC (https://libreelec.tv)
+
+. /etc/profile
+oe_setup_addon service.tailscale
+
+# Set up environment
+export HOME="$ADDON_HOME"
+export PATH="$ADDON_DIR/bin:$PATH"
+
+# Ensure state directory exists
+mkdir -p "$ADDON_HOME/tailscale-state"
+
+# Start tailscaled daemon
+TAILSCALED_ARGS="--state=$ADDON_HOME/tailscale-state/tailscaled.state"
+TAILSCALED_ARGS="$TAILSCALED_ARGS --socket=$ADDON_HOME/tailscale-state/tailscaled.sock"
+TAILSCALED_ARGS="$TAILSCALED_ARGS --port=${ts_daemon_port:-41641}"
+
+if [ "$ts_verbose_logging" = "true" ]; then
+    TAILSCALED_ARGS="$TAILSCALED_ARGS -verbose=2"
+fi
+
+echo "Starting tailscaled with args: $TAILSCALED_ARGS"
+exec "$ADDON_DIR/bin/tailscaled" $TAILSCALED_ARGS

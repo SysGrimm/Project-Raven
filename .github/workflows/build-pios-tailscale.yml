@@ -1,9 +1,10 @@
-name: Build Raspberry Pi OS with Tailscale & Kodi
+name: Build Raspberry Pi OS with Tailscale & Kodi (Legacy)
 
 on:
-  schedule:
-    # Check for new Pi OS releases every Monday at 6 AM UTC
-    - cron: '0 6 * * 1'
+  # Disabled - migrated to LibreELEC build system
+  # schedule:
+  #   # Check for new Pi OS releases every Monday at 6 AM UTC
+  #   - cron: '0 6 * * 1'
   workflow_dispatch:
     inputs:
       force_build:

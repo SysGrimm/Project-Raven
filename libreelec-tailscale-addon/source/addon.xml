@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="service.tailscale"
+       name="Tailscale VPN"
+       version="1.82.1.1"
+       provider-name="Team LibreELEC">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+    <import addon="script.module.requests" version="2.12.4"/>
+  </requires>
+  <extension point="xbmc.service" library="default.py" start="login"/>
+  <extension point="xbmc.addon.metadata">
+    <reuselanguageinvoker>false</reuselanguageinvoker>
+    <summary lang="en_GB">Tailscale VPN service for LibreELEC</summary>
+    <description lang="en_GB">Tailscale is a secure network that just works. Zero config VPN. Installs on any device in minutes. This addon provides Tailscale VPN functionality for LibreELEC, allowing you to securely access your media center from anywhere.</description>
+    <disclaimer lang="en_GB">This addon requires internet connectivity and a Tailscale account.</disclaimer>
+    <platform>linux</platform>
+    <license>BSD-3-Clause</license>
+    <forum>https://forum.libreelec.tv</forum>
+    <website>https://tailscale.com</website>
+    <source>https://github.com/SysGrimm/Project-Raven</source>
+    <news>
+v1.82.1.1 (2025-09-05)
+- Initial release
+- Tailscale v1.82.1
+- Support for Raspberry Pi platforms
+- Web-based configuration
+- Automatic startup and authentication
+    </news>
+    <assets>
+      <icon>icon.png</icon>
+      <fanart>fanart.jpg</fanart>
+    </assets>
+  </extension>
+</addon>

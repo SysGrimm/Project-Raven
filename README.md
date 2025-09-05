@@ -1,16 +1,199 @@
-<div align="center">
-  <img src="assets/logo.png" alt="Project Raven Logo" width="400" />
-  
-  <h1>Project Raven</h1>
-  
-  <strong>Automated Raspberry Pi OS builds with Kodi & Tailscale</strong>
-  
-  <br><br>
-  
-  <a href="https://github.com/SysGrimm/Project-Raven/actions">
-    <img src="https://github.com/SysGrimm/Project-Raven/workflows/Build%20Raspberry%20Pi%20OS%20with%20Tailscale%20%26%20Kodi/badge.svg" alt="Build Status" />
-  </a>
-</div>
+# Project-Raven 🎬
+
+**A complete LibreELEC media center solution with integrated VPN, Jellyfin support, and automated setup.**
+
+Project-Raven transforms your Raspberry Pi into a powerful, remotely accessible media center with zero-configuration networking and beautiful themes.
+
+## ✨ Features
+
+### 🎯 **Core Components**
+- **LibreELEC 12.x** - Optimized media center OS with CEC support
+- **Tailscale VPN** - Secure remote access with mesh networking
+- **Jellyfin Integration** - Native connection to Jellyfin media servers
+- **Copacetic Theme** - Modern, clean interface optimized for TV viewing
+- **Setup Wizard** - Guided first-boot configuration
+
+### 🔧 **What Makes It Special**
+- **Zero-Config CEC** - TV remote control works out of the box
+- **One-Click VPN** - Authenticate with Tailscale auth keys
+- **Auto Jellyfin Setup** - Connect to your media server during setup
+- **Beautiful UI** - Copacetic theme pre-configured and optimized
+- **Turnkey Solution** - Flash image and run setup wizard
+
+## 🚀 Quick Start
+
+### 1. Download & Flash
+```bash
+# Download latest release
+curl -L -o libreelec-raven.img.gz 
+  "https://github.com/SysGrimm/Project-Raven/releases/latest/download/LibreELEC-RPi4-raven.img.gz"
+
+# Flash to SD card (8GB+ recommended)
+# Use Raspberry Pi Imager or similar tool
+```
+
+### 2. First Boot Setup
+1. **Insert SD card** into Raspberry Pi 4/5
+2. **Connect to TV** via HDMI (for CEC remote support)
+3. **Connect network** (Ethernet or WiFi)
+4. **Power on** - Setup wizard starts automatically
+
+### 3. Configuration Wizard
+The setup wizard will guide you through:
+- **Jellyfin Server**: Enter server URL, username, password
+- **Tailscale VPN**: Paste auth key for automatic connection
+- **Device Hostname**: Choose name for your media center
+- **Theme Setup**: Copacetic theme activated automatically
+
+### 4. Enjoy! 
+- Use TV remote to navigate Kodi
+- Access remotely via Tailscale network
+- Stream from Jellyfin server seamlessly
+
+## 📦 What's Included
+
+### **Pre-installed Add-ons**
+- **Jellyfin for Kodi** - Native Jellyfin integration
+- **Tailscale VPN** - Secure mesh networking
+- **YouTube** - Stream YouTube content
+- **UPnP/DLNA** - Network media sharing
+
+### **Custom Theme**
+- **Copacetic Skin** - Clean, modern interface
+- **Optimized for TV** - Perfect for couch viewing
+- **Remote-friendly** - Easy navigation with TV remote
+
+### **System Optimizations**
+- **CEC Support** - TV remote control enabled
+- **Hardware Acceleration** - Optimized video decoding
+- **Network Performance** - VPN and streaming optimized
+- **Auto-updates** - Security patches via image updates
+
+## 💻 Supported Hardware
+
+| Device | Status | Performance | Notes |
+|--------|--------|-------------|-------|
+| **Raspberry Pi 4** (4GB+) | ✅ **Recommended** | Excellent | Best price/performance |
+| **Raspberry Pi 5** (4GB+) | ✅ **Best** | Outstanding | Latest features |
+| **Raspberry Pi 3** | ⚠️ Limited | Good | Basic 1080p playback |
+| **Generic x86_64** | ✅ Supported | Varies | NUC, mini-PC builds |
+
+### **Requirements**
+- **Storage**: 8GB+ microSD card (Class 10+)
+- **Network**: Ethernet or WiFi connection
+- **Display**: HDMI TV/monitor with CEC support
+- **Power**: Official power adapter recommended
+
+## 🔧 Advanced Configuration
+
+### **Jellyfin Setup**
+- Server discovery during setup wizard
+- Automatic library sync
+- Hardware transcoding support
+- Multiple user profiles
+
+### **Tailscale Network**
+- Mesh VPN with automatic NAT traversal
+- Exit node capability
+- Subnet routing support
+- Mobile device access
+
+### **Remote Access**
+Once connected to Tailscale:
+- **Kodi Web Interface**: `http://100.x.x.x:8080`
+- **SSH Access**: `ssh root@100.x.x.x`
+- **File Sharing**: `\100.x.x.x` or `smb://100.x.x.x`
+
+## 🛠 Building Custom Images
+
+### **Prerequisites**
+```bash
+# macOS
+brew install wget git rsync gawk coreutils
+
+# Ubuntu/Debian  
+sudo apt install build-essential git wget rsync gawk
+```
+
+### **Build Process**
+```bash
+# Clone repository
+git clone https://github.com/SysGrimm/Project-Raven.git
+cd Project-Raven/libreelec-custom-build
+
+# Configure build (edit config/project.conf)
+# Set PROJECT=RPi, DEVICE=RPi4, ARCH=arm, etc.
+
+# Run build
+./scripts/build-image.sh
+
+# Output: LibreELEC-RPi.RPi4-raven-YYYYMMDD.img
+```
+
+### **Repository Structure**
+```
+Project-Raven/
+├── libreelec-custom-build/    # Custom LibreELEC build system
+├── libreelec-tailscale-addon/ # Tailscale VPN service add-on
+├── wiki/                      # Comprehensive documentation
+└── README.md                  # This file
+```
+
+## 📖 Documentation
+
+### **User Guides**
+- **[Quick Start Guide](wiki/Quick-Start-Guide)** - Get running in 30 minutes
+- **[Troubleshooting](wiki/CEC-Troubleshooting)** - Fix common issues
+- **[Network Setup](wiki/Network-Configuration)** - Advanced networking
+
+### **Developer Resources**
+- **[Architecture Overview](wiki/Architecture-Overview)** - System design
+- **[Build System](wiki/Custom-LibreELEC-Build)** - Custom image creation
+- **[Add-on Development](wiki/Add-on-Development)** - Create new add-ons
+
+### **Technical References**
+- **[Known Issues](wiki/Known-Issues)** - Current limitations
+- **[Changelog](wiki/Changelog)** - Version history
+
+## 🤝 Community
+
+### **Getting Help**
+- **[GitHub Issues](https://github.com/SysGrimm/Project-Raven/issues)** - Bug reports and feature requests
+- **[Discussions](https://github.com/SysGrimm/Project-Raven/discussions)** - Community support
+- **[Wiki](https://github.com/SysGrimm/Project-Raven/wiki)** - Comprehensive documentation
+
+### **Contributing**
+We welcome contributions! Areas where you can help:
+- Code contributions and bug fixes
+- Documentation improvements  
+- Bug reports and testing
+- Feature suggestions and feedback
+
+## 📜 License
+
+Project-Raven is licensed under [GPL-2.0-or-later](LICENSE).
+
+### **Third-party Components**
+- **LibreELEC**: [GPL-2.0](https://github.com/LibreELEC/LibreELEC.tv/blob/master/LICENSE)
+- **Kodi**: [GPL-2.0](https://github.com/xbmc/xbmc/blob/master/LICENSE.md)
+- **Tailscale**: [BSD-3-Clause](https://github.com/tailscale/tailscale/blob/main/LICENSE)
+- **Jellyfin**: [GPL-2.0](https://github.com/jellyfin/jellyfin/blob/master/LICENSE)
+- **Copacetic Theme**: [GPL-2.0](https://github.com/scarfa/Copacetic/blob/master/LICENSE.txt)
+
+## ⭐ Credits
+
+**Created by**: [SysGrimm](https://github.com/SysGrimm)
+
+**Special Thanks**:
+- LibreELEC Team - Excellent foundation
+- Tailscale Team - Revolutionary networking
+- Jellyfin Team - Open source media server
+- Kodi Community - Endless possibilities
+- Copacetic Theme Authors - Beautiful design
+
+---
+
+**🎉 Ready to transform your media experience?** [Download the latest release](https://github.com/SysGrimm/Project-Raven/releases) and get started!
 
 ## What is Project Raven?
 

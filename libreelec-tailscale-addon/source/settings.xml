@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings version="1">
+  <category id="general" label="32001">
+    <group id="1" label="32010">
+      <setting id="auto_login" type="boolean" label="32011" help="32012" default="true"/>
+      <setting id="hostname" type="string" label="32013" help="32014" default="LibreELEC-Kodi"/>
+      <setting id="daemon_port" type="number" label="32015" help="32016" default="41641"/>
+      <setting id="auth_key" type="string" label="32017" help="32018" default="" option="hidden"/>
+    </group>
+    <group id="2" label="32020">
+      <setting id="accept_routes" type="boolean" label="32021" help="32022" default="false"/>
+      <setting id="accept_dns" type="boolean" label="32023" help="32024" default="false"/>
+      <setting id="shields_up" type="boolean" label="32025" help="32026" default="false"/>
+    </group>
+  </category>
+  <category id="advanced" label="32002">
+    <group id="3" label="32030">
+      <setting id="exit_node" type="string" label="32031" help="32032" default=""/>
+      <setting id="advertise_routes" type="string" label="32033" help="32034" default=""/>
+      <setting id="snat_subnet_routes" type="boolean" label="32035" help="32036" default="true"/>
+    </group>
+    <group id="4" label="32040">
+      <setting id="reset_auth" type="action" label="32041" help="32042" action="RunScript(special://home/addons/service.tailscale/reset_auth.py)"/>
+      <setting id="show_status" type="action" label="32043" help="32044" action="RunScript(special://home/addons/service.tailscale/show_status.py)"/>
+    </group>
+  </category>
+</settings>
