@@ -1,0 +1,534 @@
+name: Build Raspberry Pi OS with Tailscale & Kodi
+
+on:
+  schedule:
+    # Check for new Pi OS releases every Monday at 6 AM UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even if no new version'
+        required: false
+        default: false
+        type: boolean
+      pi_os_version:
+        description: 'Specific Pi OS version to build (optional)'
+        required: false
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-builder
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.version_check.outputs.new_version }}
+      download_url: ${{ steps.version_check.outputs.download_url }}
+      version_date: ${{ steps.version_check.outputs.version_date }}
+      should_build: ${{ steps.version_check.outputs.should_build }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for new Raspberry Pi OS version
+        id: version_check
+        run: |
+          # Get latest Pi OS release info
+          echo "Fetching latest Raspberry Pi OS releases..."
+          
+          # Raspberry Pi OS download URL pattern (headless/lite version)
+          BASE_URL="https://downloads.raspberrypi.org/raspios_lite_arm64/images"
+          
+          # Get the latest version info
+          latest_info=$(curl -s "https://api.github.com/repos/RPi-Distro/pi-gen/releases/latest")
+          latest_tag=$(echo "$latest_info" | jq -r '.tag_name')
+          
+          # Alternative: scrape the downloads page for the actual latest image
+          latest_image=$(curl -s "$BASE_URL/" | grep -oE 'raspios_lite_arm64-[0-9]{4}-[0-9]{2}-[0-9]{2}' | sort -u | tail -1)
+          
+          if [ -n "$latest_image" ]; then
+            version_date=$(echo "$latest_image" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+            download_url="$BASE_URL/$latest_image/$latest_image.img.xz"
+            echo "Found latest image: $latest_image"
+            echo "Version date: $version_date"
+            echo "Download URL: $download_url"
+          else
+            echo "Could not find latest image, using fallback"
+            version_date=$(date +%Y-%m-%d)
+            download_url="https://downloads.raspberrypi.org/raspios_lite_arm64_latest"
+          fi
+          
+          # Check if we already built this version
+          last_built_version=$(git tag -l "v*" | sort -V | tail -1 | sed 's/v//')
+          
+          should_build="false"
+          if [ "${{ inputs.force_build }}" = "true" ]; then
+            should_build="true"
+            echo "Force build requested"
+          elif [ "$version_date" != "$last_built_version" ]; then
+            should_build="true"
+            echo "New version found: $version_date (last built: $last_built_version)"
+          else
+            echo "No new version found"
+          fi
+          
+          # Override version if specified
+          if [ -n "${{ inputs.pi_os_version }}" ]; then
+            version_date="${{ inputs.pi_os_version }}"
+            should_build="true"
+            echo "Using specified version: $version_date"
+          fi
+          
+          echo "new_version=$version_date" >> $GITHUB_OUTPUT
+          echo "download_url=$download_url" >> $GITHUB_OUTPUT
+          echo "version_date=$version_date" >> $GITHUB_OUTPUT
+          echo "should_build=$should_build" >> $GITHUB_OUTPUT
+
+  build-image:
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Free up disk space
+        run: |
+          # Remove unnecessary packages to free up space
+          sudo apt-get remove -y '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' '^mysql-.*' azure-cli google-cloud-sdk hhvm google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          
+          # Remove unnecessary files
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/graalvm /usr/local/.ghcup /usr/local/share/chrom* /usr/local/lib/android /usr/local/lib/node_modules
+          
+          df -h
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qemu-user-static \
+            binfmt-support \
+            parted \
+            kpartx \
+            xz-utils \
+            curl \
+            wget \
+            unzip \
+            systemd-container
+
+      - name: Download and extract Raspberry Pi OS
+        run: |
+          echo "Downloading Raspberry Pi OS from: ${{ needs.check-version.outputs.download_url }}"
+          
+          # Create working directory
+          mkdir -p /tmp/pios-build
+          cd /tmp/pios-build
+          
+          # Download the image
+          wget -O raspios.img.xz "${{ needs.check-version.outputs.download_url }}"
+          
+          # Extract the image
+          echo "Extracting image..."
+          xz -d raspios.img.xz
+          
+          # Verify the image
+          ls -lh raspios.img
+          file raspios.img
+
+      - name: Mount and customize image
+        run: |
+          cd /tmp/pios-build
+          
+          # Create loop device
+          sudo losetup -P /dev/loop0 raspios.img
+          
+          # Wait for partitions to be ready
+          sleep 2
+          sudo partprobe /dev/loop0
+          
+          # Mount boot and root partitions
+          mkdir -p boot rootfs
+          sudo mount /dev/loop0p1 boot
+          sudo mount /dev/loop0p2 rootfs
+          
+          # Enable SSH
+          sudo touch boot/ssh
+          
+          # Configure boot settings
+          sudo tee -a boot/config.txt << 'EOF'
+          
+          # Enable audio (for Kodi)
+          dtparam=audio=on
+          
+          # GPU memory split for Kodi
+          gpu_mem=128
+          
+          # Enable hardware acceleration
+          dtoverlay=vc4-kms-v3d
+          EOF
+          
+          # Create firstboot script for customization
+          sudo tee boot/firstboot.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          # Update system
+          apt-get update
+          
+          # Install Tailscale
+          curl -fsSL https://tailscale.com/install.sh | sh
+          systemctl enable tailscaled
+          
+          # Install Kodi and dependencies
+          apt-get install -y \
+            kodi \
+            kodi-standalone \
+            xserver-xorg \
+            xinit \
+            alsa-utils \
+            pulseaudio
+          
+          # Create kodi user
+          useradd -m -G audio,video,input,dialout,plugdev,tty kodi
+          
+          # Configure Kodi to start automatically
+          systemctl disable lightdm || true
+          
+          # Create Kodi service
+          cat > /etc/systemd/system/kodi.service << 'KODI_EOF'
+          [Unit]
+          Description=Kodi standalone
+          After=graphical-session.target
+          Wants=graphical-session.target
+          
+          [Service]
+          Type=simple
+          User=kodi
+          Group=kodi
+          ExecStart=/usr/bin/kodi-standalone
+          Restart=always
+          RestartSec=10
+          
+          [Install]
+          WantedBy=multi-user.target
+          KODI_EOF
+          
+          systemctl enable kodi
+          
+          # Configure autologin for kodi user
+          mkdir -p /etc/systemd/system/getty@tty1.service.d
+          cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'AUTO_EOF'
+          [Service]
+          ExecStart=
+          ExecStart=-/sbin/agetty --autologin kodi --noclear %I $TERM
+          AUTO_EOF
+          
+          # Create Tailscale setup script
+          cat > /home/kodi/setup-tailscale.sh << 'TS_EOF'
+          #!/bin/bash
+          echo "To connect this device to Tailscale, run:"
+          echo "sudo tailscale up"
+          echo "Then follow the authentication URL"
+          TS_EOF
+          chmod +x /home/kodi/setup-tailscale.sh
+          chown kodi:kodi /home/kodi/setup-tailscale.sh
+          
+          # Create welcome message
+          cat > /etc/motd << 'MOTD_EOF'
+          
+          ====================================
+          Raspberry Pi OS with Kodi & Tailscale
+          ====================================
+          
+          This system includes:
+          - Kodi Media Center (auto-starting)
+          - Tailscale VPN (ready to configure)
+          
+          To set up Tailscale:
+          1. Run: sudo tailscale up
+          2. Follow the authentication URL
+          
+          Kodi is configured to start automatically.
+          Default user: kodi
+          
+          ====================================
+          
+          MOTD_EOF
+          
+          # Clean up
+          apt-get clean
+          rm -rf /var/lib/apt/lists/*
+          
+          # Remove this script
+          rm -f /boot/firstboot.sh
+          rm -f /etc/systemd/system/firstboot.service
+          
+          # Reboot to start services
+          systemctl reboot
+          EOF
+          
+          chmod +x boot/firstboot.sh
+          
+          # Create systemd service to run firstboot script
+          sudo tee rootfs/etc/systemd/system/firstboot.service << 'EOF'
+          [Unit]
+          Description=First boot setup
+          After=network-online.target
+          Wants=network-online.target
+          ConditionPathExists=/boot/firstboot.sh
+          
+          [Service]
+          Type=oneshot
+          ExecStart=/boot/firstboot.sh
+          RemainAfterExit=yes
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          
+          # Enable the firstboot service
+          sudo chroot rootfs systemctl enable firstboot.service
+          
+          # Unmount partitions
+          sudo umount boot rootfs
+          sudo losetup -d /dev/loop0
+
+      - name: Compress final image
+        run: |
+          cd /tmp/pios-build
+          
+          # Create descriptive filename
+          output_name="raven-pios-kodi-tailscale-${{ needs.check-version.outputs.version_date }}.img"
+          mv raspios.img "$output_name"
+          
+          # Compress the image
+          echo "Compressing image..."
+          xz -9 -T 0 "$output_name"
+          
+          # Generate checksums
+          sha256sum "${output_name}.xz" > "${output_name}.xz.sha256"
+          
+          # Move to workspace
+          mkdir -p "$GITHUB_WORKSPACE/release"
+          mv "${output_name}.xz" "$GITHUB_WORKSPACE/release/"
+          mv "${output_name}.xz.sha256" "$GITHUB_WORKSPACE/release/"
+          
+          echo "IMAGE_NAME=${output_name}.xz" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "v${{ needs.check-version.outputs.version_date }}"
+          name: "Raven Pi OS v${{ needs.check-version.outputs.version_date }}"
+          body: |
+            # Raspberry Pi OS with Kodi & Tailscale
+            
+            **Version:** ${{ needs.check-version.outputs.version_date }}
+            **Base:** Raspberry Pi OS Lite (ARM64)
+            
+            ## What's Included
+            
+            - 🏠 **Kodi Media Center** - Automatically starts on boot
+            - 🔐 **Tailscale VPN** - Ready to configure
+            - 🎯 **Optimized** - For headless media center use
+            - 🚀 **Ready to Flash** - Just burn to SD card and boot
+            
+            ## Quick Start
+            
+            1. **Flash to SD card** using Raspberry Pi Imager or balenaEtcher
+            2. **Boot your Pi** - Kodi will start automatically
+            3. **Set up Tailscale**: 
+               ```bash
+               sudo tailscale up
+               ```
+            4. **Access Kodi** via your Tailscale network or directly
+            
+            ## Default Configuration
+            
+            - **Auto-login user:** `kodi`
+            - **SSH:** Enabled by default
+            - **GPU Memory:** 128MB allocated for media playback
+            - **Services:** Kodi auto-starts, Tailscale ready to configure
+            
+            ## Files
+            
+            - `${{ env.IMAGE_NAME }}` - Main disk image (flash this to SD card)
+            - `${{ env.IMAGE_NAME }}.sha256` - Checksum for verification
+            
+            **Size:** ~2-3GB compressed, ~8GB when flashed
+            **Compatible with:** Raspberry Pi 4, Pi 5, Pi Zero 2 W
+          files: |
+            release/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update README
+        run: |
+          cat > README.md << 'EOF'
+          # Project Raven 🐦‍⬛
+          
+          **Automated Raspberry Pi OS builds with Kodi & Tailscale**
+          
+          ## What is Project Raven?
+          
+          Project Raven automatically builds custom Raspberry Pi OS images that include:
+          
+          - 🎬 **Kodi Media Center** - Auto-starting entertainment system
+          - 🔐 **Tailscale VPN** - Secure remote access out of the box
+          - 🏠 **Headless Ready** - Perfect for media centers and home servers
+          - 🚀 **Zero Configuration** - Flash and boot, that's it!
+          
+          ## Quick Start
+          
+          1. **Download** the latest release from [Releases](../../releases/latest)
+          2. **Flash** the `.img.xz` file to an SD card using [Raspberry Pi Imager](https://www.raspberrypi.org/software/)
+          3. **Boot** your Raspberry Pi
+          4. **Connect** via SSH or directly to set up Tailscale
+          
+          ## Latest Build
+          
+          [![Build Status](https://github.com/${{ github.repository }}/workflows/Build%20Raspberry%20Pi%20OS%20with%20Tailscale%20%26%20Kodi/badge.svg)](https://github.com/${{ github.repository }}/actions)
+          
+          **Current Version:** v${{ needs.check-version.outputs.version_date }}
+          
+          ## Features
+          
+          ### 🎬 Kodi Media Center
+          - Auto-starts on boot
+          - Hardware acceleration enabled
+          - Optimized for Raspberry Pi performance
+          - Audio/video drivers pre-configured
+          
+          ### 🔐 Tailscale VPN
+          - Pre-installed and ready to configure
+          - Secure remote access to your media center
+          - Easy setup with `sudo tailscale up`
+          
+          ### 🛠️ System Configuration
+          - SSH enabled by default
+          - Headless operation optimized
+          - 128MB GPU memory allocation
+          - Auto-login configured for seamless experience
+          
+          ## Setup Instructions
+          
+          ### Initial Setup
+          1. Flash the image to SD card (8GB minimum)
+          2. Insert SD card and power on your Pi
+          3. Wait 2-3 minutes for first boot setup to complete
+          4. Kodi will start automatically
+          
+          ### Tailscale Configuration
+          ```bash
+          # SSH into your Pi (default user: kodi)
+          ssh kodi@your-pi-ip
+          
+          # Set up Tailscale
+          sudo tailscale up
+          
+          # Follow the authentication URL provided
+          ```
+          
+          ### Remote Access
+          Once Tailscale is configured:
+          - Access Kodi web interface: `http://your-tailscale-ip:8080`
+          - SSH access: `ssh kodi@your-tailscale-ip`
+          - Direct media streaming via Tailscale network
+          
+          ## Automation
+          
+          Project Raven automatically:
+          - 🔍 **Monitors** for new Raspberry Pi OS releases every Monday
+          - 🏗️ **Builds** custom images with latest security updates
+          - 📦 **Publishes** releases with checksums and documentation
+          - 🔄 **Version tags** for easy tracking and rollbacks
+          
+          ## Manual Build
+          
+          Trigger a manual build:
+          1. Go to [Actions](../../actions)
+          2. Select "Build Raspberry Pi OS with Tailscale & Kodi"
+          3. Click "Run workflow"
+          4. Optionally specify a version or force rebuild
+          
+          ## System Requirements
+          
+          ### Raspberry Pi Models
+          - ✅ Raspberry Pi 4 (all variants)
+          - ✅ Raspberry Pi 5
+          - ✅ Raspberry Pi Zero 2 W
+          - ❌ Raspberry Pi 3 and older (ARM64 required)
+          
+          ### SD Card
+          - **Minimum:** 8GB Class 10
+          - **Recommended:** 32GB+ for media storage
+          - **Best Performance:** High-endurance or SSD via USB
+          
+          ## Troubleshooting
+          
+          ### Common Issues
+          
+          **Kodi not starting:**
+          ```bash
+          sudo systemctl status kodi
+          sudo systemctl restart kodi
+          ```
+          
+          **Tailscale connection issues:**
+          ```bash
+          sudo tailscale status
+          sudo tailscale up --reset
+          ```
+          
+          **SSH access problems:**
+          - Ensure SSH is enabled: `sudo systemctl enable ssh`
+          - Check if service is running: `sudo systemctl status ssh`
+          
+          ### Log Files
+          - Kodi logs: `/home/kodi/.kodi/temp/`
+          - System logs: `sudo journalctl -u kodi`
+          - Tailscale logs: `sudo journalctl -u tailscaled`
+          
+          ## Contributing
+          
+          Want to improve Project Raven?
+          
+          1. Fork this repository
+          2. Create a feature branch
+          3. Make your improvements
+          4. Test with a manual workflow run
+          5. Submit a pull request
+          
+          ## License
+          
+          This project is open source. The builds include:
+          - Raspberry Pi OS (Raspberry Pi Foundation)
+          - Kodi (GPL v2)
+          - Tailscale (BSD 3-Clause)
+          
+          ## Support
+          
+          - 📖 **Documentation:** Check the [Wiki](../../wiki)
+          - 🐛 **Issues:** Report bugs in [Issues](../../issues)
+          - 💬 **Discussions:** General questions in [Discussions](../../discussions)
+          
+          ---
+          
+          **Built with ❤️ for the Raspberry Pi community**
+          EOF
+          
+          git add README.md
+          git commit -m "Update README with latest build info v${{ needs.check-version.outputs.version_date }}" || true
+          git push || true
