@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.png" alt="Project Raven Logo" width="200" />
+  <img src="assets/logo.png" alt="Project Raven Logo" width="400" />
 </div>
 
 # Project Raven
