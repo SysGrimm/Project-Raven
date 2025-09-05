@@ -85,7 +85,14 @@ jobs:
             gperf \
             build-essential \
             bison \
-            gettext
+            gettext \
+            xfonts-utils \
+            rdfind \
+            libparse-yapp-perl \
+            xsltproc \
+            libxml-parser-perl \
+            patchutils \
+            lzop
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -210,6 +217,12 @@ jobs:
           # List what we successfully downloaded
           echo "Pre-downloaded files:"
           ls -la /tmp/sources/ || echo "No sources downloaded"
+          echo "Verifying downloaded files exist and have content:"
+          for file in /tmp/sources/*; do
+            if [ -f "$file" ]; then
+              echo "$(basename "$file"): $(ls -lh "$file" | awk '{print $5}')"
+            fi
+          done
 
       - name: Build LibreELEC image
         timeout-minutes: 180
