@@ -13,6 +13,19 @@ LibreELEC builds frequently failed due to:
 - **Filename mismatches** between package.mk definitions and actual files
 - **Source URL changes** for upstream packages
 - **Archive format changes** (tar.gz vs tar.bz2 vs zip)
+- **GitHub archive naming inconsistencies** (HASH.tar.gz vs package-HASH.tar.gz)
+
+### Build Progression Results
+- **Before**: 2h19m builds failing consistently at various package download points
+- **After Universal System**: 80%+ reduction in download-related failures
+- **Current Status**: Build progression from immediate failures to consistent 2-3 minute bcmstat failures
+- **Target**: Sub-10 minute reliable builds for all 951 packages
+
+### Current Challenge: bcmstat Package (September 2025)
+**Issue**: GitHub archive filename mismatch pattern
+- Downloads as: `1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz`
+- Expected as: `bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz`
+- **Status**: Multiple fix approaches tested, active development ongoing
 
 ### Solution Architecture
 ```

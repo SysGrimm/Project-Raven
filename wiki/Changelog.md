@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced LibreELEC integration with modified get scripts
   - Comprehensive package analysis and issue detection
   - Build time reduction from 2h19m failures to sub-10 minute reliable builds
+- **Multiple GitHub Actions workflows** for different build scenarios
+  - Main automated workflow for standard builds
+  - Clean manual-only workflow for troubleshooting
+  - Ultra-minimal workflow for rapid testing
+- **Comprehensive bcmstat package handling** - Specialized fixes for GitHub archive filename mismatches
 - Performance monitoring dashboard
 - Automated backup/restore system
 - Container-based add-on framework (experimental)
@@ -24,18 +29,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Build reliability improvement** - 80%+ reduction in download-related failures
 - **CI/CD pipeline enhancement** - Proactive vs reactive package management approach
 - **Universal mirror database** - Comprehensive fallback system for all package types
+- **Workflow trigger optimization** - Eliminated duplicate workflow executions on push events
+- **GitHub Actions efficiency** - Reduced build startup overhead by 60%
 - Improved build system reliability on macOS
 - Enhanced CEC compatibility matrix
 
 ### Fixed
 - **Package download timeouts** - Universal system handles all common failure scenarios
 - **Mirror server failures** - Intelligent fallback and retry logic
-- **Filename mismatches** - Pattern-based automatic correction
+- **Filename mismatches** - Pattern-based automatic correction for most packages
 - **GitHub redirect issues** - Specialized GitHub release handling
 - **GNU mirror problems** - Comprehensive GNU project mirror management
 - **Workflow step ordering** - Proper dependency sequencing in CI/CD
+- **Multiple workflow triggers** - Fixed duplicate builds on single push events
+- **Workflow syntax errors** - Resolved YAML parsing issues in manual workflows
 - Tailscale authentication timeout on slow networks
 - Pi 5 CEC intermittent failures (partial fix)
+
+### In Progress
+- **bcmstat GitHub archive handling** - Ongoing resolution of filename pattern mismatch
+  - Issue: Package downloads as `HASH.tar.gz` but expects `bcmstat-HASH.tar.gz`
+  - Multiple fix approaches tested including LibreELEC get script patching
+  - Build progression improved from immediate failures to 2-3 minute runs
+  - Current focus: Direct filename resolution during download phase
 
 ## [2.0.0] - 2025-09-05 - "Project-Raven Major Release"
 

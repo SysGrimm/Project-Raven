@@ -4,8 +4,27 @@ This page documents current known issues, limitations, and workarounds for Proje
 
 ## 🚨 Critical Issues
 
-### Issue #1: Raspberry Pi 5 CEC Intermittent Failures
-**Status**:  Under Investigation  
+### Issue #1: bcmstat Package GitHub Archive Filename Mismatch
+**Status**: 🔍 Under Active Investigation  
+**Affects**: All LibreELEC builds  
+**Symptoms**: Build fails at package 1/290 with "File bcmstat-HASH.tar.gz doesn't exist"
+
+**Details**:
+- bcmstat package downloads from GitHub as `HASH.tar.gz`
+- LibreELEC extract script expects `bcmstat-HASH.tar.gz`
+- Multiple fix approaches tested including LibreELEC get script patching
+- Build progression improved from immediate failures to 2-3 minute consistent failures
+
+**Current Status**: 
+- ✅ Universal Package Download System implemented
+- ✅ Build workflow optimization completed  
+- ✅ Multiple workflow trigger conflicts resolved
+- 🔄 **Active Work**: Direct filename resolution during download phase
+
+**Tracking**: High priority - blocking all LibreELEC builds
+
+### Issue #2: Raspberry Pi 5 CEC Intermittent Failures
+**Status**: 🔍 Under Investigation  
 **Affects**: Raspberry Pi 5 with specific TV models  
 **Symptoms**: CEC remote control works initially but stops responding after 30-60 minutes
 
@@ -22,8 +41,8 @@ cec_osd_name=LibreELEC
 **Root Cause**: Suspected timing issue in Pi 5 CEC implementation  
 **Tracking**: [GitHub Issue #42](https://github.com/SysGrimm/Project-Raven/issues/42)
 
-### Issue #2: Tailscale Authentication Timeout on Slow Networks
-**Status**:  Known Limitation  
+### Issue #3: Tailscale Authentication Timeout on Slow Networks
+**Status**: 🔧 Known Limitation  
 **Affects**: Networks with >500ms latency to Tailscale servers  
 **Symptoms**: Add-on shows "Authentication failed" during initial setup
 
