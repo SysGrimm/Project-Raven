@@ -348,21 +348,39 @@ jobs:
             fi
           fi
           
-          # Use our enhanced download function, but download to expected filename
+          # Use our enhanced download function
           echo "Downloading $PKG_NAME..."
           if download_with_mirrors "$filename" "$PKG_URL"; then
-            # If we downloaded to a different name than expected, rename it
-            if [ "$filename" != "$expected_filename" ] && [ -f "$filename" ]; then
-              echo "Renaming $filename to $expected_filename"
-              mv "$filename" "$expected_filename"
+            # Handle filename conversion if needed
+            if [ "$filename" != "$expected_filename" ]; then
+              if [ -f "$filename" ]; then
+                echo "Renaming $filename to $expected_filename"
+                mv "$filename" "$expected_filename"
+              elif [ -f "$expected_filename" ]; then
+                echo "File already exists as $expected_filename"
+              else
+                echo "Warning: Neither $filename nor $expected_filename found after download"
+                # List what we actually have
+                echo "Files in directory:"
+                ls -la
+                # Try to find any file that looks like it could be our download
+                possible_file=$(ls -1 | grep -E "(${PKG_NAME}|$(echo "$filename" | sed 's/\.[^.]*$//'))" | head -1)
+                if [ -n "$possible_file" ]; then
+                  echo "Found possible match: $possible_file, renaming to $expected_filename"
+                  mv "$possible_file" "$expected_filename"
+                fi
+              fi
             fi
             
-            # Final verification
+            # Final verification with more detailed error reporting
             if [ -s "$expected_filename" ]; then
               echo "Successfully downloaded $PKG_NAME ($expected_filename)"
+              echo "File size: $(stat -c%s "$expected_filename" 2>/dev/null || echo "unknown") bytes"
               exit 0
             else
-              echo "Downloaded file is empty!"
+              echo "Error: Expected file $expected_filename not found or empty!"
+              echo "Current directory contents:"
+              ls -la
               exit 1
             fi
           else
