@@ -263,6 +263,21 @@ jobs:
                 echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
               fi
               ;;
+            "7-zip")
+              # LibreELEC expects 7-zip-VERSION.tar.xz but 7-zip.org provides 7zVERSION-src.tar.xz
+              if echo "$filename" | grep -q '^7z.*-src\.tar\.xz$'; then
+                # Extract version from 7zVERSION-src.tar.xz and make 7-zip-VERSION.tar.xz
+                version=$(echo "$filename" | sed 's/^7z//' | sed 's/-src\.tar\.xz$//')
+                # Format version with dots (e.g. 2301 -> 23.01)
+                if [ ${#version} -eq 4 ]; then
+                  formatted_version="${version:0:2}.${version:2:2}"
+                else
+                  formatted_version="$version"
+                fi
+                expected_filename="${PKG_NAME}-${formatted_version}.tar.xz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
           esac
           
           # Create package sources directory
