@@ -30,6 +30,7 @@ declare -A PACKAGE_FIXES=(
     ["kernel-firmware"]="filename"
     ["nss"]="combined_package"
     ["nspr"]="combined_package"
+    ["bcmstat"]="github_archive"
 )
 
 # Analyze all package.mk files

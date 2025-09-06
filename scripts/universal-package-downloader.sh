@@ -36,6 +36,7 @@ declare -A FILENAME_PATTERNS=(
     ["kernel-firmware-*"]="linux-firmware-*"  # kernel-firmware-VERSION.tar.xz <- linux-firmware-VERSION.tar.xz
     ["nss-*"]="nss-*-with-nspr-*"  # nss-VERSION.tar.gz <- nss-VERSION-with-nspr-VERSION.tar.gz
     ["nspr-*"]="nss-*-with-nspr-*"  # nspr-VERSION.tar.gz <- nss-VERSION-with-nspr-VERSION.tar.gz
+    ["bcmstat-*"]="*.tar.gz"  # bcmstat-HASH.tar.gz <- HASH.tar.gz (GitHub archive pattern)
 )
 
 # Auto-detect package type and source
