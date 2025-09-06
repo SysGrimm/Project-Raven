@@ -139,25 +139,50 @@ jobs:
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           
-          echo "Patching LibreELEC scripts to fix bcmstat GitHub archive filename..."
+          echo "Creating bcmstat GitHub archive filename fix..."
           
-          # Backup the original get script
+          # Create a script to run after bcmstat download to fix the filename
+          cat > scripts/bcmstat-post-download.sh << 'EOF'
+          #!/bin/bash
+          # Post-download fix for bcmstat GitHub archive filename mismatch
+          
+          PKG_NAME="bcmstat"
+          SOURCES_DIR="sources/${PKG_NAME}"
+          HASH="1698ec66f7dd38b21d92958dfe08a79dd07300a5"
+          DOWNLOADED_FILE="${SOURCES_DIR}/${HASH}.tar.gz"
+          EXPECTED_FILE="${SOURCES_DIR}/bcmstat-${HASH}.tar.gz"
+          
+          echo "Checking for bcmstat filename mismatch..."
+          
+          if [[ -f "$DOWNLOADED_FILE" && ! -f "$EXPECTED_FILE" ]]; then
+            echo "Found downloaded file: $DOWNLOADED_FILE"
+            echo "Creating expected filename: $EXPECTED_FILE"
+            cp "$DOWNLOADED_FILE" "$EXPECTED_FILE"
+            echo "✓ bcmstat filename fix applied"
+          elif [[ -f "$EXPECTED_FILE" ]]; then
+            echo "✓ Expected file already exists: $EXPECTED_FILE"
+          else
+            echo "⚠ Neither downloaded nor expected file found"
+            ls -la "$SOURCES_DIR"/ 2>/dev/null || echo "Sources directory doesn't exist yet"
+          fi
+          EOF
+          
+          chmod +x scripts/bcmstat-post-download.sh
+          
+          # Patch the get script to run our fix after bcmstat download
           cp scripts/get scripts/get.original
           
-          # Patch the get script to handle bcmstat specifically
-          sed -i '/wget ${WGET_OPT} -O "${PKG_SOURCE_NAME}" "${PKG_URL}"/c\
-          # Handle bcmstat GitHub archive filename mismatch\
-          if [[ "${PKG_NAME}" == "bcmstat" && "${PKG_URL}" == *"github.com"*"/archive/"* ]]; then\
-            echo "Downloading bcmstat with corrected filename..."\
-            mkdir -p "${SOURCES}/${PKG_NAME}"\
-            cd "${SOURCES}/${PKG_NAME}"\
-            wget ${WGET_OPT} -O "${PKG_SOURCE_NAME}" "${PKG_URL}"\
-            echo "✓ Downloaded bcmstat as ${PKG_SOURCE_NAME}"\
-          else\
-            wget ${WGET_OPT} -O "${PKG_SOURCE_NAME}" "${PKG_URL}"\
-          fi' scripts/get
+          # Add our post-download fix to the end of the get script
+          cat >> scripts/get << 'PATCH'
           
-          echo "✓ LibreELEC get script patched for bcmstat GitHub archive handling!"
+          # bcmstat GitHub archive filename fix
+          if [[ "${PKG_NAME}" == "bcmstat" ]]; then
+            echo "Running bcmstat post-download filename fix..."
+            ${SCRIPTS}/bcmstat-post-download.sh
+          fi
+          PATCH
+          
+          echo "✓ bcmstat post-download fix configured!"
 
       - name: Copy custom packages
         run: |
