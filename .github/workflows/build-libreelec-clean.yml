@@ -7,13 +7,6 @@ on:
         description: 'Reason for manual build'
         required: false
         default: 'Manual trigger'
-    paths-ignore:
-      - 'wiki/**'
-      - 'README.md'
-      - '*.md'
-      - 'docs/**'
-  workflow_dispatch:
-    inputs:
       device:
         description: 'Target device (RPi4, RPi5, Generic)'
         required: false
