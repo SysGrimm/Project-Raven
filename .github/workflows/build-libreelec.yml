@@ -139,13 +139,13 @@ jobs:
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           
-          echo "Pre-downloading bcmstat to fix GitHub archive filename issue..."
+          echo "Pre-downloading packages to fix archive filename issues..."
           
-          # Create sources directory for bcmstat
+          # Pre-download bcmstat (GitHub archive pattern)
+          echo "=== Downloading bcmstat ==="
           mkdir -p sources/bcmstat
           cd sources/bcmstat
           
-          # Download the file directly
           BCMSTAT_URL="https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz"
           HASH="1698ec66f7dd38b21d92958dfe08a79dd07300a5"
           EXPECTED_FILENAME="bcmstat-${HASH}.tar.gz"
@@ -153,7 +153,6 @@ jobs:
           echo "Downloading bcmstat from: $BCMSTAT_URL"
           echo "Saving as expected filename: $EXPECTED_FILENAME"
           
-          # Download with the correct filename LibreELEC expects
           wget -O "$EXPECTED_FILENAME" "$BCMSTAT_URL"
           
           if [[ -f "$EXPECTED_FILENAME" ]]; then
@@ -165,7 +164,31 @@ jobs:
           fi
           
           cd ../..
-          echo "✅ bcmstat pre-download completed!"
+          
+          # Pre-download configtools (GNU savannah pattern)
+          echo "=== Downloading configtools ==="
+          mkdir -p sources/configtools
+          cd sources/configtools
+          
+          CONFIGTOOLS_URL="http://git.savannah.gnu.org/cgit/config.git/snapshot/config-28ea239c53a2d5d8800c472bc2452eaa16e37af2.tar.gz"
+          CONFIG_HASH="28ea239c53a2d5d8800c472bc2452eaa16e37af2"
+          CONFIG_EXPECTED="configtools-${CONFIG_HASH}.tar.gz"
+          
+          echo "Downloading configtools from: $CONFIGTOOLS_URL"
+          echo "Saving as expected filename: $CONFIG_EXPECTED"
+          
+          wget -O "$CONFIG_EXPECTED" "$CONFIGTOOLS_URL"
+          
+          if [[ -f "$CONFIG_EXPECTED" ]]; then
+            echo "✅ Successfully pre-downloaded configtools as $CONFIG_EXPECTED"
+            ls -la "$CONFIG_EXPECTED"
+          else
+            echo "❌ Failed to download configtools"
+            exit 1
+          fi
+          
+          cd ../..
+          echo "✅ Package pre-downloads completed!"
 
       - name: Copy custom packages
         run: |
