@@ -176,7 +176,7 @@ jobs:
                 ;;
               *)
                 # For other files, try to infer mirror from original URL
-                if [[ "$primary_url" == *"ftp.gnu.org"* ]]; then
+                if echo "$primary_url" | grep -q "ftp.gnu.org"; then
                   mirrors=(
                     "${primary_url/ftp.gnu.org/mirrors.kernel.org}"
                     "${primary_url/ftp.gnu.org/ftpmirror.gnu.org}"
@@ -244,18 +244,18 @@ jobs:
           case "$PKG_NAME" in
             "texturecache.py")
               # LibreELEC expects texturecache.py-VERSION.tar.gz but GitHub provides VERSION.tar.gz
-              if [[ "$filename" =~ ^[0-9] ]]; then
+              if echo "$filename" | grep -q '^[0-9]'; then
                 expected_filename="${PKG_NAME}-${filename}"
-                echo "🔧 Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
               fi
               ;;
             "ir-bpf-decoders")
               # LibreELEC expects ir-bpf-decoders-VERSION.tar.gz but GitHub provides v4l-utils-VERSION.tar.gz
-              if [[ "$filename" =~ ^v4l-utils- ]]; then
+              if echo "$filename" | grep -q '^v4l-utils-'; then
                 # Extract version from v4l-utils-VERSION.tar.gz and make ir-bpf-decoders-VERSION.tar.gz
                 version=$(echo "$filename" | sed 's/^v4l-utils-//' | sed 's/.tar.gz$//')
                 expected_filename="${PKG_NAME}-${version}.tar.gz"
-                echo "🔧 Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
               fi
               ;;
           esac
@@ -269,10 +269,10 @@ jobs:
             echo "File $expected_filename already exists, verifying..."
             # Basic verification - check if it's not empty and looks like an archive
             if [ -s "$expected_filename" ] && file "$expected_filename" | grep -q -E "(compressed|archive|gzip|XZ|bzip2|tar)"; then
-              echo "✓ Existing file appears valid, skipping download"
+              echo "Existing file appears valid, skipping download"
               exit 0
             else
-              echo "⚠ Existing file appears corrupted, re-downloading..."
+              echo "Existing file appears corrupted, re-downloading..."
               rm -f "$expected_filename"
             fi
           fi
@@ -282,20 +282,20 @@ jobs:
           if download_with_mirrors "$filename" "$PKG_URL"; then
             # If we downloaded to a different name than expected, rename it
             if [ "$filename" != "$expected_filename" ] && [ -f "$filename" ]; then
-              echo "🔧 Renaming $filename to $expected_filename"
+              echo "Renaming $filename to $expected_filename"
               mv "$filename" "$expected_filename"
             fi
             
             # Final verification
             if [ -s "$expected_filename" ]; then
-              echo "✓ Successfully downloaded $PKG_NAME ($expected_filename)"
+              echo "Successfully downloaded $PKG_NAME ($expected_filename)"
               exit 0
             else
-              echo "✗ Downloaded file is empty!"
+              echo "Downloaded file is empty!"
               exit 1
             fi
           else
-            echo "✗ Failed to download $PKG_NAME from all mirrors"
+            echo "Failed to download $PKG_NAME from all mirrors"
             exit 1
           fi
           GETSCRIPT
