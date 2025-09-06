@@ -137,43 +137,53 @@ jobs:
 
       - name: Pre-download sources to fix download failures
         run: |
-          # Create sources directory if it doesn't exist
-          mkdir -p libreelec-custom-build/LibreELEC.tv/sources
+      - name: Pre-download sources to fix download failures
+        run: |
+          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v3.0 ==="
+          echo "Creating LibreELEC-compatible source solution..."
           
-          # Pre-download bcmstat source package (GitHub pattern)
+          cd libreelec-custom-build/LibreELEC.tv
+          
+          # Create sources directory
+          mkdir -p sources
+          cd sources
+          
+          # Pre-download all packages to sources directory
           echo "Pre-downloading bcmstat..."
-          cd libreelec-custom-build/LibreELEC.tv/sources
-          curl -L -o bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz
+          curl -L -o bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz \
+            https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz
           
-          # Pre-download configtools source package (GNU Savannah pattern)
           echo "Pre-downloading configtools..."
-          curl -L -o configtools-2021-08-14.tar.gz https://git.savannah.gnu.org/gitweb/?p=config.git;a=snapshot;h=5123daa3d5;sf=tgz
+          curl -L -o configtools-2021-08-14.tar.gz \
+            https://git.savannah.gnu.org/gitweb/?p=config.git;a=snapshot;h=5123daa3d5;sf=tgz
           
-          # Pre-download make source package (GNU mirror pattern)
           echo "Pre-downloading make..."
-          curl -L -o make-4.4.1.tar.gz https://mirrors.kernel.org/gnu/make/make-4.4.1.tar.gz
+          curl -L -o make-4.4.1.tar.gz \
+            https://mirrors.kernel.org/gnu/make/make-4.4.1.tar.gz
           
-          # Pre-download fakeroot source package (Debian pattern)
           echo "Pre-downloading fakeroot..."
-          curl -L -o fakeroot-1.32.2.tar.gz https://deb.debian.org/debian/pool/main/f/fakeroot/fakeroot_1.32.2.orig.tar.gz
+          curl -L -o fakeroot-1.32.2.tar.gz \
+            https://deb.debian.org/debian/pool/main/f/fakeroot/fakeroot_1.32.2.orig.tar.gz
           
-          # Pre-download ninja source package (GitHub v2 pattern)
           echo "Pre-downloading ninja..."
-          curl -L -o ninja-1.11.1.tar.gz https://github.com/ninja-build/ninja/archive/refs/tags/v1.11.1.tar.gz
+          curl -L -o ninja-1.11.1.tar.gz \
+            https://github.com/ninja-build/ninja/archive/refs/tags/v1.11.1.tar.gz
           
-          # Pre-download autoconf source package (GNU mirror v2 pattern)
           echo "Pre-downloading autoconf..."
-          curl -L -o autoconf-2.71.tar.xz https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.xz
+          curl -L -o autoconf-2.71.tar.xz \
+            https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.xz
           
-          # Pre-download setuptools source package (GitHub v3 pattern)
           echo "Pre-downloading setuptools..."
-          curl -L -o setuptools-52.0.0.tar.gz https://github.com/pypa/setuptools/archive/refs/tags/v52.0.0.tar.gz
+          curl -L -o setuptools-52.0.0.tar.gz \
+            https://github.com/pypa/setuptools/archive/refs/tags/v52.0.0.tar.gz
           
-          cd ../../..
+          cd ..
           
-          # Debug: List pre-downloaded files
-          echo "=== DEBUG: Pre-downloaded files ==="
-          ls -la libreelec-custom-build/LibreELEC.tv/sources/
+          # Set environment variable to make LibreELEC use our sources
+          echo "export SOURCES_DIR=\$ROOT/sources" >> config/options
+          
+          echo "=== DEBUG: Pre-downloaded sources ==="
+          ls -la sources/
 
       - name: Copy custom packages
         run: |
