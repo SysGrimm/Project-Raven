@@ -158,7 +158,9 @@ jobs:
           ./comprehensive-package-fix.sh LibreELEC.tv
           
           echo "✓ Comprehensive package fixes applied successfully!"
-          echo "This should handle all known download issues automatically."          # Create advanced download script with comprehensive mirror support
+          echo "This should handle all known download issues automatically."
+          
+          # Create advanced download script with comprehensive mirror support
           cat > scripts/download-with-mirrors.sh << 'DLSCRIPT'
           #!/bin/bash
           
