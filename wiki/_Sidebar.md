@@ -11,7 +11,7 @@ Quick reference for finding information in the Project-Raven wiki.
 | **[[Hardware-Requirements]]** | Compatible devices and specs | 3 min |
 | **[[Installation-Methods]]** | Different deployment options | 10 min |
 
-## 🔧 Core Components
+## Core Components
 
 | Component | Main Page | Deep Dive | Configuration |
 |-----------|-----------|-----------|---------------|
@@ -20,11 +20,12 @@ Quick reference for finding information in the Project-Raven wiki.
 | **Remote Control** | [[CEC-Troubleshooting]] | [[Hardware-Requirements]] | [[Known-Issues]] |
 | **Custom Themes** | [[Theme-Customization]] | [[Add-on-Development]] | [[Build-System]] |
 
-## 🛠 Development & Building
+## Development & Building
 
 | Topic | Primary Page | Related Pages |
 |-------|--------------|---------------|
-| **Building Images** | [[Custom-LibreELEC-Build]] | [[Build-System]], [[Architecture-Overview]] |
+| **Building Images** | [[Custom-LibreELEC-Build]] | [[Universal-Package-Download-System]], [[Architecture-Overview]] |
+| **Package Management** | [[Universal-Package-Download-System]] | [[Custom-LibreELEC-Build]], [[Build-System]] |
 | **Creating Add-ons** | [[Add-on-Development]] | [[Tailscale-Add-on]], [[Custom-Repositories]] |
 | **Theme Development** | [[Theme-Customization]] | [[Performance-Optimization]] |
 | **Automation** | [[Automated-Deployment]] | [[Build-System]], [[Custom-Repositories]] |
@@ -49,7 +50,7 @@ Quick reference for finding information in the Project-Raven wiki.
 | **Compatibility** | [[Hardware-Requirements]], [[Known-Issues]] | Planning deployments |
 | **Version History** | [[Changelog]], [[Version-2.0-Enhancements]] | Release information |
 
-## 🎯 By Use Case
+## By Use Case
 
 ### Home Theater Enthusiast
 1. Start: [[Quick-Start-Guide]]
@@ -78,7 +79,7 @@ Quick reference for finding information in the Project-Raven wiki.
 4. Monitoring: [[Performance-Optimization]]
 5. Maintenance: [[Known-Issues]]
 
-## 🔍 Search Tips
+## Search Tips
 
 ### Finding Specific Information
 - **Error Messages**: Search in [[Known-Issues]] first
@@ -92,7 +93,7 @@ Quick reference for finding information in the Project-Raven wiki.
 - **Build Problems** → [[Build-Problems]] → [[Custom-LibreELEC-Build]] → [[Known-Issues]]
 - **Theme Issues** → [[Theme-Customization]] → [[Add-on-Development]] → [[Performance-Optimization]]
 
-## 📊 Complexity Levels
+## Complexity Levels
 
 ### Beginner (🟢)
 - [[Home]]
@@ -115,7 +116,7 @@ Quick reference for finding information in the Project-Raven wiki.
 - [[Build-System]]
 - [[Automated-Deployment]]
 
-## 🔄 Update Frequency
+## Update Frequency
 
 | Page | Update Frequency | Last Major Update |
 |------|------------------|-------------------|
@@ -155,6 +156,6 @@ These pages are optimized for mobile viewing:
 
 ---
 
-**💡 Pro Tip**: Use your browser's find function (Ctrl+F / Cmd+F) to search within pages for specific terms or error messages.
+** Pro Tip**: Use your browser's find function (Ctrl+F / Cmd+F) to search within pages for specific terms or error messages.
 
-**🔄 Last Updated**: September 5, 2025
+** Last Updated**: September 5, 2025

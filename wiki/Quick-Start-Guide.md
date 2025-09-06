@@ -2,14 +2,14 @@
 
 Get up and running with Project-Raven in under 30 minutes! This guide covers the fastest path from zero to a working custom LibreELEC media center with VPN capabilities.
 
-## 🎯 What You'll Get
+## What You'll Get
 
 - **LibreELEC** media center with working CEC remote control
 - **Tailscale VPN** for secure remote access
 - **Custom theme** and pre-installed add-ons
 - **Turnkey solution** ready to deploy
 
-## ⚡ 5-Minute Quick Start
+## 5-Minute Quick Start
 
 ### Prerequisites Check
 ```bash
@@ -52,15 +52,15 @@ cd libreelec-custom-build
 # Output: LibreELEC-RPi.RPi4-raven-YYYYMMDD.img
 ```
 
-## 🔧 Hardware Setup
+## Hardware Setup
 
 ### Supported Devices
 | Device | Status | Notes |
 |--------|--------|-------|
-| Raspberry Pi 4 | ✅ Fully Supported | Recommended |
-| Raspberry Pi 5 | ✅ Fully Supported | Best Performance |
-| Raspberry Pi 3 | ⚠️ Limited | Basic functionality |
-| Generic x86_64 | ✅ Supported | PC/NUC builds |
+| Raspberry Pi 4 |  Fully Supported | Recommended |
+| Raspberry Pi 5 |  Fully Supported | Best Performance |
+| Raspberry Pi 3 |  Limited | Basic functionality |
+| Generic x86_64 |  Supported | PC/NUC builds |
 
 ### Required Hardware
 - **Raspberry Pi 4/5** (4GB+ RAM recommended)
@@ -105,7 +105,7 @@ sync
 # 4. Set SSH password
 ```
 
-## 🌐 Tailscale VPN Setup
+## Tailscale VPN Setup
 
 ### Automatic Configuration
 1. Navigate to **Settings** → **Add-ons** → **My Add-ons** → **Services**
@@ -172,7 +172,7 @@ Once Tailscale is connected:
 - **Sybu** (Android): Advanced Kodi remote  
 - **Tailscale** (Mobile): VPN status and control
 
-## 🎨 Customization Quick Wins
+## Customization Quick Wins
 
 ### Change Theme
 1. **Settings** → **Interface** → **Skin**
@@ -193,7 +193,7 @@ nfs://192.168.1.100/media
 2. Browse available add-ons
 3. Popular choices: YouTube, Emby, Plex
 
-## 🔍 Health Check
+## Health Check
 
 ### Verify Everything Works
 ```bash
@@ -274,7 +274,7 @@ free -h
 - **Kodi Community**: https://forum.kodi.tv
 - **Tailscale Docs**: https://tailscale.com/kb
 
-## ✅ Success Criteria
+## Success Criteria
 
 You've successfully completed the quick start when:
 

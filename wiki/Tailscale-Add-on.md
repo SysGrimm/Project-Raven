@@ -2,7 +2,7 @@
 
 This page documents the complete Tailscale VPN service add-on that provides secure remote access to your LibreELEC media center.
 
-## 🎯 Overview
+## Overview
 
 The Tailscale add-on integrates Tailscale's mesh VPN directly into LibreELEC, allowing you to:
 - Access your media center from anywhere
@@ -10,7 +10,7 @@ The Tailscale add-on integrates Tailscale's mesh VPN directly into LibreELEC, al
 - Connect multiple devices in a private network
 - Use your LibreELEC device as a VPN exit node
 
-## 📦 Add-on Components
+## Add-on Components
 
 ### Core Files Structure
 ```
@@ -35,7 +35,7 @@ service.tailscale/
 - **ARM64** (aarch64): Raspberry Pi 2/3/4/5
 - **x86_64**: Generic PC builds
 
-## 🔧 Installation Methods
+## Installation Methods
 
 ### Method 1: Custom LibreELEC Build (Recommended)
 Include the add-on in your custom build:
@@ -56,7 +56,7 @@ PKG_ADDON_TYPE="xbmc.service"
 ### Method 3: Repository Installation
 Add custom repository with pre-built add-on packages.
 
-## ⚙️ Configuration Options
+## Configuration Options
 
 ### Basic Settings
 
@@ -82,7 +82,7 @@ Add custom repository with pre-built add-on packages.
 | Advertise Routes | Advertise local subnet routes | None |
 | SNAT Routes | Use source NAT for advertised routes | Disabled |
 
-## 🚀 Service Architecture
+## Service Architecture
 
 ### TailscaleService Class
 The main service class handles:
@@ -141,7 +141,7 @@ Use the "Reset authentication" button in settings to:
 2. Clear stored authentication state
 3. Restart daemon for fresh authentication
 
-## 🌐 Network Configuration
+## Network Configuration
 
 ### Basic Connectivity
 Once authenticated, your LibreELEC device gets:
@@ -180,7 +180,7 @@ Advertise Routes: 0.0.0.0/0
 # Other devices can then route all traffic through LibreELEC
 ```
 
-## 🔍 Monitoring and Status
+## Monitoring and Status
 
 ### Status Display
 The add-on provides real-time status information:
@@ -203,7 +203,7 @@ Continuous monitoring includes:
 - **Debug Mode**: Verbose logging for troubleshooting
 - **Error Notifications**: User-friendly error messages in Kodi UI
 
-## 🛠 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -263,7 +263,7 @@ tail -f /storage/.kodi/temp/kodi.log | grep -i tailscale
 3. **Access Review**: Regularly audit device access in admin console
 4. **Network Segmentation**: Use ACLs to limit device access scope
 
-## 📈 Performance Optimization
+## Performance Optimization
 
 ### Bandwidth Considerations
 - **Direct Connections**: Peer-to-peer when possible (no relay)
@@ -280,7 +280,7 @@ tail -f /storage/.kodi/temp/kodi.log | grep -i tailscale
 - **Startup Integration**: Starts with LibreELEC, stops cleanly on shutdown
 - **Resource Management**: Respects LibreELEC memory constraints
 
-## 🔄 Updates and Maintenance
+## Updates and Maintenance
 
 ### Binary Updates
 Update Tailscale binaries in custom builds:

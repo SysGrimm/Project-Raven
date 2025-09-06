@@ -2,13 +2,16 @@
 
 This page documents the complete process for creating custom LibreELEC images with pre-installed add-ons, themes, and configurations.
 
-## 🎯 Build System Overview
+## Build System Overview
 
 The custom build system extends LibreELEC's official build framework to create turnkey media center images with:
+- **Universal Package Download System** for reliable builds
 - **Tailscale VPN** pre-configured
 - **Custom themes** and skins
 - **Essential add-ons** pre-installed
 - **Optimized settings** for your hardware
+
+For comprehensive build reliability, see the **[Universal Package Download System](Universal-Package-Download-System.md)** documentation.
 
 ## 📁 Build Directory Structure
 
@@ -39,7 +42,7 @@ libreelec-custom-build/
     └── logs/                  # Build logs and reports
 ```
 
-## 🛠 Environment Setup
+## Environment Setup
 
 ### Prerequisites
 ```bash
@@ -65,7 +68,7 @@ git checkout libreelec-12.0
 PROJECT=RPi DEVICE=RPi4 ARCH=arm ./scripts/install
 ```
 
-## 📦 Package Configuration
+## Package Configuration
 
 ### Tailscale Add-on Package
 The Tailscale add-on is defined in `packages/addons/service/tailscale/package.mk`:
@@ -130,7 +133,7 @@ service.upnp=official
 plugin.video.emby=repository.emby
 ```
 
-## 🎨 Theme Customization
+## Theme Customization
 
 ### Custom Theme Structure
 ```
@@ -164,7 +167,7 @@ addon_install_theme() {
 }
 ```
 
-## 🔧 Build Process
+## Build Process
 
 ### Main Build Script
 The `scripts/build-image.sh` handles the complete build process:
@@ -256,7 +259,7 @@ EOF
 }
 ```
 
-## 🎯 Hardware-Specific Builds
+## Hardware-Specific Builds
 
 ### Raspberry Pi 4/5 Configuration
 ```bash
@@ -286,7 +289,7 @@ KODI_EXTRA_OPTS="--enable-vaapi --enable-vdpau --enable-gl"
 KERNEL_OPTS="i915.enable_guc=2 i915.enable_fbc=1"
 ```
 
-## 📊 Build Performance
+## Build Performance
 
 ### Build Times (Approximate)
 | Hardware | Clean Build | Incremental | Custom Image |
@@ -308,7 +311,7 @@ export MAKEFLAGS="-j$(nproc)"
 export BUILD_MINIMAL=yes
 ```
 
-## 🔄 Automated Builds
+## Automated Builds
 
 ### GitHub Actions Integration
 Create `.github/workflows/build-image.yml`:
@@ -395,7 +398,7 @@ test_image() {
 - **Network Test**: Validate Tailscale connectivity
 - **Performance Test**: Check media playback performance
 
-## 📋 Troubleshooting Build Issues
+## Troubleshooting Build Issues
 
 ### Common Build Problems
 
@@ -438,7 +441,7 @@ PROJECT=RPi DEVICE=RPi4 ./scripts/build package-name
 tail -f target/build.log
 ```
 
-## 📈 Advanced Customizations
+## Advanced Customizations
 
 ### Custom Kernel Patches
 ```bash

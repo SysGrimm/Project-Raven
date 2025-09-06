@@ -5,7 +5,7 @@ This page documents current known issues, limitations, and workarounds for Proje
 ## 🚨 Critical Issues
 
 ### Issue #1: Raspberry Pi 5 CEC Intermittent Failures
-**Status**: 🔍 Under Investigation  
+**Status**:  Under Investigation  
 **Affects**: Raspberry Pi 5 with specific TV models  
 **Symptoms**: CEC remote control works initially but stops responding after 30-60 minutes
 
@@ -23,7 +23,7 @@ cec_osd_name=LibreELEC
 **Tracking**: [GitHub Issue #42](https://github.com/SysGrimm/Project-Raven/issues/42)
 
 ### Issue #2: Tailscale Authentication Timeout on Slow Networks
-**Status**: ⚠️ Known Limitation  
+**Status**:  Known Limitation  
 **Affects**: Networks with >500ms latency to Tailscale servers  
 **Symptoms**: Add-on shows "Authentication failed" during initial setup
 
@@ -42,7 +42,7 @@ cd /storage/.kodi/addons/service.tailscale
 **Root Cause**: Default timeout too aggressive for high-latency connections  
 **Fix Status**: Will be addressed in v2.1 release
 
-## ⚠️ Major Limitations
+## Major Limitations
 
 ### Limitation #1: No HDR10+ Support on Generic x86_64 Builds
 **Affects**: Generic PC builds, Intel/AMD graphics  
@@ -87,7 +87,7 @@ mkdir -p /storage/.kodi/userdata/theme-overlay/
 ## 🐛 Minor Issues
 
 ### Issue #3: YouTube Add-on Occasional Playback Stutters
-**Status**: 🔧 Workaround Available  
+**Status**:  Workaround Available  
 **Affects**: 4K YouTube content on Pi 4 (not Pi 5)  
 **Symptoms**: Occasional frame drops during 4K playback
 
@@ -102,7 +102,7 @@ gpu_mem=256  # Increase from default 128
 ```
 
 ### Issue #4: SMB Share Discovery Slow on Some Networks
-**Status**: 📋 Configuration Issue  
+**Status**:  Configuration Issue  
 **Affects**: Networks with multiple subnets or complex topologies  
 **Symptoms**: SMB shares take 30+ seconds to appear in file browser
 
@@ -115,7 +115,7 @@ gpu_mem=256  # Increase from default 128
 ```
 
 ### Issue #5: Tailscale Status Display Incorrect After Sleep/Resume
-**Status**: 🔄 Cosmetic Issue  
+**Status**:  Cosmetic Issue  
 **Affects**: All platforms  
 **Symptoms**: Add-on status shows "Disconnected" even when VPN works
 
@@ -126,10 +126,10 @@ gpu_mem=256  # Increase from default 128
 # Or restart add-on: Settings → Add-ons → service.tailscale → Disable/Enable
 ```
 
-## 🏗 Build System Issues
+## Build System Issues
 
 ### Issue #6: Build Fails on macOS with Xcode 15+
-**Status**: 🔍 Under Investigation  
+**Status**:  Under Investigation  
 **Affects**: macOS users with latest Xcode  
 **Symptoms**: LibreELEC build fails during cross-compilation
 
@@ -145,7 +145,7 @@ docker run -v $(pwd):/workspace \
 ```
 
 ### Issue #7: Incremental Builds Sometimes Corrupted
-**Status**: 🔧 Workaround Available  
+**Status**:  Workaround Available  
 **Affects**: Development builds  
 **Symptoms**: Build succeeds but resulting image doesn't boot
 
@@ -188,12 +188,12 @@ make clean-package-tailscale
 # Recommended alternatives: Sybu for Kodi, Yatse
 ```
 
-## 🔧 Hardware-Specific Issues
+## Hardware-Specific Issues
 
 ### Raspberry Pi 4 Specific
 
 #### Issue #10: USB 3.0 Interference with 2.4GHz WiFi
-**Status**: 📋 Known Hardware Limitation  
+**Status**:  Known Hardware Limitation  
 **Affects**: Pi 4 with USB 3.0 devices and 2.4GHz WiFi  
 **Symptoms**: WiFi performance degrades when USB 3.0 devices active
 
@@ -222,10 +222,10 @@ usb_max_current_enable=1
 # Or use powered USB hub with Pi 5 compatible power management
 ```
 
-## 🌐 Network-Related Issues
+## Network-Related Issues
 
 ### Issue #12: Double NAT Prevents Tailscale Direct Connections
-**Status**: ⚠️ Network Configuration Issue  
+**Status**:  Network Configuration Issue  
 **Affects**: Networks with double NAT (ISP modem + router)  
 **Symptoms**: All Tailscale traffic routes through DERP relays
 
@@ -271,7 +271,7 @@ usb_max_current_enable=1
 - [ ] Advanced network monitoring
 - [ ] Multi-room audio/video synchronization
 
-## 📊 Issue Priority Matrix
+## Issue Priority Matrix
 
 | Issue | Severity | Frequency | Impact | Priority |
 |-------|----------|-----------|---------|----------|
