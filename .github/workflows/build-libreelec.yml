@@ -97,33 +97,211 @@ jobs:
 
       - name: Pre-download critical dependencies
         run: |
-          # Create sources directory for LibreELEC
-          mkdir -p /home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources
-          cd /home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources
+          cd libreelec-custom-build
+          echo "Creating comprehensive download reliability solution..."
           
-          # Download GMP from working mirror
-          echo "Downloading GMP from working mirror..."
-          wget -c -T 30 -t 3 "https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz" || \
-          wget -c -T 30 -t 3 "https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz" || \
-          echo "Warning: Could not pre-download GMP"
+          # Create the patch application script that will run after LibreELEC.tv is cloned
+          cat > comprehensive_download_fix.sh << 'EOF'
+          #!/bin/bash
+          set -e
           
-          # Ensure the file is there and valid
-          if [ -f "gmp-6.3.0.tar.xz" ]; then
-            echo "✓ GMP downloaded successfully ($(du -h gmp-6.3.0.tar.xz | cut -f1))"
-            # Verify it's a valid archive
-            if file gmp-6.3.0.tar.xz | grep -q "XZ compressed"; then
-              echo "✓ GMP archive is valid"
-            else
-              echo "⚠ GMP archive may be corrupted, removing..."
-              rm -f gmp-6.3.0.tar.xz
+          echo "Applying comprehensive download fixes..."
+          
+          # Function to wait for directory
+          wait_for_directory() {
+            local dir=$1
+            local timeout=600  # 10 minutes
+            local counter=0
+            
+            while [ ! -d "$dir" ] && [ $counter -lt $timeout ]; do
+              echo "Waiting for $dir directory... ($counter seconds)"
+              sleep 5
+              counter=$((counter + 5))
+            done
+            
+            if [ ! -d "$dir" ]; then
+              echo "ERROR: $dir directory not found after timeout"
+              exit 1
             fi
-          else
-            echo "⚠ GMP download failed"
+            echo "$dir directory found!"
+          }
+          
+          # Wait for LibreELEC.tv directory to be cloned
+          wait_for_directory "LibreELEC.tv"
+          
+          cd LibreELEC.tv
+          
+          echo "Creating master download script with fallback mirrors..."
+          
+          # Create advanced download script with comprehensive mirror support
+          cat > scripts/download-with-mirrors.sh << 'DLSCRIPT'
+          #!/bin/bash
+          
+          download_with_mirrors() {
+            local filename="$1"
+            local primary_url="$2"
+            
+            echo "Starting download for: $filename"
+            echo "Primary URL: $primary_url"
+            
+            # Define comprehensive mirror mappings
+            case "$filename" in
+              gmp-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/gmp/$filename"
+                  "https://ftpmirror.gnu.org/gmp/$filename"
+                  "https://mirror.us-east-1.nexcess.net/gnu/gmp/$filename"
+                  "https://ftp.halifax.rwth-aachen.de/gnu/gmp/$filename"
+                  "https://mirrors.ocf.berkeley.edu/gnu/gmp/$filename"
+                )
+                ;;
+              binutils-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/binutils/$filename"
+                  "https://ftpmirror.gnu.org/binutils/$filename"
+                  "https://mirror.us-east-1.nexcess.net/gnu/binutils/$filename"
+                )
+                ;;
+              mpfr-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/mpfr/$filename"
+                  "https://ftpmirror.gnu.org/mpfr/$filename"
+                )
+                ;;
+              mpc-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/mpc/$filename"
+                  "https://ftpmirror.gnu.org/mpc/$filename"
+                )
+                ;;
+              *)
+                # For other files, try to infer mirror from original URL
+                if [[ "$primary_url" == *"ftp.gnu.org"* ]]; then
+                  mirrors=(
+                    "${primary_url/ftp.gnu.org/mirrors.kernel.org}"
+                    "${primary_url/ftp.gnu.org/ftpmirror.gnu.org}"
+                  )
+                else
+                  mirrors=()
+                fi
+                ;;
+            esac
+            
+            # Add the original URL as backup
+            mirrors+=("$primary_url")
+            
+            # Try each mirror with robust download settings
+            for url in "${mirrors[@]}"; do
+              echo "Attempting download from: $url"
+              if wget --timeout=60 --tries=3 --retry-connrefused --waitretry=10 \
+                     --read-timeout=30 --dns-timeout=15 --connect-timeout=15 \
+                     -c "$url"; then
+                echo "✓ Successfully downloaded from: $url"
+                return 0
+              else
+                echo "✗ Failed to download from: $url"
+              fi
+            done
+            
+            echo "ERROR: All download attempts failed for $filename"
+            return 1
+          }
+          
+          # Export the function for use by other scripts
+          export -f download_with_mirrors
+          DLSCRIPT
+          
+          chmod +x scripts/download-with-mirrors.sh
+          
+          echo "Backing up original get script..."
+          if [ -f "scripts/get" ]; then
+            cp scripts/get scripts/get.original
+            
+            # Create enhanced get script
+            cat > scripts/get << 'GETSCRIPT'
+          #!/bin/bash
+          
+          # Source the advanced download function
+          source "$(dirname "$0")/download-with-mirrors.sh"
+          
+          # Get package information
+          PKG_NAME="$1"
+          
+          # Load package configuration
+          . config/options "$PKG_NAME"
+          
+          # Skip if no URL defined
+          if [ -z "$PKG_URL" ]; then
+            echo "No URL defined for $PKG_NAME, skipping download"
+            exit 0
           fi
           
-          # List downloaded files
-          echo "Downloaded dependencies:"
-          ls -la
+          # Extract filename from URL
+          filename=$(basename "$PKG_URL")
+          
+          # Create package sources directory
+          mkdir -p "sources/$PKG_NAME"
+          cd "sources/$PKG_NAME"
+          
+          # Check if file already exists and is valid
+          if [ -f "$filename" ]; then
+            echo "File $filename already exists, verifying..."
+            # Basic verification - check if it's not empty and looks like an archive
+            if [ -s "$filename" ] && (file "$filename" | grep -q -E "(compressed|archive|gzip|XZ|bzip2|tar)"); then
+              echo "✓ Existing file appears valid, skipping download"
+              exit 0
+            else
+              echo "⚠ Existing file appears corrupted, re-downloading..."
+              rm -f "$filename"
+            fi
+          fi
+          
+          # Use our enhanced download function
+          echo "Downloading $PKG_NAME..."
+          if download_with_mirrors "$filename" "$PKG_URL"; then
+            # Final verification
+            if [ -s "$filename" ]; then
+              echo "✓ Successfully downloaded $PKG_NAME ($filename)"
+              exit 0
+            else
+              echo "✗ Downloaded file is empty!"
+              exit 1
+            fi
+          else
+            echo "✗ Failed to download $PKG_NAME from all mirrors"
+            exit 1
+          fi
+          GETSCRIPT
+          
+          chmod +x scripts/get
+          fi
+          
+          echo "Patching package.mk files to use reliable mirrors..."
+          
+          # Find and patch all package.mk files with broken URLs
+          find packages/ tools/ -name "package.mk" -type f | while read pkg_file; do
+            if grep -q "gmplib.org\|sources.libreelec.tv.*404" "$pkg_file" 2>/dev/null; then
+              echo "Patching: $pkg_file"
+              sed -i.bak \
+                -e 's|https://gmplib.org/download/gmp/|https://mirrors.kernel.org/gnu/gmp/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/gmp/|https://mirrors.kernel.org/gnu/gmp/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/binutils/|https://mirrors.kernel.org/gnu/binutils/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/mpfr/|https://mirrors.kernel.org/gnu/mpfr/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/mpc/|https://mirrors.kernel.org/gnu/mpc/|g' \
+                "$pkg_file"
+            fi
+          done
+          
+          echo "✓ Comprehensive download fixes applied successfully!"
+          EOF
+          
+          chmod +x comprehensive_download_fix.sh
+          
+          # Start the fix script in background so it applies patches as soon as LibreELEC.tv is cloned
+          echo "Starting comprehensive download fix in background..."
+          nohup ./comprehensive_download_fix.sh > download_fix.log 2>&1 &
+          
+          echo "✓ Download reliability system initialized"
 
       - name: Clone LibreELEC source
         run: |
@@ -147,52 +325,6 @@ jobs:
           echo "Checking for essential directories:"
           ls -la LibreELEC.tv/scripts/ || echo "Warning: scripts directory not found"
           ls -la LibreELEC.tv/packages/ || echo "Warning: packages directory not found"
-
-      - name: Apply download reliability patches
-        run: |
-          cd libreelec-custom-build/LibreELEC.tv
-          
-          # Configure wget to be more resilient to network issues
-          echo "timeout = 30" > ~/.wgetrc
-          echo "tries = 5" >> ~/.wgetrc
-          echo "retry_connrefused = on" >> ~/.wgetrc
-          echo "waitretry = 3" >> ~/.wgetrc
-          
-          # Find and patch GMP package definition
-          GMP_PKG_FILE=$(find packages/ -name "*gmp*" -type f -path "*/package.mk" | head -1)
-          if [ -n "$GMP_PKG_FILE" ]; then
-            echo "Found GMP package file: $GMP_PKG_FILE"
-            echo "Original GMP package content:"
-            head -20 "$GMP_PKG_FILE"
-            
-            # Backup original and patch with working mirror
-            cp "$GMP_PKG_FILE" "$GMP_PKG_FILE.bak"
-            sed -i 's|PKG_URL=.*|PKG_URL="https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz"|g' "$GMP_PKG_FILE"
-            
-            echo "Patched GMP package content:"
-            head -20 "$GMP_PKG_FILE"
-          else
-            echo "⚠ Could not find GMP package definition"
-          fi
-          
-          # Verify scripts directory exists before patching
-          if [ -d "scripts/" ]; then
-            echo "Applying network timeout and retry patches to scripts..."
-            # Apply network timeout and retry patches to scripts
-            find scripts/ -name "get" -type f -exec sed -i.bak \
-              's/wget /wget --timeout=30 --tries=5 --retry-connrefused --waitretry=3 /g' {} \;
-            echo "Download reliability patches applied to get scripts"
-          else
-            echo "Warning: scripts directory not found, skipping get script patches"
-          fi
-          
-          # Check for and patch any Makefile downloads
-          if [ -f "Makefile" ]; then
-            echo "Patching Makefile for download reliability..."
-            sed -i.bak 's/wget /wget --timeout=30 --tries=5 --retry-connrefused --waitretry=3 /g' Makefile || true
-          fi
-          
-          echo "Download reliability configuration completed"
 
       - name: Copy custom packages
         run: |
