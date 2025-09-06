@@ -414,6 +414,30 @@ jobs:
                 fi
               fi
               ;;
+            "nss"|"nspr")
+              # Handle NSS/NSPR combined package - Mozilla provides combined nss-X.XX-with-nspr-X.XX.tar.gz
+              # but LibreELEC expects separate nss-X.XX.tar.gz and nspr-X.XX.tar.gz files
+              if echo "$filename" | grep -q '^nss-.*-with-nspr-.*\.tar\.gz$'; then
+                echo "Found combined NSS/NSPR package: $filename"
+                
+                # Extract NSS and NSPR versions from combined filename
+                nss_version=$(echo "$filename" | sed -n 's/^nss-\([0-9.]*\)-with-nspr-.*/\1/p')
+                nspr_version=$(echo "$filename" | sed -n 's/^nss-.*-with-nspr-\([0-9.]*\)\.tar\.gz$/\1/p')
+                
+                echo "Extracted versions - NSS: $nss_version, NSPR: $nspr_version"
+                
+                if [ "$PKG_NAME" = "nss" ]; then
+                  expected_filename="nss-${nss_version}.tar.gz"
+                  echo "Setting expected filename for NSS: $expected_filename"
+                elif [ "$PKG_NAME" = "nspr" ]; then
+                  expected_filename="nspr-${nspr_version}.tar.gz"
+                  echo "Setting expected filename for NSPR: $expected_filename"
+                fi
+                
+                # We'll need special extraction handling for this combined package
+                echo "Will need to extract individual package from combined archive"
+              fi
+              ;;
           esac
           
           # Create package sources directory
@@ -473,7 +497,57 @@ jobs:
             if [ "$filename" != "$expected_filename" ]; then
               if [ -f "$filename" ]; then
                 echo "Renaming $filename to $expected_filename"
-                mv "$filename" "$expected_filename"
+                
+                # Special handling for NSS/NSPR combined package
+                if [[ "$PKG_NAME" == "nss" || "$PKG_NAME" == "nspr" ]] && echo "$filename" | grep -q '^nss-.*-with-nspr-.*\.tar\.gz$'; then
+                  echo "Processing combined NSS/NSPR package for $PKG_NAME"
+                  
+                  # Extract the combined archive
+                  echo "Extracting combined package: $filename"
+                  temp_dir="/tmp/nss_nspr_extract"
+                  mkdir -p "$temp_dir"
+                  
+                  # Extract combined archive
+                  tar -xzf "$filename" -C "$temp_dir"
+                  
+                  # Find the extracted directory (usually nss-VERSION)
+                  extracted_dir=$(find "$temp_dir" -maxdepth 1 -type d -name "nss-*" | head -1)
+                  
+                  if [ -n "$extracted_dir" ] && [ -d "$extracted_dir" ]; then
+                    echo "Found extracted directory: $extracted_dir"
+                    
+                    if [ "$PKG_NAME" = "nss" ]; then
+                      # For NSS, repackage the main directory
+                      echo "Creating NSS package..."
+                      (cd "$temp_dir" && tar -czf "$(basename "$extracted_dir").tar.gz" "$(basename "$extracted_dir")")
+                      cp "$temp_dir/$(basename "$extracted_dir").tar.gz" "$expected_filename"
+                    elif [ "$PKG_NAME" = "nspr" ]; then
+                      # For NSPR, find and repackage the nspr subdirectory
+                      nspr_dir=$(find "$extracted_dir" -type d -name "nspr" | head -1)
+                      if [ -n "$nspr_dir" ] && [ -d "$nspr_dir" ]; then
+                        echo "Found NSPR directory: $nspr_dir"
+                        nspr_version=$(echo "$filename" | sed -n 's/^nss-.*-with-nspr-\([0-9.]*\)\.tar\.gz$/\1/p')
+                        (cd "$(dirname "$nspr_dir")" && tar -czf "nspr-${nspr_version}.tar.gz" "nspr")
+                        cp "$(dirname "$nspr_dir")/nspr-${nspr_version}.tar.gz" "$expected_filename"
+                      else
+                        echo "Error: Could not find NSPR directory in combined package"
+                        exit 1
+                      fi
+                    fi
+                    
+                    # Clean up
+                    rm -rf "$temp_dir"
+                    rm -f "$filename"
+                    
+                    echo "Successfully extracted $PKG_NAME from combined package"
+                  else
+                    echo "Error: Could not extract combined NSS/NSPR package"
+                    exit 1
+                  fi
+                else
+                  # Regular filename conversion
+                  mv "$filename" "$expected_filename"
+                fi
               elif [ -f "$expected_filename" ]; then
                 echo "File already exists as $expected_filename"
               else
