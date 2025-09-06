@@ -139,50 +139,33 @@ jobs:
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           
-          echo "Creating bcmstat GitHub archive filename fix..."
+          echo "Pre-downloading bcmstat to fix GitHub archive filename issue..."
           
-          # Create a script to run after bcmstat download to fix the filename
-          cat > scripts/bcmstat-post-download.sh << 'EOF'
-          #!/bin/bash
-          # Post-download fix for bcmstat GitHub archive filename mismatch
+          # Create sources directory for bcmstat
+          mkdir -p sources/bcmstat
+          cd sources/bcmstat
           
-          PKG_NAME="bcmstat"
-          SOURCES_DIR="sources/${PKG_NAME}"
+          # Download the file directly
+          BCMSTAT_URL="https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz"
           HASH="1698ec66f7dd38b21d92958dfe08a79dd07300a5"
-          DOWNLOADED_FILE="${SOURCES_DIR}/${HASH}.tar.gz"
-          EXPECTED_FILE="${SOURCES_DIR}/bcmstat-${HASH}.tar.gz"
+          EXPECTED_FILENAME="bcmstat-${HASH}.tar.gz"
           
-          echo "Checking for bcmstat filename mismatch..."
+          echo "Downloading bcmstat from: $BCMSTAT_URL"
+          echo "Saving as expected filename: $EXPECTED_FILENAME"
           
-          if [[ -f "$DOWNLOADED_FILE" && ! -f "$EXPECTED_FILE" ]]; then
-            echo "Found downloaded file: $DOWNLOADED_FILE"
-            echo "Creating expected filename: $EXPECTED_FILE"
-            cp "$DOWNLOADED_FILE" "$EXPECTED_FILE"
-            echo "✓ bcmstat filename fix applied"
-          elif [[ -f "$EXPECTED_FILE" ]]; then
-            echo "✓ Expected file already exists: $EXPECTED_FILE"
+          # Download with the correct filename LibreELEC expects
+          wget -O "$EXPECTED_FILENAME" "$BCMSTAT_URL"
+          
+          if [[ -f "$EXPECTED_FILENAME" ]]; then
+            echo "✅ Successfully pre-downloaded bcmstat as $EXPECTED_FILENAME"
+            ls -la "$EXPECTED_FILENAME"
           else
-            echo "⚠ Neither downloaded nor expected file found"
-            ls -la "$SOURCES_DIR"/ 2>/dev/null || echo "Sources directory doesn't exist yet"
+            echo "❌ Failed to download bcmstat"
+            exit 1
           fi
-          EOF
           
-          chmod +x scripts/bcmstat-post-download.sh
-          
-          # Patch the get script to run our fix after bcmstat download
-          cp scripts/get scripts/get.original
-          
-          # Add our post-download fix to the end of the get script
-          cat >> scripts/get << 'PATCH'
-          
-          # bcmstat GitHub archive filename fix
-          if [[ "${PKG_NAME}" == "bcmstat" ]]; then
-            echo "Running bcmstat post-download filename fix..."
-            ${SCRIPTS}/bcmstat-post-download.sh
-          fi
-          PATCH
-          
-          echo "✓ bcmstat post-download fix configured!"
+          cd ../..
+          echo "✅ bcmstat pre-download completed!"
 
       - name: Copy custom packages
         run: |
