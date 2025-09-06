@@ -141,19 +141,22 @@ Project-Raven/
 
 ## 📖 Documentation
 
+**All documentation is available in the [GitHub Wiki](https://github.com/SysGrimm/Project-Raven/wiki)** with comprehensive coverage of all aspects of the system.
+
 ### **User Guides**
-- **[Quick Start Guide](wiki/Quick-Start-Guide)** - Get running in 30 minutes
-- **[Troubleshooting](wiki/CEC-Troubleshooting)** - Fix common issues
-- **[Network Setup](wiki/Network-Configuration)** - Advanced networking
+- **[Quick Start Guide](https://github.com/SysGrimm/Project-Raven/wiki/Quick-Start-Guide)** - Get running in 30 minutes
+- **[CEC Troubleshooting](https://github.com/SysGrimm/Project-Raven/wiki/CEC-Troubleshooting)** - Fix common remote control issues
+- **[Tailscale Add-on](https://github.com/SysGrimm/Project-Raven/wiki/Tailscale-Add-on)** - VPN setup and configuration
 
 ### **Developer Resources**
-- **[Architecture Overview](wiki/Architecture-Overview)** - System design
-- **[Build System](wiki/Custom-LibreELEC-Build)** - Custom image creation
-- **[Add-on Development](wiki/Add-on-Development)** - Create new add-ons
+- **[Architecture Overview](https://github.com/SysGrimm/Project-Raven/wiki/Architecture-Overview)** - Complete system design documentation
+- **[Universal Package Download System](https://github.com/SysGrimm/Project-Raven/wiki/Universal-Package-Download-System)** - Build reliability framework
+- **[Custom LibreELEC Build](https://github.com/SysGrimm/Project-Raven/wiki/Custom-LibreELEC-Build)** - Custom image creation process
 
 ### **Technical References**
-- **[Known Issues](wiki/Known-Issues)** - Current limitations
-- **[Changelog](wiki/Changelog)** - Version history
+- **[Known Issues](https://github.com/SysGrimm/Project-Raven/wiki/Known-Issues)** - Current limitations and workarounds
+- **[Changelog](https://github.com/SysGrimm/Project-Raven/wiki/Changelog)** - Complete version history with v2.1.0 Universal Package Download System
+- **[Version 2.0 Enhancements](https://github.com/SysGrimm/Project-Raven/wiki/Version-2.0-Enhancements)** - Major improvements and new features
 
 ## 🤝 Community
 
