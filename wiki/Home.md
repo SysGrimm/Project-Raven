@@ -2,7 +2,7 @@
 
 Welcome to the Project-Raven wiki! This project provides comprehensive solutions for creating custom LibreELEC media center builds with integrated VPN functionality.
 
-## 🎯 Project Overview
+## Project Overview
 
 Project-Raven evolved from troubleshooting CEC (Consumer Electronics Control) remote functionality on Raspberry Pi systems and has grown into a complete LibreELEC customization framework with Tailscale VPN integration.
 
@@ -14,6 +14,7 @@ Project-Raven evolved from troubleshooting CEC (Consumer Electronics Control) re
 - **[[Hardware Requirements|Hardware-Requirements]]** - Compatible devices and specs
 
 ### Core Components
+- **[[Universal Package Download System|Universal-Package-Download-System]]** - Advanced build reliability framework
 - **[[Tailscale Add-on|Tailscale-Add-on]]** - VPN service integration for LibreELEC
 - **[[Custom LibreELEC Build|Custom-LibreELEC-Build]]** - Building custom images
 - **[[Theme Customization|Theme-Customization]]** - Creating and applying custom themes
@@ -25,6 +26,7 @@ Project-Raven evolved from troubleshooting CEC (Consumer Electronics Control) re
 - **[[Known Issues|Known-Issues]]** - Current limitations and workarounds
 
 ### Technical Deep Dives
+- **[[Universal Package Download System|Universal-Package-Download-System]]** - Comprehensive build reliability framework
 - **[[Architecture Overview|Architecture-Overview]]** - System design and components
 - **[[Build System|Build-System]]** - LibreELEC build process explained
 - **[[Add-on Development|Add-on-Development]]** - Creating LibreELEC add-ons
@@ -36,17 +38,18 @@ Project-Raven evolved from troubleshooting CEC (Consumer Electronics Control) re
 - **[[Performance Optimization|Performance-Optimization]]** - Tuning your build
 - **[[Security Considerations|Security-Considerations]]** - VPN and network security
 
-## 🔧 Problem Solutions Map
+## Problem Solutions Map
 
 | Original Problem | Solution Approach | Wiki Page |
 |------------------|-------------------|-----------|
+| Build Reliability Issues | Universal Package Download System | [[Universal-Package-Download-System]] |
 | CEC Remote Not Working | LibreELEC with built-in patches | [[CEC-Troubleshooting]] |
 | VPN Access to Media Center | Tailscale service add-on | [[Tailscale-Add-on]] |
 | Complex Manual Setup | Custom LibreELEC image | [[Custom-LibreELEC-Build]] |
 | Theme Customization | Automated theme deployment | [[Theme-Customization]] |
 | Add-on Management | Pre-installed add-on bundles | [[Add-on-Development]] |
 
-## 🚀 Quick Navigation
+## Quick Navigation
 
 ### For Beginners
 1. Read the [[Quick-Start-Guide]]
@@ -63,7 +66,7 @@ Project-Raven evolved from troubleshooting CEC (Consumer Electronics Control) re
 2. Check relevant troubleshooting pages
 3. Review [[Technical-Deep-Dives]]
 
-## 📈 Project Evolution
+## Project Evolution
 
 This project has evolved through several iterations:
 
@@ -72,6 +75,7 @@ This project has evolved through several iterations:
 3. **Phase 3**: Migration to LibreELEC platform
 4. **Phase 4**: Tailscale VPN integration
 5. **Phase 5**: Custom build system and automation
+6. **Phase 6**: Universal Package Download System for build reliability
 
 Each phase taught us valuable lessons documented in this wiki.
 
@@ -83,7 +87,7 @@ See [[Contributing-Guidelines]] for information on:
 - Adding documentation
 - Testing new features
 
-## 📋 Changelog
+## Changelog
 
 See [[Changelog]] for detailed version history and changes.
 

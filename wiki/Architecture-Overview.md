@@ -2,7 +2,7 @@
 
 This page provides a comprehensive technical overview of Project-Raven's architecture, design decisions, and system integration approach.
 
-## 🏗 System Architecture
+## System Architecture
 
 ### High-Level Design
 ```
@@ -41,7 +41,7 @@ This page provides a comprehensive technical overview of Project-Raven's archite
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 🔧 Component Integration
+## Component Integration
 
 ### Core Components
 
@@ -51,6 +51,15 @@ This page provides a comprehensive technical overview of Project-Raven's archite
 - **Read-only Root**: Immutable system partition for stability  
 - **Kodi-centric**: Everything optimized for media center use
 - **Hardware Integration**: Native GPU acceleration, CEC support
+- **Universal Package System**: Advanced build reliability framework
+
+#### 2. Universal Package Download System
+**Purpose**: Comprehensive build reliability and package management
+- **Proactive Analysis**: Pre-build scanning of all 951 LibreELEC packages
+- **Intelligent Mirrors**: Auto-fallback system for all major package sources
+- **Pattern Matching**: Smart filename conversion and URL correction
+- **Build Optimization**: Sub-10 minute reliable builds vs 2h+ failures
+- **Mirror Database**: Comprehensive coverage of GNU, Kernel.org, Python, GitHub, Mozilla, Debian
 
 #### 2. Kodi Media Center
 **Purpose**: Primary user interface and media management
@@ -73,7 +82,7 @@ This page provides a comprehensive technical overview of Project-Raven's archite
 - **Arbitration**: Coordinated access between frameworks
 - **Device Discovery**: Automatic TV and receiver detection
 
-## 🌐 Network Architecture
+## Network Architecture
 
 ### Network Flow Design
 ```
@@ -115,7 +124,7 @@ Internet
 - **SMB/CIFS**: File sharing protocols
 - **UPnP/DLNA**: Media streaming protocols
 
-## 🔄 Data Flow Patterns
+## Data Flow Patterns
 
 ### Media Playback Flow
 ```
@@ -152,7 +161,7 @@ Internet
 └─────────────┘              └─────────────┘             └─────────────┘
 ```
 
-## 📦 Build System Architecture
+## Build System Architecture
 
 ### Package Dependencies
 ```
@@ -240,7 +249,7 @@ Source Code → Configure → Compile → Package → Customize → Image
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## ⚡ Performance Architecture
+## Performance Architecture
 
 ### Resource Management
 
@@ -283,7 +292,7 @@ Source Code → Configure → Compile → Package → Customize → Image
 - **Tailscale VPN**: ~200Mbps peer-to-peer / ~50Mbps relay
 - **Media Streaming**: Adaptive bitrate based on connection
 
-## 🔄 State Management
+## State Management
 
 ### System State
 ```

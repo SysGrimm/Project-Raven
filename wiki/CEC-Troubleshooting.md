@@ -2,11 +2,11 @@
 
 This page documents the comprehensive troubleshooting process for Consumer Electronics Control (CEC) remote functionality on Raspberry Pi systems.
 
-## 🎯 Problem Summary
+## Problem Summary
 
 CEC allows your TV remote to control Kodi/LibreELEC, but Raspberry Pi systems often have conflicts between different CEC implementations that prevent proper functionality.
 
-## 🔍 Root Cause Analysis
+## Root Cause Analysis
 
 ### The Core Conflict
 
@@ -26,7 +26,7 @@ ERROR <general>: CEC adapter: could not open a connection (errno=16)
 # errno=16 = EBUSY (Device or resource busy)
 ```
 
-## 🛠 Diagnostic Commands
+## Diagnostic Commands
 
 ### Check CEC Device Status
 ```bash
@@ -61,7 +61,7 @@ cec-ctl --monitor
 dmesg | grep -i cec
 ```
 
-## ⚠️ Failed Solutions
+## Failed Solutions
 
 ### Attempt 1: Disable Kernel CEC Framework
 ```bash
@@ -98,7 +98,7 @@ SUBSYSTEM=="cec", GROUP="video", MODE="0664"
 # Result: Permissions fixed but framework conflict remains
 ```
 
-## ✅ Working Solutions
+## Working Solutions
 
 ### Solution 1: LibreELEC (Recommended)
 
@@ -113,10 +113,10 @@ SUBSYSTEM=="cec", GROUP="video", MODE="0664"
 ```
 
 **Benefits**:
-- ✅ CEC works out of the box
-- ✅ No manual kernel patching required
-- ✅ Optimized for media center use
-- ✅ Regular updates with CEC fixes
+- CEC works out of the box
+- No manual kernel patching required
+- Optimized for media center use
+- Regular updates with CEC fixes
 
 ### Solution 2: Custom Kernel Patching (Advanced)
 
@@ -135,7 +135,7 @@ For those who must stay on standard Raspberry Pi OS:
 - Custom build toolchain
 - Ongoing maintenance for each kernel update
 
-## 🔧 Debugging Workflow
+## Debugging Workflow
 
 ### Step 1: Identify the Conflict
 ```bash
@@ -167,16 +167,16 @@ cat /sys/class/cec/cec0/state
 watch -n 1 'cat /sys/class/cec/cec0/state'
 ```
 
-## 📊 Comparison Matrix
+## Comparison Matrix
 
 | Approach | Complexity | Success Rate | Maintenance | Recommended |
 |----------|------------|--------------|-------------|-------------|
-| LibreELEC Migration | Low | 95% | Low | ✅ Yes |
+| LibreELEC Migration | Low | 95% | Low |  Yes |
 | Kernel Patching | Very High | 70% | Very High | ❌ No |
 | Framework Disabling | Medium | 40% | Medium | ❌ No |
 | Module Blacklisting | Low | 10% | Low | ❌ No |
 
-## 🎯 Best Practices
+## Best Practices
 
 ### For New Installations
 1. **Use LibreELEC** - It's purpose-built for this
