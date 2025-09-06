@@ -102,38 +102,39 @@ jobs:
           
           # Create the patch application script that will run after LibreELEC.tv is cloned
           cat > comprehensive_download_fix.sh << 'EOF'
-          #!/bin/bash
-          set -e
+      - name: Apply comprehensive download fixes
+        run: |
+          echo "Applying comprehensive package download fixes..."
           
-          echo "Applying comprehensive download fixes..."
+          # Copy our comprehensive fix scripts
+          cp scripts/comprehensive-package-fix.sh libreelec-custom-build/
+          cp scripts/universal-package-downloader.sh libreelec-custom-build/
           
-          # Function to wait for directory
-          wait_for_directory() {
-            local dir=$1
-            local timeout=600  # 10 minutes
-            local counter=0
-            
-            while [ ! -d "$dir" ] && [ $counter -lt $timeout ]; do
-              echo "Waiting for $dir directory... ($counter seconds)"
-              sleep 5
-              counter=$((counter + 5))
-            done
-            
-            if [ ! -d "$dir" ]; then
-              echo "ERROR: $dir directory not found after timeout"
-              exit 1
-            fi
-            echo "$dir directory found!"
-          }
+          cd libreelec-custom-build
           
-          # Wait for LibreELEC.tv directory to be cloned
-          wait_for_directory "LibreELEC.tv"
+          # Wait for LibreELEC.tv directory to be ready
+          echo "Waiting for LibreELEC.tv directory..."
+          timeout=300
+          counter=0
+          while [ ! -d "LibreELEC.tv/scripts" ] && [ $counter -lt $timeout ]; do
+            echo "Waiting... ($counter seconds)"
+            sleep 5
+            counter=$((counter + 5))
+          done
           
-          cd LibreELEC.tv
+          if [ ! -d "LibreELEC.tv/scripts" ]; then
+            echo "ERROR: LibreELEC.tv/scripts not found after timeout"
+            exit 1
+          fi
           
-          echo "Creating master download script with fallback mirrors..."
+          echo "Applying comprehensive fixes..."
+          chmod +x comprehensive-package-fix.sh universal-package-downloader.sh
           
-          # Create advanced download script with comprehensive mirror support
+          # Apply all fixes at once
+          ./comprehensive-package-fix.sh LibreELEC.tv
+          
+          echo "✓ Comprehensive package fixes applied successfully!"
+          echo "This should handle all known download issues automatically."          # Create advanced download script with comprehensive mirror support
           cat > scripts/download-with-mirrors.sh << 'DLSCRIPT'
           #!/bin/bash
           
@@ -163,6 +164,14 @@ jobs:
                   "https://ftp.halifax.rwth-aachen.de/gnu/make/$filename"
                   "https://mirrors.ocf.berkeley.edu/gnu/make/$filename"
                   "https://ftp.gnu.org/gnu/make/$filename"
+                )
+                ;;
+              linux-firmware-*.tar.*)
+                mirrors=(
+                  "https://cdn.kernel.org/pub/linux/kernel/firmware/$filename"
+                  "https://mirrors.kernel.org/pub/linux/kernel/firmware/$filename"
+                  "https://www.kernel.org/pub/linux/kernel/firmware/$filename"
+                  "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/snapshot/$filename"
                 )
                 ;;
               binutils-*.tar.*)
@@ -448,6 +457,15 @@ jobs:
                 echo "Will need to extract individual package from combined archive"
               fi
               ;;
+            "kernel-firmware")
+              # LibreELEC expects kernel-firmware-DATE.tar.xz but kernel.org provides linux-firmware-DATE.tar.xz
+              if echo "$filename" | grep -q '^linux-firmware-'; then
+                # Extract date from linux-firmware-DATE.tar.xz and make kernel-firmware-DATE.tar.xz
+                date_version=$(echo "$filename" | sed 's/^linux-firmware-//' | sed 's/\.tar\.xz$//')
+                expected_filename="${PKG_NAME}-${date_version}.tar.xz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
           esac
           
           # Create package sources directory
@@ -612,16 +630,8 @@ jobs:
             fi
           done
           
-          echo "✓ Comprehensive download fixes applied successfully!"
-          EOF
-          
-          chmod +x comprehensive_download_fix.sh
-          
-          # Start the fix script in background so it applies patches as soon as LibreELEC.tv is cloned
-          echo "Starting comprehensive download fix in background..."
-          nohup ./comprehensive_download_fix.sh > download_fix.log 2>&1 &
-          
-          echo "✓ Download reliability system initialized"
+          echo "✓ Comprehensive package fixes applied successfully!"
+          echo "This should handle all known download issues automatically."
 
       - name: Clone LibreELEC source
         run: |
