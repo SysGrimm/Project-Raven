@@ -155,6 +155,16 @@ jobs:
                   "https://mirrors.ocf.berkeley.edu/gnu/gmp/$filename"
                 )
                 ;;
+              make-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/make/$filename"
+                  "https://ftpmirror.gnu.org/make/$filename"
+                  "https://mirror.us-east-1.nexcess.net/gnu/make/$filename"
+                  "https://ftp.halifax.rwth-aachen.de/gnu/make/$filename"
+                  "https://mirrors.ocf.berkeley.edu/gnu/make/$filename"
+                  "https://ftp.gnu.org/gnu/make/$filename"
+                )
+                ;;
               binutils-*.tar.*)
                 mirrors=(
                   "https://mirrors.kernel.org/gnu/binutils/$filename"
@@ -588,7 +598,7 @@ jobs:
           
           # Find and patch all package.mk files with broken URLs
           find packages/ tools/ -name "package.mk" -type f | while read pkg_file; do
-            if grep -q "gmplib.org\|sources.libreelec.tv.*404" "$pkg_file" 2>/dev/null; then
+            if grep -q "gmplib.org\|sources.libreelec.tv.*404\|ftpmirror.gnu.org/make" "$pkg_file" 2>/dev/null; then
               echo "Patching: $pkg_file"
               sed -i.bak \
                 -e 's|https://gmplib.org/download/gmp/|https://mirrors.kernel.org/gnu/gmp/|g' \
@@ -596,6 +606,8 @@ jobs:
                 -e 's|http://sources.libreelec.tv/mirror/binutils/|https://mirrors.kernel.org/gnu/binutils/|g' \
                 -e 's|http://sources.libreelec.tv/mirror/mpfr/|https://mirrors.kernel.org/gnu/mpfr/|g' \
                 -e 's|http://sources.libreelec.tv/mirror/mpc/|https://mirrors.kernel.org/gnu/mpc/|g' \
+                -e 's|http://ftpmirror.gnu.org/make/|https://mirrors.kernel.org/gnu/make/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/make/|https://mirrors.kernel.org/gnu/make/|g' \
                 "$pkg_file"
             fi
           done
