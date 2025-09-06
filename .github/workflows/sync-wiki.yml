@@ -1,0 +1,56 @@
+name: Sync Repository Wiki to GitHub Wiki
+
+on:
+  push:
+    branches: [ main ]
+    paths: 
+      - 'wiki/**'
+  workflow_dispatch:
+
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Git
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+    
+    - name: Clone GitHub Wiki
+      run: |
+        # Clone the wiki repository
+        git clone https://github.com/${{ github.repository }}.wiki.git wiki-repo
+        cd wiki-repo
+        
+        # Copy all markdown files from repository wiki folder
+        cp ../wiki/*.md .
+        
+        # Add all changes
+        git add .
+        
+        # Check if there are changes to commit
+        if git diff --staged --quiet; then
+          echo "No changes to sync"
+        else
+          # Commit and push changes
+          git commit -m "Auto-sync from repository wiki folder
+          
+          Updated by GitHub Actions from commit: ${{ github.sha }}
+          
+          Files synced:
+          $(cd ../wiki && ls -1 *.md | sed 's/^/- /')"
+          
+          git push origin main
+          echo "Successfully synced wiki content"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Report sync status
+      run: |
+        echo "Wiki sync completed!"
+        echo "View the updated wiki at: https://github.com/${{ github.repository }}/wiki"
