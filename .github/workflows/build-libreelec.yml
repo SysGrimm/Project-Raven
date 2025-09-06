@@ -211,6 +211,29 @@ jobs:
           fi
           
           cd ../..
+          
+          # Pre-download fakeroot (Debian package pattern)
+          echo "=== Downloading fakeroot ==="
+          mkdir -p sources/fakeroot
+          cd sources/fakeroot
+          
+          FAKEROOT_URL="http://ftp.debian.org/debian/pool/main/f/fakeroot/fakeroot_1.37.1.2.orig.tar.gz"
+          FAKEROOT_EXPECTED="fakeroot-1.34.tar.gz"
+          
+          echo "Downloading fakeroot from: $FAKEROOT_URL"
+          echo "Saving as expected filename: $FAKEROOT_EXPECTED"
+          
+          wget -O "$FAKEROOT_EXPECTED" "$FAKEROOT_URL"
+          
+          if [[ -f "$FAKEROOT_EXPECTED" ]]; then
+            echo "✅ Successfully pre-downloaded fakeroot as $FAKEROOT_EXPECTED"
+            ls -la "$FAKEROOT_EXPECTED"
+          else
+            echo "❌ Failed to download fakeroot"
+            exit 1
+          fi
+          
+          cd ../..
           echo "✅ Package pre-downloads completed!"
 
       - name: Copy custom packages
