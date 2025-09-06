@@ -7,6 +7,12 @@ on:
       - '.github/workflows/build-libreelec.yml'
       - 'libreelec-custom-build/**'
       - 'libreelec-tailscale-addon/**'
+      - 'scripts/**'
+    paths-ignore:
+      - 'wiki/**'
+      - 'README.md'
+      - '*.md'
+      - 'docs/**'
   workflow_dispatch:
     inputs:
       device:
@@ -31,20 +37,16 @@ env:
 jobs:
   build-libreelec:
     runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours timeout for LibreELEC build
     strategy:
       matrix:
-        device: [RPi5, RPiZero2]
+        device: [RPi5]  # Temporarily build only RPi5 to speed up testing
         include:
           - device: RPi5
             project: RPi
             arch: arm
             full_name: "Raspberry Pi 5"
             libreelec_device: "RPi5"
-          - device: RPiZero2
-            project: RPi
-            arch: arm
-            full_name: "Raspberry Pi Zero 2 W"
-            libreelec_device: "RPi2"
     
     steps:
       - name: Maximize build space
@@ -62,43 +64,52 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install build dependencies
+      - name: Install additional build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            git \
-            mercurial \
-            wget \
-            cpio \
-            gzip \
-            unzip \
-            gcc \
-            g++ \
-            xsltproc \
-            default-jre-headless \
-            python3 \
-            python3-setuptools \
-            python3-dev \
-            rsync \
-            bc \
+          # Install more comprehensive math library dependencies
+          sudo apt update
+          sudo apt install -y \
+            libgmp-dev \
+            libmpfr-dev \
+            libmpc-dev \
+            texinfo \
+            flex \
+            help2man \
             gawk \
-            file \
-            lzop \
-            libc6-dev \
-            libncurses5-dev \
+            wget \
+            libtool-bin \
+            autotools-dev \
+            automake \
             pkg-config \
+            libssl-dev \
+            libncurses5-dev \
+            unzip \
+            gperf \
+            build-essential \
+            bison \
+            gettext \
             xfonts-utils \
             rdfind \
             libparse-yapp-perl \
-            gperf \
+            xsltproc \
             libxml-parser-perl \
-            patchutils
+            patchutils \
+            lzop
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: libreelec-${{ matrix.device }}-${{ github.sha }}
+
+      - name: Pre-download critical dependencies
+        run: |
+          echo "Pre-downloading critical dependencies to avoid timeout issues..."
+          
+          # Prepare scripts for later use
+          echo "Preparing comprehensive package fix scripts..."
+          ls -la scripts/
+          
+          echo "✓ Scripts ready for comprehensive package fixes after LibreELEC clone"
 
       - name: Clone LibreELEC source
         run: |
@@ -106,16 +117,547 @@ jobs:
           ls -la libreelec-custom-build/
           cd libreelec-custom-build
           
-          if [ ! -d "LibreELEC.tv" ]; then
-            echo "Cloning LibreELEC source..."
-            git clone --depth 1 --branch libreelec-12.0 \
-              https://github.com/LibreELEC/LibreELEC.tv.git
-          else
-            echo "LibreELEC.tv directory already exists"
+          # Remove any incomplete clone and start fresh
+          if [ -d "LibreELEC.tv" ]; then
+            echo "Removing incomplete LibreELEC.tv directory..."
+            rm -rf LibreELEC.tv
           fi
+          
+          echo "Cloning LibreELEC source..."
+          git clone --depth 1 --branch libreelec-12.0 
+            https://github.com/LibreELEC/LibreELEC.tv.git
           
           echo "LibreELEC directory contents:"
           ls -la LibreELEC.tv/
+          
+          echo "Checking for essential directories:"
+          ls -la LibreELEC.tv/scripts/ || echo "Warning: scripts directory not found"
+          ls -la LibreELEC.tv/packages/ || echo "Warning: packages directory not found"
+
+      - name: Apply comprehensive download fixes
+        run: |
+          echo "Applying comprehensive package download fixes..."
+          
+          # Copy our comprehensive fix scripts
+          cp scripts/comprehensive-package-fix.sh libreelec-custom-build/
+          cp scripts/universal-package-downloader.sh libreelec-custom-build/
+          
+          cd libreelec-custom-build
+          
+          # Verify LibreELEC.tv directory exists
+          if [ ! -d "LibreELEC.tv/scripts" ]; then
+            echo "ERROR: LibreELEC.tv/scripts not found"
+            ls -la LibreELEC.tv/ || echo "LibreELEC.tv directory missing"
+            exit 1
+          fi
+          
+          echo "Applying comprehensive fixes..."
+          chmod +x comprehensive-package-fix.sh universal-package-downloader.sh
+          
+          # Apply all fixes at once
+          ./comprehensive-package-fix.sh LibreELEC.tv
+          
+          echo "✓ Comprehensive package fixes applied successfully!"
+          echo "This should handle all known download issues automatically."
+          
+          # Create advanced download script with comprehensive mirror support
+          cat > scripts/download-with-mirrors.sh << 'DLSCRIPT'
+          #!/bin/bash
+          
+          download_with_mirrors() {
+            local filename="$1"
+            local primary_url="$2"
+            
+            echo "Starting download for: $filename"
+            echo "Primary URL: $primary_url"
+            
+            # Define comprehensive mirror mappings
+            case "$filename" in
+              gmp-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/gmp/$filename"
+                  "https://ftpmirror.gnu.org/gmp/$filename"
+                  "https://mirror.us-east-1.nexcess.net/gnu/gmp/$filename"
+                  "https://ftp.halifax.rwth-aachen.de/gnu/gmp/$filename"
+                  "https://mirrors.ocf.berkeley.edu/gnu/gmp/$filename"
+                )
+                ;;
+              make-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/make/$filename"
+                  "https://ftpmirror.gnu.org/make/$filename"
+                  "https://mirror.us-east-1.nexcess.net/gnu/make/$filename"
+                  "https://ftp.halifax.rwth-aachen.de/gnu/make/$filename"
+                  "https://mirrors.ocf.berkeley.edu/gnu/make/$filename"
+                  "https://ftp.gnu.org/gnu/make/$filename"
+                )
+                ;;
+              linux-firmware-*.tar.*)
+                mirrors=(
+                  "https://cdn.kernel.org/pub/linux/kernel/firmware/$filename"
+                  "https://mirrors.kernel.org/pub/linux/kernel/firmware/$filename"
+                  "https://www.kernel.org/pub/linux/kernel/firmware/$filename"
+                  "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/snapshot/$filename"
+                )
+                ;;
+              binutils-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/binutils/$filename"
+                  "https://ftpmirror.gnu.org/binutils/$filename"
+                  "https://mirror.us-east-1.nexcess.net/gnu/binutils/$filename"
+                )
+                ;;
+              mpfr-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/mpfr/$filename"
+                  "https://ftpmirror.gnu.org/mpfr/$filename"
+                )
+                ;;
+              mpc-*.tar.*)
+                mirrors=(
+                  "https://mirrors.kernel.org/gnu/mpc/$filename"
+                  "https://ftpmirror.gnu.org/mpc/$filename"
+                )
+                ;;
+              fakeroot_*.orig.tar.*)
+                # Special handling for fakeroot - auto-detect available version
+                echo "Handling fakeroot download with version detection..."
+                
+                # Extract requested version from filename
+                requested_version=$(echo "$filename" | grep -o '[0-9]\+\.[0-9]\+[0-9\.]*')
+                echo "Requested fakeroot version: $requested_version"
+                
+                # Function to find available fakeroot version
+                find_available_fakeroot() {
+                  local pool_url="http://deb.debian.org/debian/pool/main/f/fakeroot/"
+                  local available_versions
+                  
+                  echo "Checking available fakeroot versions..." >&2
+                  # Get list of available versions from Debian pool
+                  available_versions=$(curl -s "$pool_url" | grep -o 'fakeroot_[0-9]\+\.[0-9][^"]*\.orig\.tar\.[a-z]*' | sort -V | tail -5)
+                  
+                  echo "Available versions found:" >&2
+                  echo "$available_versions" >&2
+                  
+                  # Try to find exact match first
+                  local exact_match=$(echo "$available_versions" | grep "fakeroot_${requested_version}\." | head -1)
+                  if [ -n "$exact_match" ]; then
+                    echo "Found exact version match: $exact_match" >&2
+                    echo "$exact_match"
+                    return
+                  fi
+                  
+                  # If no exact match, use the latest available version
+                  local latest_version=$(echo "$available_versions" | tail -1)
+                  if [ -n "$latest_version" ]; then
+                    echo "Using latest available version: $latest_version" >&2
+                    echo "$latest_version"
+                    return
+                  fi
+                  
+                  # Fallback to original filename
+                  echo "No alternative found, using original: $filename" >&2
+                  echo "$filename"
+                }
+                
+                # Get the correct filename
+                correct_filename=$(find_available_fakeroot)
+                
+                # Update filename if we found a different version
+                if [ "$correct_filename" != "$filename" ]; then
+                  echo "Updating filename from $filename to $correct_filename"
+                  filename="$correct_filename"
+                  
+                  # Also create a symlink so the build can find it under the expected name
+                  original_base=$(basename "$1" .orig.tar.gz)
+                  correct_base=$(basename "$correct_filename" .orig.tar.gz)
+                  echo "Will create symlink: $correct_base -> $original_base"
+                fi
+                
+                # Debian package mirrors for fakeroot
+                mirrors=(
+                  "http://deb.debian.org/debian/pool/main/f/fakeroot/$filename"
+                  "http://ftp.us.debian.org/debian/pool/main/f/fakeroot/$filename"
+                  "http://ftp.debian.org/debian/pool/main/f/fakeroot/$filename"
+                  "https://deb.debian.org/debian/pool/main/f/fakeroot/$filename"
+                  "https://archive.debian.org/debian/pool/main/f/fakeroot/$filename"
+                )
+                ;;
+              *)
+                # For other files, try to infer mirror from original URL
+                if echo "$primary_url" | grep -q "ftp.gnu.org"; then
+                  mirrors=(
+                    "${primary_url/ftp.gnu.org/mirrors.kernel.org}"
+                    "${primary_url/ftp.gnu.org/ftpmirror.gnu.org}"
+                  )
+                else
+                  mirrors=()
+                fi
+                ;;
+            esac
+            
+            # Add the original URL as backup
+            mirrors+=("$primary_url")
+            
+            # Try each mirror with robust download settings
+            for url in "${mirrors[@]}"; do
+              echo "Attempting download from: $url"
+              if wget --timeout=60 --tries=3 --retry-connrefused --waitretry=10 \
+                     --read-timeout=30 --dns-timeout=15 --connect-timeout=15 \
+                     -c "$url"; then
+                echo "✓ Successfully downloaded from: $url"
+                return 0
+              else
+                echo "✗ Failed to download from: $url"
+              fi
+            done
+            
+            echo "ERROR: All download attempts failed for $filename"
+            return 1
+          }
+          
+          # Export the function for use by other scripts
+          export -f download_with_mirrors
+          DLSCRIPT
+          
+          chmod +x scripts/download-with-mirrors.sh
+          
+          echo "Backing up original get script..."
+          if [ -f "scripts/get" ]; then
+            cp scripts/get scripts/get.original
+            
+            # Clean up any potentially corrupted downloads
+            echo "Cleaning up any corrupted files..."
+            find sources/ -name "*.tar.xz" -exec sh -c 'echo "Checking {}..."; if ! xz -t "{}" 2>/dev/null || ! tar -tf "{}" >/dev/null 2>&1; then echo "Removing corrupted file {}"; rm -f "{}"; fi' \; 2>/dev/null || true
+            find sources/ -name "*.tar.gz" -exec sh -c 'echo "Checking {}..."; if ! gzip -t "{}" 2>/dev/null || ! tar -tf "{}" >/dev/null 2>&1; then echo "Removing corrupted file {}"; rm -f "{}"; fi' \; 2>/dev/null || true
+            
+            # Create enhanced get script
+            cat > scripts/get << 'GETSCRIPT'
+          #!/bin/bash
+          
+          # Source the advanced download function
+          source "$(dirname "$0")/download-with-mirrors.sh"
+          
+          # Get package information
+          PKG_NAME="$1"
+          
+          # Load package configuration
+          . config/options "$PKG_NAME"
+          
+          # Skip if no URL defined
+          if [ -z "$PKG_URL" ]; then
+            echo "No URL defined for $PKG_NAME, skipping download"
+            exit 0
+          fi
+          
+          # Extract filename from URL
+          filename=$(basename "$PKG_URL")
+          
+          # Handle special filename cases where LibreELEC expects different naming
+          expected_filename="$filename"
+          case "$PKG_NAME" in
+            "texturecache.py")
+              # LibreELEC expects texturecache.py-VERSION.tar.gz but GitHub provides VERSION.tar.gz
+              if echo "$filename" | grep -q '^[0-9]'; then
+                expected_filename="${PKG_NAME}-${filename}"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
+            "ir-bpf-decoders")
+              # LibreELEC expects ir-bpf-decoders-VERSION.tar.gz but GitHub provides v4l-utils-VERSION.tar.gz
+              if echo "$filename" | grep -q '^v4l-utils-'; then
+                # Extract version from v4l-utils-VERSION.tar.gz and make ir-bpf-decoders-VERSION.tar.gz
+                version=$(echo "$filename" | sed 's/^v4l-utils-//' | sed 's/.tar.gz$//')
+                expected_filename="${PKG_NAME}-${version}.tar.gz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
+            "7-zip")
+              # LibreELEC expects 7-zip-VERSION.tar.xz but 7-zip.org provides 7zVERSION-src.tar.xz
+              if echo "$filename" | grep -q '^7z.*-src\.tar\.xz$'; then
+                # Extract version from 7zVERSION-src.tar.xz and make 7-zip-VERSION.tar.xz
+                version=$(echo "$filename" | sed 's/^7z//' | sed 's/-src\.tar\.xz$//')
+                # Format version with dots (e.g. 2301 -> 23.01)
+                if [ ${#version} -eq 4 ]; then
+                  formatted_version="${version:0:2}.${version:2:2}"
+                else
+                  formatted_version="$version"
+                fi
+                expected_filename="${PKG_NAME}-${formatted_version}.tar.xz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
+            "Python3")
+              # LibreELEC expects Python3-VERSION.tar.xz but python.org provides Python-VERSION.tar.xz
+              if echo "$filename" | grep -q '^Python-'; then
+                # Extract version from Python-VERSION.tar.xz and make Python3-VERSION.tar.xz
+                version=$(echo "$filename" | sed 's/^Python-//' | sed 's/\.tar\.xz$//')
+                expected_filename="${PKG_NAME}-${version}.tar.xz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
+            "linux")
+              # LibreELEC expects linux-raspberrypi-HASH.tar.gz but GitHub provides HASH.tar.gz
+              if echo "$filename" | grep -q '^[a-f0-9]\{40\}\.tar\.gz$'; then
+                # Extract hash from HASH.tar.gz and make linux-raspberrypi-HASH.tar.gz
+                hash=$(echo "$filename" | sed 's/\.tar\.gz$//')
+                expected_filename="linux-raspberrypi-${hash}.tar.gz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
+            "fakeroot")
+              # LibreELEC expects fakeroot-VERSION.tar.gz but Debian provides fakeroot_VERSION.orig.tar.gz
+              # Also handle version auto-detection when requested version is not available
+              if echo "$filename" | grep -q '^fakeroot_.*\.orig\.tar\.gz$'; then
+                # Extract version from fakeroot_VERSION.orig.tar.gz and make fakeroot-VERSION.tar.gz
+                version=$(echo "$filename" | sed 's/^fakeroot_//' | sed 's/\.orig\.tar\.gz$//')
+                expected_filename="${PKG_NAME}-${version}.tar.gz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              else
+                # Check if we need to auto-detect available version
+                echo "Checking for available fakeroot version..."
+                
+                # Function to find available fakeroot version
+                find_available_fakeroot() {
+                  local pool_url="http://deb.debian.org/debian/pool/main/f/fakeroot/"
+                  local available_versions
+                  
+                  echo "Checking available fakeroot versions..."
+                  # Get list of available versions from Debian pool (with timeout and fallback)
+                  available_versions=$(timeout 10 curl -s "$pool_url" | grep -o 'fakeroot_[0-9]\+\.[0-9][^"]*\.orig\.tar\.[a-z]*' | sort -V | tail -5 2>/dev/null || echo "")
+                  
+                  if [ -z "$available_versions" ]; then
+                    # Fallback to known working versions
+                    echo "Could not retrieve version list, using known versions"
+                    available_versions="fakeroot_1.31.orig.tar.gz"
+                  fi
+                  
+                  echo "Available versions found:"
+                  echo "$available_versions"
+                  
+                  # Use the latest available version
+                  local latest_version=$(echo "$available_versions" | tail -1)
+                  if [ -n "$latest_version" ]; then
+                    echo "Using latest available version: $latest_version"
+                    echo "$latest_version"
+                    return
+                  fi
+                  
+                  # Fallback
+                  echo "fakeroot_1.31.orig.tar.gz"
+                }
+                
+                # Get available version and update filename
+                available_file=$(find_available_fakeroot)
+                if [ -n "$available_file" ]; then
+                  # Update the download URL to use available version
+                  version=$(echo "$available_file" | sed 's/^fakeroot_//' | sed 's/\.orig\.tar\.gz$//')
+                  PKG_URL="http://deb.debian.org/debian/pool/main/f/fakeroot/$available_file"
+                  filename="$available_file"
+                  expected_filename="${PKG_NAME}-${version}.tar.gz"
+                  echo "Updated fakeroot download: $PKG_URL -> $expected_filename"
+                fi
+              fi
+              ;;
+            "nss"|"nspr")
+              # Handle NSS/NSPR combined package - Mozilla provides combined nss-X.XX-with-nspr-X.XX.tar.gz
+              # but LibreELEC expects separate nss-X.XX.tar.gz and nspr-X.XX.tar.gz files
+              if echo "$filename" | grep -q '^nss-.*-with-nspr-.*\.tar\.gz$'; then
+                echo "Found combined NSS/NSPR package: $filename"
+                
+                # Extract NSS and NSPR versions from combined filename
+                nss_version=$(echo "$filename" | sed -n 's/^nss-\([0-9.]*\)-with-nspr-.*/\1/p')
+                nspr_version=$(echo "$filename" | sed -n 's/^nss-.*-with-nspr-\([0-9.]*\)\.tar\.gz$/\1/p')
+                
+                echo "Extracted versions - NSS: $nss_version, NSPR: $nspr_version"
+                
+                if [ "$PKG_NAME" = "nss" ]; then
+                  expected_filename="nss-${nss_version}.tar.gz"
+                  echo "Setting expected filename for NSS: $expected_filename"
+                elif [ "$PKG_NAME" = "nspr" ]; then
+                  expected_filename="nspr-${nspr_version}.tar.gz"
+                  echo "Setting expected filename for NSPR: $expected_filename"
+                fi
+                
+                # We'll need special extraction handling for this combined package
+                echo "Will need to extract individual package from combined archive"
+              fi
+              ;;
+            "kernel-firmware")
+              # LibreELEC expects kernel-firmware-DATE.tar.xz but kernel.org provides linux-firmware-DATE.tar.xz
+              if echo "$filename" | grep -q '^linux-firmware-'; then
+                # Extract date from linux-firmware-DATE.tar.xz and make kernel-firmware-DATE.tar.xz
+                date_version=$(echo "$filename" | sed 's/^linux-firmware-//' | sed 's/\.tar\.xz$//')
+                expected_filename="${PKG_NAME}-${date_version}.tar.xz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
+          esac
+          
+          # Create package sources directory
+          mkdir -p "sources/$PKG_NAME"
+          cd "sources/$PKG_NAME"
+          
+          # Check if file already exists and is valid
+          if [ -f "$expected_filename" ]; then
+            echo "File $expected_filename already exists, verifying..."
+            # Enhanced verification - test archive integrity
+            is_valid=false
+            if [ -s "$expected_filename" ]; then
+              case "$expected_filename" in
+                *.tar.xz)
+                  if xz -t "$expected_filename" 2>/dev/null && tar -tf "$expected_filename" >/dev/null 2>&1; then
+                    is_valid=true
+                  fi
+                  ;;
+                *.tar.gz)
+                  if gzip -t "$expected_filename" 2>/dev/null && tar -tf "$expected_filename" >/dev/null 2>&1; then
+                    is_valid=true
+                  fi
+                  ;;
+                *.tar.bz2)
+                  if bzip2 -t "$expected_filename" 2>/dev/null && tar -tf "$expected_filename" >/dev/null 2>&1; then
+                    is_valid=true
+                  fi
+                  ;;
+                *.tar)
+                  if tar -tf "$expected_filename" >/dev/null 2>&1; then
+                    is_valid=true
+                  fi
+                  ;;
+                *)
+                  # For non-archive files, check if file size is reasonable
+                  file_size=$(stat -c%s "$expected_filename" 2>/dev/null || echo "0")
+                  if [ "$file_size" -gt 100 ]; then
+                    is_valid=true
+                  fi
+                  ;;
+              esac
+            fi
+            
+            if [ "$is_valid" = "true" ]; then
+              echo "Existing file appears valid, skipping download"
+              exit 0
+            else
+              echo "Existing file appears corrupted, re-downloading..."
+              rm -f "$expected_filename"
+            fi
+          fi
+          
+          # Use our enhanced download function
+          echo "Downloading $PKG_NAME..."
+          if download_with_mirrors "$filename" "$PKG_URL"; then
+            # Handle filename conversion if needed
+            if [ "$filename" != "$expected_filename" ]; then
+              if [ -f "$filename" ]; then
+                echo "Renaming $filename to $expected_filename"
+                
+                # Special handling for NSS/NSPR combined package
+                if [[ "$PKG_NAME" == "nss" || "$PKG_NAME" == "nspr" ]] && echo "$filename" | grep -q '^nss-.*-with-nspr-.*\.tar\.gz$'; then
+                  echo "Processing combined NSS/NSPR package for $PKG_NAME"
+                  
+                  # Extract the combined archive
+                  echo "Extracting combined package: $filename"
+                  temp_dir="/tmp/nss_nspr_extract"
+                  mkdir -p "$temp_dir"
+                  
+                  # Extract combined archive
+                  tar -xzf "$filename" -C "$temp_dir"
+                  
+                  # Find the extracted directory (usually nss-VERSION)
+                  extracted_dir=$(find "$temp_dir" -maxdepth 1 -type d -name "nss-*" | head -1)
+                  
+                  if [ -n "$extracted_dir" ] && [ -d "$extracted_dir" ]; then
+                    echo "Found extracted directory: $extracted_dir"
+                    
+                    if [ "$PKG_NAME" = "nss" ]; then
+                      # For NSS, repackage the main directory
+                      echo "Creating NSS package..."
+                      (cd "$temp_dir" && tar -czf "$(basename "$extracted_dir").tar.gz" "$(basename "$extracted_dir")")
+                      cp "$temp_dir/$(basename "$extracted_dir").tar.gz" "$expected_filename"
+                    elif [ "$PKG_NAME" = "nspr" ]; then
+                      # For NSPR, find and repackage the nspr subdirectory
+                      nspr_dir=$(find "$extracted_dir" -type d -name "nspr" | head -1)
+                      if [ -n "$nspr_dir" ] && [ -d "$nspr_dir" ]; then
+                        echo "Found NSPR directory: $nspr_dir"
+                        nspr_version=$(echo "$filename" | sed -n 's/^nss-.*-with-nspr-\([0-9.]*\)\.tar\.gz$/\1/p')
+                        (cd "$(dirname "$nspr_dir")" && tar -czf "nspr-${nspr_version}.tar.gz" "nspr")
+                        cp "$(dirname "$nspr_dir")/nspr-${nspr_version}.tar.gz" "$expected_filename"
+                      else
+                        echo "Error: Could not find NSPR directory in combined package"
+                        exit 1
+                      fi
+                    fi
+                    
+                    # Clean up
+                    rm -rf "$temp_dir"
+                    rm -f "$filename"
+                    
+                    echo "Successfully extracted $PKG_NAME from combined package"
+                  else
+                    echo "Error: Could not extract combined NSS/NSPR package"
+                    exit 1
+                  fi
+                else
+                  # Regular filename conversion
+                  mv "$filename" "$expected_filename"
+                fi
+              elif [ -f "$expected_filename" ]; then
+                echo "File already exists as $expected_filename"
+              else
+                echo "Warning: Neither $filename nor $expected_filename found after download"
+                # List what we actually have
+                echo "Files in directory:"
+                ls -la
+                # Try to find any file that looks like it could be our download
+                possible_file=$(ls -1 | grep -E "(${PKG_NAME}|$(echo "$filename" | sed 's/\.[^.]*$//'))" | head -1)
+                if [ -n "$possible_file" ]; then
+                  echo "Found possible match: $possible_file, renaming to $expected_filename"
+                  mv "$possible_file" "$expected_filename"
+                fi
+              fi
+            fi
+            
+            # Final verification with more detailed error reporting
+            if [ -s "$expected_filename" ]; then
+              echo "Successfully downloaded $PKG_NAME ($expected_filename)"
+              echo "File size: $(stat -c%s "$expected_filename" 2>/dev/null || echo "unknown") bytes"
+              exit 0
+            else
+              echo "Error: Expected file $expected_filename not found or empty!"
+              echo "Current directory contents:"
+              ls -la
+              exit 1
+            fi
+          else
+            echo "Failed to download $PKG_NAME from all mirrors"
+            exit 1
+          fi
+          GETSCRIPT
+          
+          chmod +x scripts/get
+          fi
+          
+          echo "Patching package.mk files to use reliable mirrors..."
+          
+          # Find and patch all package.mk files with broken URLs
+          find packages/ tools/ -name "package.mk" -type f | while read pkg_file; do
+            if grep -q "gmplib.org\|sources.libreelec.tv.*404\|ftpmirror.gnu.org/make" "$pkg_file" 2>/dev/null; then
+              echo "Patching: $pkg_file"
+              sed -i.bak \
+                -e 's|https://gmplib.org/download/gmp/|https://mirrors.kernel.org/gnu/gmp/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/gmp/|https://mirrors.kernel.org/gnu/gmp/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/binutils/|https://mirrors.kernel.org/gnu/binutils/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/mpfr/|https://mirrors.kernel.org/gnu/mpfr/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/mpc/|https://mirrors.kernel.org/gnu/mpc/|g' \
+                -e 's|http://ftpmirror.gnu.org/make/|https://mirrors.kernel.org/gnu/make/|g' \
+                -e 's|http://sources.libreelec.tv/mirror/make/|https://mirrors.kernel.org/gnu/make/|g' \
+                "$pkg_file"
+            fi
+          done
+          
+          echo "✓ Comprehensive package fixes applied successfully!"
+          echo "This should handle all known download issues automatically."
 
       - name: Copy custom packages
         run: |
@@ -143,10 +685,104 @@ jobs:
           echo "Setting up LibreELEC build for ${{ matrix.full_name }}"
           echo "PROJECT=${{ matrix.project }}, DEVICE=${{ matrix.libreelec_device }}, ARCH=${{ matrix.arch }}"
 
+      - name: Pre-download sources to avoid build failures
+        run: |
+          set -e
+          echo "Pre-downloading common source packages that might fail during build..."
+          
+          # Create sources directory if it doesn't exist
+          sudo mkdir -p /tmp/sources
+          
+          # Pre-download gettext from multiple GNU mirrors
+          echo "Downloading gettext..."
+          for url in \
+            "https://ftp.gnu.org/gnu/gettext/gettext-0.21.tar.xz" \
+            "https://ftpmirror.gnu.org/gettext/gettext-0.21.tar.xz" \
+            "https://mirror.koddos.net/gnu/gettext/gettext-0.21.tar.xz" \
+            "https://mirrors.kernel.org/gnu/gettext/gettext-0.21.tar.xz" \
+            "https://mirror.us-midwest-1.nexcess.net/gnu/gettext/gettext-0.21.tar.xz"
+          do
+            if wget --timeout=30 --tries=2 -O /tmp/sources/gettext-0.21.tar.xz "$url" 2>/dev/null; then
+              echo "Successfully downloaded gettext from $url"
+              break
+            else
+              echo "Failed to download from $url, trying next mirror..."
+            fi
+          done
+          
+          # Pre-download GMP (GNU Multiple Precision Arithmetic Library)
+          echo "Downloading GMP..."
+          for url in \
+            "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz" \
+            "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz" \
+            "https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz" \
+            "https://mirror.koddos.net/gnu/gmp/gmp-6.3.0.tar.xz" \
+            "https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz" \
+            "https://archive.archlinux.org/packages/g/gmp/gmp-6.3.0-1-x86_64.pkg.tar.zst"
+          do
+            if wget --timeout=30 --tries=2 -O /tmp/sources/gmp-6.3.0.tar.xz "$url" 2>/dev/null; then
+              echo "Successfully downloaded GMP from $url"
+              break
+            else
+              echo "Failed to download from $url, trying next mirror..."
+            fi
+          done
+          
+          # Pre-download other commonly problematic packages
+          echo "Downloading MPFR..."
+          for url in \
+            "https://www.mpfr.org/mpfr-current/mpfr-4.2.1.tar.xz" \
+            "https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz" \
+            "https://ftpmirror.gnu.org/mpfr/mpfr-4.2.1.tar.xz"
+          do
+            if wget --timeout=30 --tries=2 -O /tmp/sources/mpfr-4.2.1.tar.xz "$url" 2>/dev/null; then
+              echo "Successfully downloaded MPFR from $url"
+              break
+            else
+              echo "Failed to download from $url, trying next mirror..."
+            fi
+          done
+          
+          echo "Downloading MPC..."
+          for url in \
+            "https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz" \
+            "https://ftpmirror.gnu.org/mpc/mpc-1.3.1.tar.gz" \
+            "https://mirror.koddos.net/gnu/mpc/mpc-1.3.1.tar.gz"
+          do
+            if wget --timeout=30 --tries=2 -O /tmp/sources/mpc-1.3.1.tar.gz "$url" 2>/dev/null; then
+              echo "Successfully downloaded MPC from $url"
+              break
+            else
+              echo "Failed to download from $url, trying next mirror..."
+            fi
+          done
+          
+          # List what we successfully downloaded
+          echo "Pre-downloaded files:"
+          ls -la /tmp/sources/ || echo "No sources downloaded"
+          echo "Verifying downloaded files exist and have content:"
+          for file in /tmp/sources/*; do
+            if [ -f "$file" ]; then
+              echo "$(basename "$file"): $(ls -lh "$file" | awk '{print $5}')"
+            fi
+          done
+
       - name: Build LibreELEC image
+        timeout-minutes: 180
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           export CCACHE_DIR="${{ github.workspace }}/.ccache"
+          
+          # Set up environment for source cache
+          export SOURCES_CACHE="/tmp/sources"
+          
+          # Create LibreELEC sources directory and copy our pre-downloaded files
+          mkdir -p sources
+          if [ -f "/home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources/gmp-6.3.0.tar.xz" ]; then
+            echo "Copying pre-downloaded GMP to LibreELEC sources directory..."
+            cp -v "/home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources/"*.tar.* sources/ 2>/dev/null || echo "No pre-downloaded sources to copy"
+            ls -la sources/
+          fi
           
           echo "Current directory: $(pwd)"
           echo "Available LibreELEC projects:"
@@ -159,8 +795,52 @@ jobs:
           echo "Starting LibreELEC build for ${{ matrix.full_name }}"
           echo "Build command: make PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image"
           
-          # Build for the specific device
-          make PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image
+          # Set timeout for wget operations to prevent hanging
+          export WGET_OPTIONS="--timeout=30 --tries=3"
+          
+          # Add alternative GNU mirrors to help with download issues
+          export GNU_MIRROR_LIST="https://ftp.gnu.org/gnu https://mirrors.kernel.org/gnu https://ftpmirror.gnu.org"
+          
+          # Optimize build performance
+          export MAKEFLAGS="-j$(nproc)"
+          export NINJA_STATUS="[%f/%t] "
+          export CCACHE_COMPRESS=1
+          export CCACHE_MAXSIZE=2G
+          
+          # Set environment variables for robust network downloads
+          export HTTP_TIMEOUT=60
+          export WGET_TIMEOUT=60
+          export CURL_TIMEOUT=60
+          
+          # Try to use pre-downloaded sources by creating symbolic links
+          if [ -f "sources/gmp-6.3.0.tar.xz" ]; then
+            echo "Using pre-downloaded GMP source"
+            # Create build cache directory structure
+            mkdir -p build.LibreELEC-${{ matrix.libreelec_device }}.${{ matrix.arch }}-12.0-devel/gmp-6.3.0/
+          fi
+          
+          # Build for the specific device with parallel jobs and robust error handling
+          set -e  # Exit on any error
+          echo "Starting LibreELEC build with enhanced error handling..."
+          
+          # Run the build with timeout and retry logic
+          for attempt in 1 2 3; do
+            echo "Build attempt $attempt of 3"
+            if timeout 3600 make -j$(nproc) PROJECT=${{ matrix.project }} DEVICE=${{ matrix.libreelec_device }} ARCH=${{ matrix.arch }} image; then
+              echo "Build completed successfully on attempt $attempt"
+              break
+            else
+              exit_code=$?
+              echo "Build attempt $attempt failed with exit code $exit_code"
+              if [ $attempt -eq 3 ]; then
+                echo "All build attempts failed"
+                exit $exit_code
+              else
+                echo "Retrying build in 30 seconds..."
+                sleep 30
+              fi
+            fi
+          done
 
       - name: Prepare release artifacts
         run: |
@@ -250,6 +930,7 @@ jobs:
           path: artifacts
 
       - name: Prepare release
+        id: release_prep
         run: |
           mkdir -p release
           
@@ -262,8 +943,12 @@ jobs:
           
           # Create release tag
           RELEASE_TAG="v2.0-$(date +%Y%m%d-%H%M)"
+          RELEASE_NAME="Project-Raven LibreELEC v2.0 - $(date +%Y-%m-%d)"
+          
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
-          echo "RELEASE_NAME=Project-Raven LibreELEC v2.0 - $(date +%Y-%m-%d)" >> $GITHUB_ENV
+          echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "release_name=$RELEASE_NAME" >> $GITHUB_OUTPUT
           
           echo "Release contents:"
           ls -la release/
@@ -271,8 +956,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_NAME }}
+          tag_name: ${{ steps.release_prep.outputs.release_tag }}
+          name: ${{ steps.release_prep.outputs.release_name }}
           body_path: release/RELEASE_NOTES.md
           files: release/*
           draft: false
