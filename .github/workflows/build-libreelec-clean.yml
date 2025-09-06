@@ -8,6 +8,11 @@ on:
       - 'libreelec-custom-build/**'
       - 'libreelec-tailscale-addon/**'
       - 'scripts/**'
+    paths-ignore:
+      - 'wiki/**'
+      - 'README.md'
+      - '*.md'
+      - 'docs/**'
   workflow_dispatch:
     inputs:
       device:
@@ -134,30 +139,6 @@ jobs:
           ./comprehensive-package-fix.sh LibreELEC.tv
           
           echo "✓ Comprehensive package fixes applied successfully!"
-
-      - name: Pre-download sources to avoid build failures  
-        run: |
-          cd libreelec-custom-build/LibreELEC.tv
-          
-          echo "Patching LibreELEC scripts to fix bcmstat GitHub archive filename..."
-          
-          # Backup the original get script
-          cp scripts/get scripts/get.original
-          
-          # Patch the get script to handle bcmstat specifically
-          sed -i '/wget ${WGET_OPT} -O "${PKG_SOURCE_NAME}" "${PKG_URL}"/c\
-          # Handle bcmstat GitHub archive filename mismatch\
-          if [[ "${PKG_NAME}" == "bcmstat" && "${PKG_URL}" == *"github.com"*"/archive/"* ]]; then\
-            echo "Downloading bcmstat with corrected filename..."\
-            mkdir -p "${SOURCES}/${PKG_NAME}"\
-            cd "${SOURCES}/${PKG_NAME}"\
-            wget ${WGET_OPT} -O "${PKG_SOURCE_NAME}" "${PKG_URL}"\
-            echo "✓ Downloaded bcmstat as ${PKG_SOURCE_NAME}"\
-          else\
-            wget ${WGET_OPT} -O "${PKG_SOURCE_NAME}" "${PKG_URL}"\
-          fi' scripts/get
-          
-          echo "✓ LibreELEC get script patched for bcmstat GitHub archive handling!"
 
       - name: Copy custom packages
         run: |
