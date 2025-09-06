@@ -143,7 +143,7 @@ jobs:
           # Pre-download bcmstat source package (GitHub pattern)
           echo "Pre-downloading bcmstat..."
           cd libreelec-custom-build/LibreELEC.tv/sources
-          curl -L -o bcmstat-1.1.tar.gz https://github.com/MilhouseVH/bcmstat/archive/refs/tags/1.1.tar.gz
+          curl -L -o bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz
           
           # Pre-download configtools source package (GNU Savannah pattern)
           echo "Pre-downloading configtools..."
