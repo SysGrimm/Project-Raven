@@ -239,29 +239,47 @@ jobs:
           # Extract filename from URL
           filename=$(basename "$PKG_URL")
           
+          # Handle special filename cases where LibreELEC expects different naming
+          expected_filename="$filename"
+          case "$PKG_NAME" in
+            "texturecache.py")
+              # LibreELEC expects texturecache.py-VERSION.tar.gz but GitHub provides VERSION.tar.gz
+              if [[ "$filename" =~ ^[0-9] ]]; then
+                expected_filename="${PKG_NAME}-${filename}"
+                echo "🔧 Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
+          esac
+          
           # Create package sources directory
           mkdir -p "sources/$PKG_NAME"
           cd "sources/$PKG_NAME"
           
           # Check if file already exists and is valid
-          if [ -f "$filename" ]; then
-            echo "File $filename already exists, verifying..."
+          if [ -f "$expected_filename" ]; then
+            echo "File $expected_filename already exists, verifying..."
             # Basic verification - check if it's not empty and looks like an archive
-            if [ -s "$filename" ] && (file "$filename" | grep -q -E "(compressed|archive|gzip|XZ|bzip2|tar)"); then
+            if [ -s "$expected_filename" ] && (file "$expected_filename" | grep -q -E "(compressed|archive|gzip|XZ|bzip2|tar)"); then
               echo "✓ Existing file appears valid, skipping download"
               exit 0
             else
               echo "⚠ Existing file appears corrupted, re-downloading..."
-              rm -f "$filename"
+              rm -f "$expected_filename"
             fi
           fi
           
-          # Use our enhanced download function
+          # Use our enhanced download function, but download to expected filename
           echo "Downloading $PKG_NAME..."
           if download_with_mirrors "$filename" "$PKG_URL"; then
+            # If we downloaded to a different name than expected, rename it
+            if [ "$filename" != "$expected_filename" ] && [ -f "$filename" ]; then
+              echo "🔧 Renaming $filename to $expected_filename"
+              mv "$filename" "$expected_filename"
+            fi
+            
             # Final verification
-            if [ -s "$filename" ]; then
-              echo "✓ Successfully downloaded $PKG_NAME ($filename)"
+            if [ -s "$expected_filename" ]; then
+              echo "✓ Successfully downloaded $PKG_NAME ($expected_filename)"
               exit 0
             else
               echo "✗ Downloaded file is empty!"
