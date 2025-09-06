@@ -1,13 +1,12 @@
-name: Build Custom LibreELEC Image
+name: Build Custom LibreELEC Image (Clean - Manual Only)
 
 on:
-  push:
-    branches: [ main ]
-    paths: 
-      - '.github/workflows/build-libreelec.yml'
-      - 'libreelec-custom-build/**'
-      - 'libreelec-tailscale-addon/**'
-      - 'scripts/**'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual build'
+        required: false
+        default: 'Manual trigger'
     paths-ignore:
       - 'wiki/**'
       - 'README.md'
