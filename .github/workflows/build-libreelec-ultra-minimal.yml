@@ -1,11 +1,12 @@
-name: LibreELEC Build - Ultra Minimal
+name: LibreELEC Build - Ultra Minimal (Manual Only)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-    paths: 
-      - '.github/workflows/build-libreelec.yml'
+    inputs:
+      reason:
+        description: 'Reason for manual minimal build'
+        required: false
+        default: 'Manual minimal test'
 
 jobs:
   build:
