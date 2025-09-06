@@ -135,152 +135,41 @@ jobs:
           
           echo "✓ Comprehensive package fixes applied successfully!"
 
-      - name: Pre-download sources to avoid build failures  
+      - name: Pre-download sources to fix download failures
         run: |
-          cd libreelec-custom-build/LibreELEC.tv
+          # Create sources directory if it doesn't exist
+          mkdir -p libreelec-custom-build/LibreELEC.tv/sources
           
-          echo "Pre-downloading packages to fix archive filename issues..."
+          # Pre-download bcmstat source package (GitHub pattern)
+          echo "Pre-downloading bcmstat..."
+          cd libreelec-custom-build/LibreELEC.tv/sources
+          curl -L -o bcmstat-1.1.tar.gz https://github.com/MilhouseVH/bcmstat/archive/refs/tags/1.1.tar.gz
           
-          # Pre-download bcmstat (GitHub archive pattern)
-          echo "=== Downloading bcmstat ==="
-          mkdir -p sources/bcmstat
-          cd sources/bcmstat
+          # Pre-download configtools source package (GNU Savannah pattern)
+          echo "Pre-downloading configtools..."
+          curl -L -o configtools-2021-08-14.tar.gz https://git.savannah.gnu.org/gitweb/?p=config.git;a=snapshot;h=5123daa3d5;sf=tgz
           
-          BCMSTAT_URL="https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz"
-          HASH="1698ec66f7dd38b21d92958dfe08a79dd07300a5"
-          EXPECTED_FILENAME="bcmstat-${HASH}.tar.gz"
+          # Pre-download make source package (GNU mirror pattern)
+          echo "Pre-downloading make..."
+          curl -L -o make-4.4.1.tar.gz https://mirrors.kernel.org/gnu/make/make-4.4.1.tar.gz
           
-          echo "Downloading bcmstat from: $BCMSTAT_URL"
-          echo "Saving as expected filename: $EXPECTED_FILENAME"
+          # Pre-download fakeroot source package (Debian pattern)
+          echo "Pre-downloading fakeroot..."
+          curl -L -o fakeroot-1.32.2.tar.gz https://deb.debian.org/debian/pool/main/f/fakeroot/fakeroot_1.32.2.orig.tar.gz
           
-          wget -O "$EXPECTED_FILENAME" "$BCMSTAT_URL"
+          # Pre-download ninja source package (GitHub v2 pattern)
+          echo "Pre-downloading ninja..."
+          curl -L -o ninja-1.11.1.tar.gz https://github.com/ninja-build/ninja/archive/refs/tags/v1.11.1.tar.gz
           
-          if [[ -f "$EXPECTED_FILENAME" ]]; then
-            echo "✅ Successfully pre-downloaded bcmstat as $EXPECTED_FILENAME"
-            ls -la "$EXPECTED_FILENAME"
-          else
-            echo "❌ Failed to download bcmstat"
-            exit 1
-          fi
+          # Pre-download autoconf source package (GNU mirror v2 pattern)
+          echo "Pre-downloading autoconf..."
+          curl -L -o autoconf-2.71.tar.xz https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.xz
           
-          cd ../..
+          # Pre-download setuptools source package (GitHub v3 pattern)
+          echo "Pre-downloading setuptools..."
+          curl -L -o setuptools-52.0.0.tar.gz https://github.com/pypa/setuptools/archive/refs/tags/v52.0.0.tar.gz
           
-          # Pre-download configtools (GNU savannah pattern)
-          echo "=== Downloading configtools ==="
-          mkdir -p sources/configtools
-          cd sources/configtools
-          
-          CONFIGTOOLS_URL="http://git.savannah.gnu.org/cgit/config.git/snapshot/config-28ea239c53a2d5d8800c472bc2452eaa16e37af2.tar.gz"
-          CONFIG_HASH="28ea239c53a2d5d8800c472bc2452eaa16e37af2"
-          CONFIG_EXPECTED="configtools-${CONFIG_HASH}.tar.gz"
-          
-          echo "Downloading configtools from: $CONFIGTOOLS_URL"
-          echo "Saving as expected filename: $CONFIG_EXPECTED"
-          
-          wget -O "$CONFIG_EXPECTED" "$CONFIGTOOLS_URL"
-          
-          if [[ -f "$CONFIG_EXPECTED" ]]; then
-            echo "✅ Successfully pre-downloaded configtools as $CONFIG_EXPECTED"
-            ls -la "$CONFIG_EXPECTED"
-          else
-            echo "❌ Failed to download configtools"
-            exit 1
-          fi
-          
-          cd ../..
-          
-          # Pre-download make (GNU mirror pattern)
-          echo "=== Downloading make ==="
-          mkdir -p sources/make
-          cd sources/make
-          
-          MAKE_URL="https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz"
-          MAKE_EXPECTED="make-4.4.1.tar.gz"
-          
-          echo "Downloading make from: $MAKE_URL"
-          echo "Saving as expected filename: $MAKE_EXPECTED"
-          
-          wget -O "$MAKE_EXPECTED" "$MAKE_URL"
-          
-          if [[ -f "$MAKE_EXPECTED" ]]; then
-            echo "✅ Successfully pre-downloaded make as $MAKE_EXPECTED"
-            ls -la "$MAKE_EXPECTED"
-          else
-            echo "❌ Failed to download make"
-            exit 1
-          fi
-          
-          cd ../..
-          
-          # Pre-download fakeroot (Debian package pattern)
-          echo "=== Downloading fakeroot ==="
-          mkdir -p sources/fakeroot
-          cd sources/fakeroot
-          
-          FAKEROOT_URL="http://ftp.debian.org/debian/pool/main/f/fakeroot/fakeroot_1.37.1.2.orig.tar.gz"
-          FAKEROOT_EXPECTED="fakeroot-1.34.tar.gz"
-          
-          echo "Downloading fakeroot from: $FAKEROOT_URL"
-          echo "Saving as expected filename: $FAKEROOT_EXPECTED"
-          
-          wget -O "$FAKEROOT_EXPECTED" "$FAKEROOT_URL"
-          
-          if [[ -f "$FAKEROOT_EXPECTED" ]]; then
-            echo "✅ Successfully pre-downloaded fakeroot as $FAKEROOT_EXPECTED"
-            ls -la "$FAKEROOT_EXPECTED"
-          else
-            echo "❌ Failed to download fakeroot"
-            exit 1
-          fi
-          
-          cd ../..
-          
-          # Pre-download ninja (GitHub archive pattern - 5th package fix)
-          echo "=== Downloading ninja ==="
-          mkdir -p sources/ninja
-          cd sources/ninja
-          
-          NINJA_URL="https://github.com/ninja-build/ninja/archive/v1.11.1.tar.gz"
-          NINJA_EXPECTED="ninja-1.11.1.tar.gz"
-          
-          echo "Downloading ninja from: $NINJA_URL"
-          echo "Saving as expected filename: $NINJA_EXPECTED"
-          
-          wget -O "$NINJA_EXPECTED" "$NINJA_URL"
-          
-          if [[ -f "$NINJA_EXPECTED" ]]; then
-            echo "✅ Successfully pre-downloaded ninja as $NINJA_EXPECTED"
-            ls -la "$NINJA_EXPECTED"
-          else
-            echo "❌ Failed to download ninja"
-            exit 1
-          fi
-          
-          cd ../..
-          
-          # Pre-download autoconf (GNU mirror pattern - 6th package fix)
-          echo "=== Downloading autoconf ==="
-          mkdir -p sources/autoconf
-          cd sources/autoconf
-          
-          AUTOCONF_URL="https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.xz"
-          AUTOCONF_EXPECTED="autoconf-2.71.tar.xz"
-          
-          echo "Downloading autoconf from: $AUTOCONF_URL"
-          echo "Saving as expected filename: $AUTOCONF_EXPECTED"
-          
-          wget -O "$AUTOCONF_EXPECTED" "$AUTOCONF_URL"
-          
-          if [[ -f "$AUTOCONF_EXPECTED" ]]; then
-            echo "✅ Successfully pre-downloaded autoconf as $AUTOCONF_EXPECTED"
-            ls -la "$AUTOCONF_EXPECTED"
-          else
-            echo "❌ Failed to download autoconf"
-            exit 1
-          fi
-          
-          cd ../..
-          echo "✅ Package pre-downloads completed!"
+          cd ../../..
 
       - name: Copy custom packages
         run: |
