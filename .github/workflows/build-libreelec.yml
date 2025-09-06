@@ -103,13 +103,6 @@ jobs:
 
       - name: Pre-download critical dependencies
         run: |
-          cd libreelec-custom-build
-          echo "Creating comprehensive download reliability solution..."
-          
-          # Create the patch application script that will run after LibreELEC.tv is cloned
-          cat > comprehensive_download_fix.sh << 'EOF'
-      - name: Pre-download critical dependencies
-        run: |
           echo "Pre-downloading critical dependencies to avoid timeout issues..."
           
           # Prepare scripts for later use
@@ -663,29 +656,6 @@ jobs:
           
           echo "✓ Comprehensive package fixes applied successfully!"
           echo "This should handle all known download issues automatically."
-
-      - name: Clone LibreELEC source
-        run: |
-          # Ensure the directory exists and is accessible
-          ls -la libreelec-custom-build/
-          cd libreelec-custom-build
-          
-          # Remove any incomplete clone and start fresh
-          if [ -d "LibreELEC.tv" ]; then
-            echo "Removing incomplete LibreELEC.tv directory..."
-            rm -rf LibreELEC.tv
-          fi
-          
-          echo "Cloning LibreELEC source..."
-          git clone --depth 1 --branch libreelec-12.0 \
-            https://github.com/LibreELEC/LibreELEC.tv.git
-          
-          echo "LibreELEC directory contents:"
-          ls -la LibreELEC.tv/
-          
-          echo "Checking for essential directories:"
-          ls -la LibreELEC.tv/scripts/ || echo "Warning: scripts directory not found"
-          ls -la LibreELEC.tv/packages/ || echo "Warning: packages directory not found"
 
       - name: Copy custom packages
         run: |
