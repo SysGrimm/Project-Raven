@@ -234,6 +234,29 @@ jobs:
           fi
           
           cd ../..
+          
+          # Pre-download ninja (GitHub archive pattern - 5th package fix)
+          echo "=== Downloading ninja ==="
+          mkdir -p sources/ninja
+          cd sources/ninja
+          
+          NINJA_URL="https://github.com/ninja-build/ninja/archive/v1.11.1.tar.gz"
+          NINJA_EXPECTED="ninja-1.11.1.tar.gz"
+          
+          echo "Downloading ninja from: $NINJA_URL"
+          echo "Saving as expected filename: $NINJA_EXPECTED"
+          
+          wget -O "$NINJA_EXPECTED" "$NINJA_URL"
+          
+          if [[ -f "$NINJA_EXPECTED" ]]; then
+            echo "✅ Successfully pre-downloaded ninja as $NINJA_EXPECTED"
+            ls -la "$NINJA_EXPECTED"
+          else
+            echo "❌ Failed to download ninja"
+            exit 1
+          fi
+          
+          cd ../..
           echo "✅ Package pre-downloads completed!"
 
       - name: Copy custom packages
