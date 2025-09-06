@@ -170,6 +170,10 @@ jobs:
           curl -L -o setuptools-52.0.0.tar.gz https://github.com/pypa/setuptools/archive/refs/tags/v52.0.0.tar.gz
           
           cd ../../..
+          
+          # Debug: List pre-downloaded files
+          echo "=== DEBUG: Pre-downloaded files ==="
+          ls -la libreelec-custom-build/LibreELEC.tv/sources/
 
       - name: Copy custom packages
         run: |
@@ -193,6 +197,10 @@ jobs:
           
           echo "Starting LibreELEC build for ${{ matrix.device }}..."
           echo "Build started at: $(date)"
+          
+          # Debug: Check if pre-downloaded files are still available
+          echo "=== DEBUG: Checking sources directory before build ==="
+          ls -la sources/ || echo "Sources directory not found"
           
           # Run the build with timeout and progress monitoring
           timeout 300m make PROJECT=${{ matrix.project }} ARCH=${{ matrix.arch }} DEVICE=${{ matrix.libreelec_device }} -j$(nproc) image
