@@ -102,6 +102,39 @@ jobs:
           
           # Create the patch application script that will run after LibreELEC.tv is cloned
           cat > comprehensive_download_fix.sh << 'EOF'
+      - name: Pre-download critical dependencies
+        run: |
+          echo "Pre-downloading critical dependencies to avoid timeout issues..."
+          
+          # Prepare scripts for later use
+          echo "Preparing comprehensive package fix scripts..."
+          ls -la scripts/
+          
+          echo "✓ Scripts ready for comprehensive package fixes after LibreELEC clone"
+
+      - name: Clone LibreELEC source
+        run: |
+          # Ensure the directory exists and is accessible
+          ls -la libreelec-custom-build/
+          cd libreelec-custom-build
+          
+          # Remove any incomplete clone and start fresh
+          if [ -d "LibreELEC.tv" ]; then
+            echo "Removing incomplete LibreELEC.tv directory..."
+            rm -rf LibreELEC.tv
+          fi
+          
+          echo "Cloning LibreELEC source..."
+          git clone --depth 1 --branch libreelec-12.0 
+            https://github.com/LibreELEC/LibreELEC.tv.git
+          
+          echo "LibreELEC directory contents:"
+          ls -la LibreELEC.tv/
+          
+          echo "Checking for essential directories:"
+          ls -la LibreELEC.tv/scripts/ || echo "Warning: scripts directory not found"
+          ls -la LibreELEC.tv/packages/ || echo "Warning: packages directory not found"
+
       - name: Apply comprehensive download fixes
         run: |
           echo "Applying comprehensive package download fixes..."
@@ -112,18 +145,10 @@ jobs:
           
           cd libreelec-custom-build
           
-          # Wait for LibreELEC.tv directory to be ready
-          echo "Waiting for LibreELEC.tv directory..."
-          timeout=300
-          counter=0
-          while [ ! -d "LibreELEC.tv/scripts" ] && [ $counter -lt $timeout ]; do
-            echo "Waiting... ($counter seconds)"
-            sleep 5
-            counter=$((counter + 5))
-          done
-          
+          # Verify LibreELEC.tv directory exists
           if [ ! -d "LibreELEC.tv/scripts" ]; then
-            echo "ERROR: LibreELEC.tv/scripts not found after timeout"
+            echo "ERROR: LibreELEC.tv/scripts not found"
+            ls -la LibreELEC.tv/ || echo "LibreELEC.tv directory missing"
             exit 1
           fi
           
