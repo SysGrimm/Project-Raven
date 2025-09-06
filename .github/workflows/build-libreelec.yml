@@ -187,17 +187,17 @@ jobs:
                   local pool_url="http://deb.debian.org/debian/pool/main/f/fakeroot/"
                   local available_versions
                   
-                  echo "Checking available fakeroot versions..."
+                  echo "Checking available fakeroot versions..." >&2
                   # Get list of available versions from Debian pool
                   available_versions=$(curl -s "$pool_url" | grep -o 'fakeroot_[0-9]\+\.[0-9][^"]*\.orig\.tar\.[a-z]*' | sort -V | tail -5)
                   
-                  echo "Available versions found:"
-                  echo "$available_versions"
+                  echo "Available versions found:" >&2
+                  echo "$available_versions" >&2
                   
                   # Try to find exact match first
                   local exact_match=$(echo "$available_versions" | grep "fakeroot_${requested_version}\." | head -1)
                   if [ -n "$exact_match" ]; then
-                    echo "Found exact version match: $exact_match"
+                    echo "Found exact version match: $exact_match" >&2
                     echo "$exact_match"
                     return
                   fi
@@ -205,13 +205,13 @@ jobs:
                   # If no exact match, use the latest available version
                   local latest_version=$(echo "$available_versions" | tail -1)
                   if [ -n "$latest_version" ]; then
-                    echo "Using latest available version: $latest_version"
+                    echo "Using latest available version: $latest_version" >&2
                     echo "$latest_version"
                     return
                   fi
                   
                   # Fallback to original filename
-                  echo "No alternative found, using original: $filename"
+                  echo "No alternative found, using original: $filename" >&2
                   echo "$filename"
                 }
                 
