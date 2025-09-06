@@ -278,6 +278,15 @@ jobs:
                 echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
               fi
               ;;
+            "Python3")
+              # LibreELEC expects Python3-VERSION.tar.xz but python.org provides Python-VERSION.tar.xz
+              if echo "$filename" | grep -q '^Python-'; then
+                # Extract version from Python-VERSION.tar.xz and make Python3-VERSION.tar.xz
+                version=$(echo "$filename" | sed 's/^Python-//' | sed 's/\.tar\.xz$//')
+                expected_filename="${PKG_NAME}-${version}.tar.xz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
             "linux")
               # LibreELEC expects linux-raspberrypi-HASH.tar.gz but GitHub provides HASH.tar.gz
               if echo "$filename" | grep -q '^[a-f0-9]\{40\}\.tar\.gz$'; then
