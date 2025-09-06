@@ -278,6 +278,15 @@ jobs:
                 echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
               fi
               ;;
+            "linux")
+              # LibreELEC expects linux-raspberrypi-HASH.tar.gz but GitHub provides HASH.tar.gz
+              if echo "$filename" | grep -q '^[a-f0-9]\{40\}\.tar\.gz$'; then
+                # Extract hash from HASH.tar.gz and make linux-raspberrypi-HASH.tar.gz
+                hash=$(echo "$filename" | sed 's/\.tar\.gz$//')
+                expected_filename="linux-raspberrypi-${hash}.tar.gz"
+                echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
           esac
           
           # Create package sources directory
