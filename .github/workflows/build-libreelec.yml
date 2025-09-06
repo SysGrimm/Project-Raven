@@ -268,7 +268,7 @@ jobs:
           if [ -f "$expected_filename" ]; then
             echo "File $expected_filename already exists, verifying..."
             # Basic verification - check if it's not empty and looks like an archive
-            if [ -s "$expected_filename" ] && (file "$expected_filename" | grep -q -E "(compressed|archive|gzip|XZ|bzip2|tar)"); then
+            if [ -s "$expected_filename" ] && file "$expected_filename" | grep -q -E "(compressed|archive|gzip|XZ|bzip2|tar)"; then
               echo "✓ Existing file appears valid, skipping download"
               exit 0
             else
