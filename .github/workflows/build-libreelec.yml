@@ -175,6 +175,60 @@ jobs:
                 )
                 ;;
               fakeroot_*.orig.tar.*)
+                # Special handling for fakeroot - auto-detect available version
+                echo "Handling fakeroot download with version detection..."
+                
+                # Extract requested version from filename
+                requested_version=$(echo "$filename" | grep -o '[0-9]\+\.[0-9]\+[0-9\.]*')
+                echo "Requested fakeroot version: $requested_version"
+                
+                # Function to find available fakeroot version
+                find_available_fakeroot() {
+                  local pool_url="http://deb.debian.org/debian/pool/main/f/fakeroot/"
+                  local available_versions
+                  
+                  echo "Checking available fakeroot versions..."
+                  # Get list of available versions from Debian pool
+                  available_versions=$(curl -s "$pool_url" | grep -o 'fakeroot_[0-9]\+\.[0-9][^"]*\.orig\.tar\.[a-z]*' | sort -V | tail -5)
+                  
+                  echo "Available versions found:"
+                  echo "$available_versions"
+                  
+                  # Try to find exact match first
+                  local exact_match=$(echo "$available_versions" | grep "fakeroot_${requested_version}\." | head -1)
+                  if [ -n "$exact_match" ]; then
+                    echo "Found exact version match: $exact_match"
+                    echo "$exact_match"
+                    return
+                  fi
+                  
+                  # If no exact match, use the latest available version
+                  local latest_version=$(echo "$available_versions" | tail -1)
+                  if [ -n "$latest_version" ]; then
+                    echo "Using latest available version: $latest_version"
+                    echo "$latest_version"
+                    return
+                  fi
+                  
+                  # Fallback to original filename
+                  echo "No alternative found, using original: $filename"
+                  echo "$filename"
+                }
+                
+                # Get the correct filename
+                correct_filename=$(find_available_fakeroot)
+                
+                # Update filename if we found a different version
+                if [ "$correct_filename" != "$filename" ]; then
+                  echo "Updating filename from $filename to $correct_filename"
+                  filename="$correct_filename"
+                  
+                  # Also create a symlink so the build can find it under the expected name
+                  original_base=$(basename "$1" .orig.tar.gz)
+                  correct_base=$(basename "$correct_filename" .orig.tar.gz)
+                  echo "Will create symlink: $correct_base -> $original_base"
+                fi
+                
                 # Debian package mirrors for fakeroot
                 mirrors=(
                   "http://deb.debian.org/debian/pool/main/f/fakeroot/$filename"
@@ -308,11 +362,56 @@ jobs:
               ;;
             "fakeroot")
               # LibreELEC expects fakeroot-VERSION.tar.gz but Debian provides fakeroot_VERSION.orig.tar.gz
+              # Also handle version auto-detection when requested version is not available
               if echo "$filename" | grep -q '^fakeroot_.*\.orig\.tar\.gz$'; then
                 # Extract version from fakeroot_VERSION.orig.tar.gz and make fakeroot-VERSION.tar.gz
                 version=$(echo "$filename" | sed 's/^fakeroot_//' | sed 's/\.orig\.tar\.gz$//')
                 expected_filename="${PKG_NAME}-${version}.tar.gz"
                 echo "Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              else
+                # Check if we need to auto-detect available version
+                echo "Checking for available fakeroot version..."
+                
+                # Function to find available fakeroot version
+                find_available_fakeroot() {
+                  local pool_url="http://deb.debian.org/debian/pool/main/f/fakeroot/"
+                  local available_versions
+                  
+                  echo "Checking available fakeroot versions..."
+                  # Get list of available versions from Debian pool (with timeout and fallback)
+                  available_versions=$(timeout 10 curl -s "$pool_url" | grep -o 'fakeroot_[0-9]\+\.[0-9][^"]*\.orig\.tar\.[a-z]*' | sort -V | tail -5 2>/dev/null || echo "")
+                  
+                  if [ -z "$available_versions" ]; then
+                    # Fallback to known working versions
+                    echo "Could not retrieve version list, using known versions"
+                    available_versions="fakeroot_1.31.orig.tar.gz"
+                  fi
+                  
+                  echo "Available versions found:"
+                  echo "$available_versions"
+                  
+                  # Use the latest available version
+                  local latest_version=$(echo "$available_versions" | tail -1)
+                  if [ -n "$latest_version" ]; then
+                    echo "Using latest available version: $latest_version"
+                    echo "$latest_version"
+                    return
+                  fi
+                  
+                  # Fallback
+                  echo "fakeroot_1.31.orig.tar.gz"
+                }
+                
+                # Get available version and update filename
+                available_file=$(find_available_fakeroot)
+                if [ -n "$available_file" ]; then
+                  # Update the download URL to use available version
+                  version=$(echo "$available_file" | sed 's/^fakeroot_//' | sed 's/\.orig\.tar\.gz$//')
+                  PKG_URL="http://deb.debian.org/debian/pool/main/f/fakeroot/$available_file"
+                  filename="$available_file"
+                  expected_filename="${PKG_NAME}-${version}.tar.gz"
+                  echo "Updated fakeroot download: $PKG_URL -> $expected_filename"
+                fi
               fi
               ;;
           esac
