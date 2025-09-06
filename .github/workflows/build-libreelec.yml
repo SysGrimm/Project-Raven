@@ -101,20 +101,28 @@ jobs:
           mkdir -p /home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources
           cd /home/runner/work/Project-Raven/Project-Raven/libreelec-custom-build/LibreELEC.tv/sources
           
-          # Download GMP from alternative mirrors
-          echo "Downloading GMP from alternative sources..."
-          wget -c -T 30 -t 3 "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz" || \
+          # Download GMP from working mirror
+          echo "Downloading GMP from working mirror..."
           wget -c -T 30 -t 3 "https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz" || \
           wget -c -T 30 -t 3 "https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz" || \
-          echo "Warning: Could not pre-download GMP, build will try original sources"
+          echo "Warning: Could not pre-download GMP"
           
-          # Download other potentially problematic dependencies
-          echo "Pre-downloading other critical dependencies..."
-          wget -c -T 30 -t 3 "https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz" || echo "MPFR pre-download failed"
-          wget -c -T 30 -t 3 "https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz" || echo "MPC pre-download failed"
+          # Ensure the file is there and valid
+          if [ -f "gmp-6.3.0.tar.xz" ]; then
+            echo "✓ GMP downloaded successfully ($(du -h gmp-6.3.0.tar.xz | cut -f1))"
+            # Verify it's a valid archive
+            if file gmp-6.3.0.tar.xz | grep -q "XZ compressed"; then
+              echo "✓ GMP archive is valid"
+            else
+              echo "⚠ GMP archive may be corrupted, removing..."
+              rm -f gmp-6.3.0.tar.xz
+            fi
+          else
+            echo "⚠ GMP download failed"
+          fi
           
           # List downloaded files
-          echo "Pre-downloaded dependencies:"
+          echo "Downloaded dependencies:"
           ls -la
 
       - name: Clone LibreELEC source
@@ -149,6 +157,23 @@ jobs:
           echo "tries = 5" >> ~/.wgetrc
           echo "retry_connrefused = on" >> ~/.wgetrc
           echo "waitretry = 3" >> ~/.wgetrc
+          
+          # Find and patch GMP package definition
+          GMP_PKG_FILE=$(find packages/ -name "*gmp*" -type f -path "*/package.mk" | head -1)
+          if [ -n "$GMP_PKG_FILE" ]; then
+            echo "Found GMP package file: $GMP_PKG_FILE"
+            echo "Original GMP package content:"
+            head -20 "$GMP_PKG_FILE"
+            
+            # Backup original and patch with working mirror
+            cp "$GMP_PKG_FILE" "$GMP_PKG_FILE.bak"
+            sed -i 's|PKG_URL=.*|PKG_URL="https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz"|g' "$GMP_PKG_FILE"
+            
+            echo "Patched GMP package content:"
+            head -20 "$GMP_PKG_FILE"
+          else
+            echo "⚠ Could not find GMP package definition"
+          fi
           
           # Verify scripts directory exists before patching
           if [ -d "scripts/" ]; then
