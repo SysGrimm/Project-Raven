@@ -139,28 +139,30 @@ jobs:
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           
-          echo "Pre-downloading sources and applying filename fixes..."
+          echo "Patching LibreELEC get script for GitHub archive filename issues..."
           
-          # Pre-download sources to apply fixes before build
-          make PROJECT=RPi ARCH=arm DEVICE=RPi5 sources || echo "Some sources may fail - this is expected"
+          # Backup original get script
+          cp scripts/get scripts/get.original
           
-          # Apply specific filename fixes for known issues
-          sources_dir="build.LibreELEC-RPi5.arm-12.0-devel/sources"
-          if [ -d "$sources_dir" ]; then
-            cd "$sources_dir"
+          # Add GitHub archive filename fix to the get script
+          cat >> scripts/get << 'GET_PATCH'
+          
+          # GitHub archive filename fix for bcmstat and similar packages
+          if [[ "$PKG_NAME" == "bcmstat" && "$PKG_URL" == *"github.com/*/archive/"* ]]; then
+            echo "Applying GitHub archive filename fix for $PKG_NAME..."
+            cd "$SOURCES" 2>/dev/null || cd .
             
-            # Fix bcmstat GitHub archive naming issue
-            for hash_file in [0-9a-f]*.tar.gz; do
-              if [[ -f "$hash_file" && ! -f "bcmstat-$hash_file" ]]; then
-                echo "Creating bcmstat filename fix: $hash_file -> bcmstat-$hash_file"
-                cp "$hash_file" "bcmstat-$hash_file"
-              fi
-            done
+            # Extract the hash from URL and look for downloaded file
+            hash=$(echo "$PKG_URL" | sed 's/.*\/archive\/\([^\/]*\)\.tar\.gz.*/\1/')
             
-            cd ../../..
+            if [[ -f "${hash}.tar.gz" && ! -f "${PKG_NAME}-${hash}.tar.gz" ]]; then
+              echo "Creating expected filename: ${hash}.tar.gz -> ${PKG_NAME}-${hash}.tar.gz"
+              cp "${hash}.tar.gz" "${PKG_NAME}-${hash}.tar.gz"
+            fi
           fi
+          GET_PATCH
           
-          echo "✓ Sources pre-downloaded and filename fixes applied!"
+          echo "✓ LibreELEC get script patched for GitHub archive compatibility!"
 
       - name: Copy custom packages
         run: |
