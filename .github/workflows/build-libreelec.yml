@@ -217,6 +217,11 @@ jobs:
           if [ -f "scripts/get" ]; then
             cp scripts/get scripts/get.original
             
+            # Clean up any potentially corrupted downloads
+            echo "Cleaning up any corrupted files..."
+            find sources/ -name "*.tar.xz" -exec sh -c 'echo "Checking {}..."; if ! xz -t "{}" 2>/dev/null || ! tar -tf "{}" >/dev/null 2>&1; then echo "Removing corrupted file {}"; rm -f "{}"; fi' \; 2>/dev/null || true
+            find sources/ -name "*.tar.gz" -exec sh -c 'echo "Checking {}..."; if ! gzip -t "{}" 2>/dev/null || ! tar -tf "{}" >/dev/null 2>&1; then echo "Removing corrupted file {}"; rm -f "{}"; fi' \; 2>/dev/null || true
+            
             # Create enhanced get script
             cat > scripts/get << 'GETSCRIPT'
           #!/bin/bash
@@ -267,8 +272,41 @@ jobs:
           # Check if file already exists and is valid
           if [ -f "$expected_filename" ]; then
             echo "File $expected_filename already exists, verifying..."
-            # Basic verification - check if it's not empty and looks like an archive
-            if [ -s "$expected_filename" ] && file "$expected_filename" | grep -q -E "(compressed|archive|gzip|XZ|bzip2|tar)"; then
+            # Enhanced verification - test archive integrity
+            is_valid=false
+            if [ -s "$expected_filename" ]; then
+              case "$expected_filename" in
+                *.tar.xz)
+                  if xz -t "$expected_filename" 2>/dev/null && tar -tf "$expected_filename" >/dev/null 2>&1; then
+                    is_valid=true
+                  fi
+                  ;;
+                *.tar.gz)
+                  if gzip -t "$expected_filename" 2>/dev/null && tar -tf "$expected_filename" >/dev/null 2>&1; then
+                    is_valid=true
+                  fi
+                  ;;
+                *.tar.bz2)
+                  if bzip2 -t "$expected_filename" 2>/dev/null && tar -tf "$expected_filename" >/dev/null 2>&1; then
+                    is_valid=true
+                  fi
+                  ;;
+                *.tar)
+                  if tar -tf "$expected_filename" >/dev/null 2>&1; then
+                    is_valid=true
+                  fi
+                  ;;
+                *)
+                  # For non-archive files, check if file size is reasonable
+                  file_size=$(stat -c%s "$expected_filename" 2>/dev/null || echo "0")
+                  if [ "$file_size" -gt 100 ]; then
+                    is_valid=true
+                  fi
+                  ;;
+              esac
+            fi
+            
+            if [ "$is_valid" = "true" ]; then
               echo "Existing file appears valid, skipping download"
               exit 0
             else
