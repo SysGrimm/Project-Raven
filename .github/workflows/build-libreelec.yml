@@ -8,11 +8,6 @@ on:
       - 'libreelec-custom-build/**'
       - 'libreelec-tailscale-addon/**'
       - 'scripts/**'
-    paths-ignore:
-      - 'wiki/**'
-      - 'README.md'
-      - '*.md'
-      - 'docs/**'
   workflow_dispatch:
     inputs:
       device:
