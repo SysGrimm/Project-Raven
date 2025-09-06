@@ -135,6 +135,33 @@ jobs:
           
           echo "✓ Comprehensive package fixes applied successfully!"
 
+      - name: Pre-download sources to avoid build failures  
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          
+          echo "Pre-downloading sources and applying filename fixes..."
+          
+          # Pre-download sources to apply fixes before build
+          make PROJECT=RPi ARCH=arm DEVICE=RPi5 sources || echo "Some sources may fail - this is expected"
+          
+          # Apply specific filename fixes for known issues
+          sources_dir="build.LibreELEC-RPi5.arm-12.0-devel/sources"
+          if [ -d "$sources_dir" ]; then
+            cd "$sources_dir"
+            
+            # Fix bcmstat GitHub archive naming issue
+            for hash_file in [0-9a-f]*.tar.gz; do
+              if [[ -f "$hash_file" && ! -f "bcmstat-$hash_file" ]]; then
+                echo "Creating bcmstat filename fix: $hash_file -> bcmstat-$hash_file"
+                cp "$hash_file" "bcmstat-$hash_file"
+              fi
+            done
+            
+            cd ../../..
+          fi
+          
+          echo "✓ Sources pre-downloaded and filename fixes applied!"
+
       - name: Copy custom packages
         run: |
           cd libreelec-custom-build
