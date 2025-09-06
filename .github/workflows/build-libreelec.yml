@@ -249,6 +249,15 @@ jobs:
                 echo "🔧 Fixing filename for $PKG_NAME: $filename -> $expected_filename"
               fi
               ;;
+            "ir-bpf-decoders")
+              # LibreELEC expects ir-bpf-decoders-VERSION.tar.gz but GitHub provides v4l-utils-VERSION.tar.gz
+              if [[ "$filename" =~ ^v4l-utils- ]]; then
+                # Extract version from v4l-utils-VERSION.tar.gz and make ir-bpf-decoders-VERSION.tar.gz
+                version=$(echo "$filename" | sed 's/^v4l-utils-//' | sed 's/.tar.gz$//')
+                expected_filename="${PKG_NAME}-${version}.tar.gz"
+                echo "🔧 Fixing filename for $PKG_NAME: $filename -> $expected_filename"
+              fi
+              ;;
           esac
           
           # Create package sources directory
