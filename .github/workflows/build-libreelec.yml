@@ -188,6 +188,29 @@ jobs:
           fi
           
           cd ../..
+          
+          # Pre-download make (GNU mirror pattern)
+          echo "=== Downloading make ==="
+          mkdir -p sources/make
+          cd sources/make
+          
+          MAKE_URL="https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz"
+          MAKE_EXPECTED="make-4.4.1.tar.gz"
+          
+          echo "Downloading make from: $MAKE_URL"
+          echo "Saving as expected filename: $MAKE_EXPECTED"
+          
+          wget -O "$MAKE_EXPECTED" "$MAKE_URL"
+          
+          if [[ -f "$MAKE_EXPECTED" ]]; then
+            echo "✅ Successfully pre-downloaded make as $MAKE_EXPECTED"
+            ls -la "$MAKE_EXPECTED"
+          else
+            echo "❌ Failed to download make"
+            exit 1
+          fi
+          
+          cd ../..
           echo "✅ Package pre-downloads completed!"
 
       - name: Copy custom packages
