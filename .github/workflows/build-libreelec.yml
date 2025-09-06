@@ -257,6 +257,29 @@ jobs:
           fi
           
           cd ../..
+          
+          # Pre-download autoconf (GNU mirror pattern - 6th package fix)
+          echo "=== Downloading autoconf ==="
+          mkdir -p sources/autoconf
+          cd sources/autoconf
+          
+          AUTOCONF_URL="https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.xz"
+          AUTOCONF_EXPECTED="autoconf-2.71.tar.xz"
+          
+          echo "Downloading autoconf from: $AUTOCONF_URL"
+          echo "Saving as expected filename: $AUTOCONF_EXPECTED"
+          
+          wget -O "$AUTOCONF_EXPECTED" "$AUTOCONF_URL"
+          
+          if [[ -f "$AUTOCONF_EXPECTED" ]]; then
+            echo "✅ Successfully pre-downloaded autoconf as $AUTOCONF_EXPECTED"
+            ls -la "$AUTOCONF_EXPECTED"
+          else
+            echo "❌ Failed to download autoconf"
+            exit 1
+          fi
+          
+          cd ../..
           echo "✅ Package pre-downloads completed!"
 
       - name: Copy custom packages
