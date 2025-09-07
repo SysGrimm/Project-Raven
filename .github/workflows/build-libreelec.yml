@@ -81,7 +81,7 @@ jobs:
           echo "Cloning LibreELEC 12.x source..."
           mkdir -p libreelec-custom-build
           cd libreelec-custom-build
-          git clone --depth 1 --branch LibreELEC-12.0 https://github.com/LibreELEC/LibreELEC.tv.git
+          git clone --depth 1 --branch libreelec-12.0 https://github.com/LibreELEC/LibreELEC.tv.git
           cd LibreELEC.tv
           echo "LibreELEC source cloned successfully"
 
