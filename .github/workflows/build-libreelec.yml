@@ -490,51 +490,120 @@ jobs:
           echo "Starting LibreELEC build for ${{ matrix.device }}..."
           echo "Build started at: $(date)"
           
-          # Start build and apply fixes during download phase
-          (
-            timeout 300m make PROJECT=RPi ARCH=arm DEVICE=${{ matrix.device }} -j$(nproc) image
-          ) 2>&1 | tee build.log &
+          # Set bash strict mode for proper error handling
+          set -euo pipefail
           
-          BUILD_PID=$!
+          # Start build with proper error handling
+          echo "Running: timeout 300m make PROJECT=RPi ARCH=arm DEVICE=${{ matrix.device }} -j$(nproc) image"
           
-          # Monitor build and apply filename fixes when needed
-          while kill -0 $BUILD_PID 2>/dev/null; do
-            if [ -f "build.LibreELEC-RPi5.arm-12.0-devel/sources/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz" ]; then
-              ./fix-github-archives.sh 2>/dev/null || true
-            fi
-            sleep 5
-          done
+          # Use a more robust approach for build monitoring
+          BUILD_SUCCESS=false
           
-          wait $BUILD_PID
-          BUILD_RESULT=$?
-          
-          echo "Build completed at: $(date)"
-          echo "Build exit code: $BUILD_RESULT"
-          
-          # Show build artifacts if successful
-          if [ $BUILD_RESULT -eq 0 ]; then
-            echo "Build artifacts:"
-            find target -name "*.img.gz" -o -name "*.tar" 2>/dev/null || echo "No build artifacts found"
+          # Run build with timeout and capture exit code properly
+          if timeout 300m make PROJECT=RPi ARCH=arm DEVICE=${{ matrix.device }} -j$(nproc) image 2>&1 | tee build.log; then
+            BUILD_RESULT=0
           else
-            echo "Build failed, showing end of log:"
-            tail -50 build.log
+            BUILD_RESULT=$?
           fi
           
-          exit $BUILD_RESULT
+          echo "Build completed at: $(date)"
+          echo "Make command exit code: $BUILD_RESULT"
+          
+          # Validate build success by checking for actual build artifacts
+          if [ $BUILD_RESULT -eq 0 ]; then
+            echo "Checking for build artifacts..."
+            if find target -name "*.img.gz" -o -name "*.tar" 2>/dev/null | grep -q .; then
+              echo "✅ Build successful - artifacts found:"
+              find target -name "*.img.gz" -o -name "*.tar" 2>/dev/null
+              BUILD_SUCCESS=true
+            else
+              echo "❌ Build reported success but no artifacts found!"
+              echo "This indicates a build failure that wasn't properly detected."
+              BUILD_RESULT=1
+              BUILD_SUCCESS=false
+            fi
+          else
+            echo "❌ Build failed with exit code: $BUILD_RESULT"
+            BUILD_SUCCESS=false
+          fi
+          
+          # Show detailed error information if build failed
+          if [ "$BUILD_SUCCESS" = false ]; then
+            echo ""
+            echo "=== BUILD FAILURE ANALYSIS ==="
+            echo "Showing last 100 lines of build log:"
+            tail -100 build.log || echo "Could not read build log"
+            
+            echo ""
+            echo "=== CHECKING FOR SPECIFIC ERROR PATTERNS ==="
+            if grep -i "error\|fail\|fatal" build.log | tail -20; then
+              echo "Found error patterns above"
+            else
+              echo "No obvious error patterns found in log"
+            fi
+            
+            echo ""
+            echo "=== DISK SPACE CHECK ==="
+            df -h . || echo "Could not check disk space"
+            
+            echo ""
+            echo "=== DIRECTORY STRUCTURE ==="
+            ls -la . || echo "Could not list directory"
+            
+            # Exit with failure
+            exit 1
+          fi
+          
+          echo "✅ Build completed successfully"
 
       - name: Prepare release artifacts
         if: success()
         run: |
           cd libreelec-custom-build/LibreELEC.tv
+          
+          echo "=== PREPARING RELEASE ARTIFACTS ==="
+          
+          # Verify target directory exists
+          if [ ! -d "target" ]; then
+            echo "❌ Error: target directory not found!"
+            echo "Current directory contents:"
+            ls -la .
+            exit 1
+          fi
+          
+          # Create artifacts directory
           mkdir -p ../../artifacts
           
-          echo "Preparing release artifacts..."
-          find target -name "*.img.gz" -o -name "*.tar" | while read -r file; do
-            echo "Found artifact: $file"
-            cp "$file" ../../artifacts/
+          echo "Searching for build artifacts..."
+          FOUND_ARTIFACTS=false
+          
+          # Find and copy artifacts with better error handling
+          find target -name "*.img.gz" -o -name "*.tar" 2>/dev/null | while read -r file; do
+            if [ -f "$file" ]; then
+              echo "✅ Found artifact: $file"
+              echo "   Size: $(ls -lh "$file" | awk '{print $5}')"
+              cp "$file" ../../artifacts/
+              FOUND_ARTIFACTS=true
+            fi
           done
           
-          ls -la ../../artifacts/
+          # Check if any artifacts were actually copied
+          if [ -d "../../artifacts" ] && [ "$(ls -A ../../artifacts 2>/dev/null)" ]; then
+            echo ""
+            echo "✅ Successfully prepared artifacts:"
+            ls -la ../../artifacts/
+            
+            # Calculate total size
+            echo ""
+            echo "Total artifacts size:"
+            du -sh ../../artifacts/
+          else
+            echo "❌ No artifacts were found or copied!"
+            echo ""
+            echo "Target directory contents:"
+            find target -type f -name "*" | head -20
+            exit 1
+          fi
 
       - name: Upload build artifacts
         if: success()
@@ -543,6 +612,17 @@ jobs:
           name: libreelec-${{ matrix.device }}-${{ github.sha }}
           path: artifacts/
           retention-days: 30
+          if-no-files-found: error  # Fail if no artifacts are found
+
+      - name: Verify artifacts uploaded
+        if: success()
+        run: |
+          echo "✅ Build artifacts have been uploaded successfully!"
+          echo "Artifact name: libreelec-${{ matrix.device }}-${{ github.sha }}"
+          echo "Retention: 30 days"
+          echo ""
+          echo "You can download the artifacts from:"
+          echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   notify-completion:
     runs-on: ubuntu-latest
@@ -551,7 +631,27 @@ jobs:
     steps:
       - name: Build Summary
         run: |
+          echo "=== PROJECT RAVEN BUILD SUMMARY ==="
           echo "Build completed for commit: ${{ github.sha }}"
           echo "Build status: ${{ needs.build-libreelec.result }}"
+          echo "Build time: $(date)"
+          echo ""
+          
+          if [ "${{ needs.build-libreelec.result }}" = "success" ]; then
+            echo "✅ BUILD SUCCESSFUL!"
+            echo "Artifacts should be available for download at:"
+            echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          elif [ "${{ needs.build-libreelec.result }}" = "failure" ]; then
+            echo "❌ BUILD FAILED!"
+            echo "Please check the build logs for detailed error information."
+            echo "Common issues to check:"
+            echo "- Disk space during build"
+            echo "- Network connectivity for package downloads"
+            echo "- Kernel compilation errors"
+            echo "- Missing dependencies"
+          else
+            echo "⚠️  BUILD STATUS: ${{ needs.build-libreelec.result }}"
+            echo "Please check the workflow logs for more information."
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
