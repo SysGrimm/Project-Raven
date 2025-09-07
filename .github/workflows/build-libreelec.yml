@@ -157,7 +157,7 @@ jobs:
           echo "✅ Pre-download system ready"
           ls -la sources/
 
-      - name: Copy custom packages
+      - name: Copy custom packages and apply boot fixes
         run: |
           cd libreelec-custom-build
           
@@ -167,11 +167,321 @@ jobs:
           
           echo "Tailscale add-on copied:"
           ls -la LibreELEC.tv/packages/addons/service/tailscale/
+          
+          echo "=== RASPBERRY PI 5 BOOT OPTIMIZATION v1.0 ==="
+          
+          # Apply Raspberry Pi 5 specific boot fixes
+          cd LibreELEC.tv
+          
+          echo "Creating custom boot configuration fixes..."
+          
+          # Create Pi 5 specific config.txt additions
+          mkdir -p projects/RPi/devices/${{ matrix.device }}/filesystem/flash
+          
+          cat > projects/RPi/devices/${{ matrix.device }}/filesystem/flash/config.txt.append << 'BOOTEOF'
+          # Project Raven - Pi 5 Boot Optimization & Stability Fixes
+          
+          # === GPU AND MEMORY CONFIGURATION ===
+          # Increase GPU memory for better graphics performance
+          gpu_mem=128
+          # Use full KMS for better stability
+          dtoverlay=vc4-kms-v3d-pi5
+          
+          # === AUDIO CONFIGURATION ===
+          # Force audio output and prevent conflicts
+          dtparam=audio=on
+          # Use VC4 audio driver for Pi 5
+          dtoverlay=vc4-kms-v3d-pi5,audio
+          
+          # === USB AND POWER MANAGEMENT ===
+          # Ensure stable USB operation for Pi 5
+          usb_max_current_enable=1
+          # Enable better power management
+          arm_boost=1
+          
+          # === HDMI AND CEC CONFIGURATION ===
+          # Force HDMI output even without connected display
+          hdmi_force_hotplug=1
+          # Enable CEC with proper configuration
+          hdmi_cec_enable=1
+          cec_osd_name=LibreELEC-Raven
+          
+          # === KERNEL COMMAND LINE ADDITIONS ===
+          # Enable CEC follower mode for better compatibility
+          # These will be added to cmdline.txt
+          # vc4.enable_cec_follower=1 console=tty1 quiet loglevel=7
+          
+          # === OVERCLOCKING (CONSERVATIVE) ===
+          # Mild overclock for better performance without instability
+          arm_freq=2400
+          over_voltage=2
+          
+          # === STABILITY FIXES ===
+          # Disable WiFi power saving to prevent disconnects
+          dtoverlay=disable-wifi-power-save
+          # Enable improved thermal management
+          temp_limit=80
+          
+          # === BOOT OPTIMIZATION ===
+          # Faster boot process
+          boot_delay=0
+          disable_splash=1
+          avoid_warnings=1
+          BOOTEOF
 
-      - name: Configure build
+          # Create kernel command line fixes
+          cat > projects/RPi/devices/${{ matrix.device }}/filesystem/flash/cmdline.txt.append << 'CMDEOF'
+          vc4.enable_cec_follower=1 console=tty1 quiet loglevel=7 rootwait
+          CMDEOF
+
+          # Create custom kernel configuration for Pi 5 stability
+          mkdir -p projects/RPi/devices/${{ matrix.device }}/linux
+          cat > projects/RPi/devices/${{ matrix.device }}/linux/linux.conf << 'KERNELEOF'
+          # Pi 5 Kernel Configuration for Stability
+          CONFIG_CEC_CORE=y
+          CONFIG_CEC_NOTIFIER=y
+          CONFIG_CEC_PIN=y
+          CONFIG_CEC_RC=y
+          CONFIG_DRM_VC4_HDMI_CEC=y
+          CONFIG_BCM2835_THERMAL=y
+          CONFIG_HWMON=y
+          CONFIG_THERMAL=y
+          CONFIG_THERMAL_HWMON=y
+          KERNELEOF
+
+          # Create post-install script for additional boot fixes
+          mkdir -p projects/RPi/filesystem/usr/lib/systemd/system
+          cat > projects/RPi/filesystem/usr/lib/systemd/system/raven-boot-fix.service << 'SERVICEEOF'
+          [Unit]
+          Description=Project Raven Boot Fixes
+          After=local-fs.target
+          Before=kodi.service
+          
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/usr/bin/raven-boot-fix.sh
+          
+          [Install]
+          WantedBy=multi-user.target
+          SERVICEEOF
+
+          # Create the boot fix script
+          mkdir -p projects/RPi/filesystem/usr/bin
+          cat > projects/RPi/filesystem/usr/bin/raven-boot-fix.sh << 'SCRIPTEOF'
+          #!/bin/bash
+          # Project Raven Boot Fix Script
+          
+          # Fix CEC permissions
+          if [ -c /dev/cec0 ]; then
+              chmod 666 /dev/cec0
+          fi
+          
+          # Optimize GPU memory split based on available RAM
+          TOTAL_RAM=$(free -m | grep '^Mem:' | awk '{print $2}')
+          if [ "$TOTAL_RAM" -gt 7000 ]; then
+              # 8GB+ Pi: Use more GPU memory
+              echo "gpu_mem=256" >> /flash/config.txt.tmp
+          elif [ "$TOTAL_RAM" -gt 3000 ]; then
+              # 4GB Pi: Balanced split
+              echo "gpu_mem=128" >> /flash/config.txt.tmp
+          else
+              # 2GB Pi: Conservative split
+              echo "gpu_mem=96" >> /flash/config.txt.tmp
+          fi
+          
+          # Ensure proper thermal throttling
+          echo 80000 > /sys/class/thermal/thermal_zone0/trip_point_0_temp 2>/dev/null || true
+          
+          # Set conservative CPU governor for stability
+          echo conservative > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true
+          
+          exit 0
+          SCRIPTEOF
+          chmod +x projects/RPi/filesystem/usr/bin/raven-boot-fix.sh
+          
+          echo "✅ Pi 5 boot optimization configuration applied"
+          
+          echo "=== PI 5 FIRMWARE AND EEPROM OPTIMIZATION ==="
+          
+          # Create firmware configuration optimizations
+          mkdir -p projects/RPi/devices/${{ matrix.device }}/filesystem/flash/overlays
+          
+          # Add firmware-specific fixes for Pi 5 boot stability
+          cat >> projects/RPi/devices/${{ matrix.device }}/filesystem/flash/config.txt.append << 'FIRMEOF'
+          
+          # === FIRMWARE AND EEPROM OPTIMIZATION ===
+          # Use latest firmware features for Pi 5
+          arm_64bit=1
+          kernel=kernel8.img
+          
+          # EEPROM and bootloader optimizations
+          eeprom_write_protect=0
+          bootcode_delay=1
+          
+          # Memory and cache optimizations
+          disable_l2cache=0
+          gpu_mem_256=112
+          gpu_mem_512=144
+          gpu_mem_1024=256
+          
+          # USB and PCIe optimizations for Pi 5
+          dtparam=pciex1
+          dtparam=pciex1_gen=2
+          
+          # Audio optimizations
+          dtparam=audio=on
+          audio_pwm_mode=2
+          
+          # Network optimizations
+          dtoverlay=w1-gpio
+          
+          # Video optimizations
+          hdmi_enable_4kp60=1
+          hdmi_force_edid_audio=1
+          
+          # Power management optimizations
+          wake_on_gpio=1
+          power_force_3v3_pwm=0
+          
+          # Debug options (can be removed for production)
+          enable_uart=1
+          dtoverlay=uart0
+          FIRMEOF
+          
+          # Create early boot optimization script
+          cat > projects/RPi/filesystem/usr/bin/raven-early-boot.sh << 'EARLYEOF'
+          #!/bin/bash
+          # Project Raven Early Boot Optimization
+          
+          # Set CPU governor to conservative during boot for stability
+          for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+              if [ -w "$cpu" ]; then
+                  echo "conservative" > "$cpu" 2>/dev/null || true
+              fi
+          done
+          
+          # Optimize I/O scheduler for SD card
+          for disk in /sys/block/mmcblk*; do
+              if [ -w "$disk/queue/scheduler" ]; then
+                  echo "deadline" > "$disk/queue/scheduler" 2>/dev/null || true
+              fi
+          done
+          
+          # Set conservative thermal limits
+          for thermal in /sys/class/thermal/thermal_zone*/trip_point_*_temp; do
+              if [ -w "$thermal" ]; then
+                  echo "75000" > "$thermal" 2>/dev/null || true
+              fi
+          done
+          
+          # Enable conservative memory management
+          echo 1 > /proc/sys/vm/overcommit_memory 2>/dev/null || true
+          echo 50 > /proc/sys/vm/overcommit_ratio 2>/dev/null || true
+          
+          exit 0
+          EARLYEOF
+          chmod +x projects/RPi/filesystem/usr/bin/raven-early-boot.sh
+          
+          # Create systemd service for early boot optimization
+          cat > projects/RPi/filesystem/usr/lib/systemd/system/raven-early-boot.service << 'EARLYSERVEOF'
+          [Unit]
+          Description=Project Raven Early Boot Optimization
+          DefaultDependencies=false
+          After=sysinit.target
+          Before=basic.target
+          
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/usr/bin/raven-early-boot.sh
+          StandardOutput=journal
+          
+          [Install]
+          WantedBy=sysinit.target
+          EARLYSERVEOF
+          
+          echo "✅ Firmware and early boot optimizations applied"
+
+      - name: Configure build and apply kernel fixes
         run: |
           cd libreelec-custom-build
           echo "Configuring build for ${{ matrix.device }}..."
+          
+          cd LibreELEC.tv
+          
+          echo "=== KERNEL PANIC PREVENTION v1.0 ==="
+          
+          # Apply additional kernel stability patches
+          echo "Creating kernel stability configuration..."
+          
+          # Add Pi 5 specific kernel patches for boot stability
+          mkdir -p projects/RPi/patches/linux
+          cat > projects/RPi/patches/linux/9999-raven-pi5-boot-stability.patch << 'PATCHEOF'
+          --- a/arch/arm64/boot/dts/broadcom/bcm2712-rpi-5-b.dts
+          +++ b/arch/arm64/boot/dts/broadcom/bcm2712-rpi-5-b.dts
+          @@ -20,6 +20,12 @@
+           	model = "Raspberry Pi 5 Model B";
+           	compatible = "raspberrypi,5-model-b", "brcm,bcm2712";
+           
+          +	/* Project Raven stability fixes */
+          +	memory@0 {
+          +		device_type = "memory";
+          +		reg = <0x0 0x0 0x0 0x40000000>;
+          +	};
+          +
+           	aliases {
+           		serial0 = &uart0;
+           		serial10 = &uart0;
+          PATCHEOF
+          
+          # Create enhanced device tree configuration
+          mkdir -p projects/RPi/devices/${{ matrix.device }}/linux
+          cat > projects/RPi/devices/${{ matrix.device }}/linux/linux.rpi5.conf << 'DTEOF'
+          # Additional Pi 5 Boot Stability Configuration
+          CONFIG_PREEMPT_VOLUNTARY=y
+          CONFIG_HZ_250=y
+          CONFIG_NO_HZ_IDLE=y
+          CONFIG_HIGH_RES_TIMERS=y
+          
+          # Memory management for stability
+          CONFIG_COMPACTION=y
+          CONFIG_MIGRATION=y
+          CONFIG_KSM=y
+          CONFIG_DEFAULT_MMAP_MIN_ADDR=65536
+          
+          # Thermal management
+          CONFIG_THERMAL_GOV_STEP_WISE=y
+          CONFIG_CPU_THERMAL=y
+          CONFIG_DEVFREQ_THERMAL=y
+          
+          # GPIO and device tree
+          CONFIG_GPIOLIB=y
+          CONFIG_GPIO_SYSFS=y
+          CONFIG_OF_GPIO=y
+          CONFIG_PINCTRL=y
+          
+          # Video and graphics stability
+          CONFIG_DRM_VC4=y
+          CONFIG_DRM_VC4_HDMI_CEC=y
+          CONFIG_FB_BCM2708=y
+          
+          # USB stability
+          CONFIG_USB_DWCOTG=y
+          CONFIG_USB_DWC2=y
+          
+          # Disable problematic features that can cause panics
+          # CONFIG_KPROBES is not set
+          # CONFIG_JUMP_LABEL is not set
+          # CONFIG_HAVE_OPTPROBES is not set
+          DTEOF
+          
+          # Create improved cmdline.txt for Pi 5
+          cat > projects/RPi/devices/${{ matrix.device }}/filesystem/flash/cmdline.txt << 'CMDEOF'
+          console=serial0,115200 console=tty1 root=LABEL=LIBREELEC rootfstype=ext4 rootwait quiet loglevel=7 plymouth.ignore-serial-consoles smsc95xx.turbo_mode=N dwc_otg.lpm_enable=0 kgdboc=serial0,115200 vc4.enable_cec_follower=1 coherent_pool=1M 8250.nr_uarts=1 pci=pcie_bus_safe
+          CMDEOF
+          
+          echo "✅ Kernel stability fixes applied"
 
       - name: Build LibreELEC image with fixes
         run: |
