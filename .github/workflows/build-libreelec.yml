@@ -139,16 +139,16 @@ jobs:
         run: |
       - name: Pre-download sources to fix download failures
         run: |
-          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v3.0 ==="
-          echo "Creating LibreELEC-compatible source solution..."
+          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v4.0 ==="
+          echo "LibreELEC Direct Source Integration"
           
           cd libreelec-custom-build/LibreELEC.tv
           
-          # Create sources directory
+          # Create sources directory for pre-downloads
           mkdir -p sources
           cd sources
           
-          # Pre-download all packages to sources directory
+          # Pre-download all packages
           echo "Pre-downloading bcmstat..."
           curl -L -o bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz \
             https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz
@@ -179,11 +179,16 @@ jobs:
           
           cd ..
           
-          # Set environment variable to make LibreELEC use our sources
-          echo "export SOURCES_DIR=\$ROOT/sources" >> config/options
+          # Create build directory structure and copy sources there too
+          echo "=== Setting up build source integration ==="
+          BUILD_DIR="build.LibreELEC-RPi5.arm-12.0-devel"
+          mkdir -p "$BUILD_DIR/sources"
+          cp sources/* "$BUILD_DIR/sources/" 2>/dev/null || true
           
           echo "=== DEBUG: Pre-downloaded sources ==="
           ls -la sources/
+          echo "=== DEBUG: Build sources ==="
+          ls -la "$BUILD_DIR/sources/" 2>/dev/null || echo "Build sources not ready yet"
 
       - name: Copy custom packages
         run: |
