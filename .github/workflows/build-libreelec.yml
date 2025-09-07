@@ -1,0 +1,228 @@
+name: Build Custom LibreELEC Image
+
+on:
+  push:
+    branches: [ main ]
+    paths: 
+      - '.github/workflows/build-libreelec.yml'
+      - 'libreelec-custom-build/**'
+      - 'libreelec-tailscale-addon/**'
+      - 'scripts/**'
+
+  workflow_dispatch:
+    inputs:
+      device:
+        description: 'Target device (RPi4, RPi5, Generic)'
+        required: false
+        default: 'RPi5'
+        type: choice
+        options:
+          - RPi4
+          - RPi5
+          - Generic
+      force_clean:
+        description: 'Force clean build'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-libreelec
+
+jobs:
+  build-libreelec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours timeout for LibreELEC build
+    strategy:
+      matrix:
+        device: [RPi5]  # Temporarily build only RPi5 to speed up testing
+        include:
+          - device: RPi5
+            project: RPi
+            arch: arm
+            full_name: "Raspberry Pi 5"
+            libreelec_device: "RPi5"
+    
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install additional build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential gcc-multilib g++-multilib \
+            libgmp-dev libmpfr-dev libmpc-dev texinfo flex gawk \
+            wget autotools-dev automake pkg-config libssl-dev \
+            libncurses-dev unzip bison gettext gperf help2man
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: libreelec-${{ matrix.device }}-${{ github.sha }}
+          restore: true
+          max-size: 500M
+
+      - name: Clone LibreELEC source
+        run: |
+          echo "Cloning LibreELEC 12.x source..."
+          mkdir -p libreelec-custom-build
+          cd libreelec-custom-build
+          git clone --depth 1 --branch LibreELEC-12.0 https://github.com/LibreELEC/LibreELEC.tv.git
+          cd LibreELEC.tv
+          echo "LibreELEC source cloned successfully"
+
+      - name: Apply comprehensive download fixes
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          
+          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v5.0 ==="
+          echo "Applying comprehensive package download fixes..."
+          
+          # Apply existing package fixes (from previous versions)
+          echo "Applying bcmstat fix..."
+          PKG_DIR="packages/devel/bcmstat"
+          sed -i 's|PKG_URL="https://github.com/popcornmix/bcmstat/archive/${PKG_VERSION}.tar.gz"|PKG_URL="https://github.com/popcornmix/bcmstat/archive/${PKG_VERSION}.tar.gz"\nPKG_SOURCE_NAME="${PKG_NAME}-${PKG_VERSION}.tar.gz"|' $PKG_DIR/package.mk
+          
+          echo "✓ Comprehensive package fixes applied successfully!"
+
+      - name: Pre-download critical packages
+        run: |
+          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v5.0 ==="
+          echo "Pre-downloading critical packages..."
+          
+          cd libreelec-custom-build/LibreELEC.tv
+          
+          # Create sources directory
+          mkdir -p sources
+          cd sources
+          
+          # Pre-download bcmstat with correct filename
+          echo "Pre-downloading bcmstat..."
+          curl -L -o bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz \
+            https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz
+          
+          # Pre-download other critical packages
+          echo "Pre-downloading make..."
+          curl -L -o make-4.4.1.tar.gz \
+            https://mirrors.kernel.org/gnu/make/make-4.4.1.tar.gz
+          
+          cd ..
+          
+          # Install runtime filename fix script
+          echo '#!/bin/bash' > fix-github-archives.sh
+          echo 'BUILD_SOURCES="$BUILD/sources"' >> fix-github-archives.sh
+          echo 'if [ -d "$BUILD_SOURCES" ]; then' >> fix-github-archives.sh
+          echo '  cd "$BUILD_SOURCES"' >> fix-github-archives.sh
+          echo '  # Fix bcmstat GitHub archive naming' >> fix-github-archives.sh
+          echo '  if [ -f "1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz" ] && [ ! -f "bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz" ]; then' >> fix-github-archives.sh
+          echo '    ln -s "1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz" "bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz"' >> fix-github-archives.sh
+          echo '    echo "Fixed bcmstat filename with symlink"' >> fix-github-archives.sh
+          echo '  fi' >> fix-github-archives.sh
+          echo 'fi' >> fix-github-archives.sh
+          chmod +x fix-github-archives.sh
+          
+          echo "✅ Pre-download system ready"
+          ls -la sources/
+
+      - name: Copy custom packages
+        run: |
+          cd libreelec-custom-build
+          
+          echo "Copying Tailscale add-on..."
+          mkdir -p LibreELEC.tv/packages/addons/service/tailscale
+          cp -r ../libreelec-tailscale-addon/* LibreELEC.tv/packages/addons/service/tailscale/
+          
+          echo "Tailscale add-on copied:"
+          ls -la LibreELEC.tv/packages/addons/service/tailscale/
+
+      - name: Configure build
+        run: |
+          cd libreelec-custom-build
+          echo "Configuring build for ${{ matrix.device }}..."
+
+      - name: Build LibreELEC image with fixes
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          
+          echo "Starting LibreELEC build for ${{ matrix.device }}..."
+          echo "Build started at: $(date)"
+          
+          # Start build and apply fixes during download phase
+          (
+            timeout 300m make PROJECT=RPi ARCH=arm DEVICE=${{ matrix.device }} -j$(nproc) image
+          ) 2>&1 | tee build.log &
+          
+          BUILD_PID=$!
+          
+          # Monitor build and apply filename fixes when needed
+          while kill -0 $BUILD_PID 2>/dev/null; do
+            if [ -f "build.LibreELEC-RPi5.arm-12.0-devel/sources/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz" ]; then
+              ./fix-github-archives.sh 2>/dev/null || true
+            fi
+            sleep 5
+          done
+          
+          wait $BUILD_PID
+          BUILD_RESULT=$?
+          
+          echo "Build completed at: $(date)"
+          echo "Build exit code: $BUILD_RESULT"
+          
+          # Show build artifacts if successful
+          if [ $BUILD_RESULT -eq 0 ]; then
+            echo "Build artifacts:"
+            find target -name "*.img.gz" -o -name "*.tar" 2>/dev/null || echo "No build artifacts found"
+          else
+            echo "Build failed, showing end of log:"
+            tail -50 build.log
+          fi
+          
+          exit $BUILD_RESULT
+
+      - name: Prepare release artifacts
+        if: success()
+        run: |
+          cd libreelec-custom-build/LibreELEC.tv
+          mkdir -p ../../artifacts
+          
+          echo "Preparing release artifacts..."
+          find target -name "*.img.gz" -o -name "*.tar" | while read -r file; do
+            echo "Found artifact: $file"
+            cp "$file" ../../artifacts/
+          done
+          
+          ls -la ../../artifacts/
+
+      - name: Upload build artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libreelec-${{ matrix.device }}-${{ github.sha }}
+          path: artifacts/
+          retention-days: 30
+
+  notify-completion:
+    runs-on: ubuntu-latest
+    needs: build-libreelec
+    if: always()
+    steps:
+      - name: Build Summary
+        run: |
+          echo "Build completed for commit: ${{ github.sha }}"
+          echo "Build status: ${{ needs.build-libreelec.result }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
