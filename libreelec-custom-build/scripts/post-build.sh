@@ -36,11 +36,41 @@ sudo partprobe "$LOOP_DEV"
 mkdir -p system
 sudo mount "${LOOP_DEV}p2" system
 
-# Mount the storage partition (usually partition 1)  
+# Mount the boot partition (usually partition 1)  
+mkdir -p boot
+sudo mount "${LOOP_DEV}p1" boot
+
+# Mount the storage partition (usually partition 2 if it exists)  
 mkdir -p storage
-sudo mount "${LOOP_DEV}p1" storage
+if [ -e "${LOOP_DEV}p2" ]; then
+    sudo mount "${LOOP_DEV}p2" storage 2>/dev/null || {
+        # If p2 doesn't exist or fails, try mounting p1 as storage
+        sudo mount "${LOOP_DEV}p1" storage
+    }
+else
+    # Only one partition, use boot as storage
+    ln -s boot storage
+fi
 
 echo "🔧 Applying customizations..."
+
+# 0. Apply custom boot configuration for Pi 5
+if [ -f "$CUSTOM_DIR/customizations/config.txt" ]; then
+    echo "⚙️ Applying Pi 5 boot configuration..."
+    # Backup original config.txt
+    sudo cp boot/config.txt boot/config.txt.backup 2>/dev/null || true
+    # Apply our custom config.txt
+    sudo cp "$CUSTOM_DIR/customizations/config.txt" boot/config.txt
+fi
+
+# Apply custom cmdline.txt for Pi 5
+if [ -f "$CUSTOM_DIR/customizations/cmdline.txt" ]; then
+    echo "⚙️ Applying Pi 5 kernel command line..."
+    # Backup original cmdline.txt
+    sudo cp boot/cmdline.txt boot/cmdline.txt.backup 2>/dev/null || true
+    # Apply our custom cmdline.txt
+    sudo cp "$CUSTOM_DIR/customizations/cmdline.txt" boot/cmdline.txt
+fi
 
 # 1. Install custom Kodi skin/theme
 if [ -d "$CUSTOM_DIR/customizations/themes" ]; then
@@ -106,7 +136,8 @@ EOF
 echo "💾 Finalizing image..."
 
 # Unmount and cleanup
-sudo umount system storage
+sudo umount boot 2>/dev/null || true
+sudo umount storage 2>/dev/null || true
 sudo losetup -d "$LOOP_DEV"
 
 # Compress the modified image

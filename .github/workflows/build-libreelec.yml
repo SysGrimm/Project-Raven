@@ -477,13 +477,13 @@ jobs:
           set -euo pipefail
           
           # Start build with proper error handling
-          echo "Running: timeout 300m make PROJECT=RPi ARCH=arm DEVICE=${{ matrix.device }} -j$(nproc) image"
+          echo "Running: timeout 300m make PROJECT=RPi ARCH=aarch64 DEVICE=${{ matrix.device }} -j$(nproc) image"
           
           # Use a more robust approach for build monitoring
           BUILD_SUCCESS=false
           
           # Run build with timeout and capture exit code properly
-          if timeout 300m make PROJECT=RPi ARCH=arm DEVICE=${{ matrix.device }} -j$(nproc) image 2>&1 | tee build.log; then
+          if timeout 300m make PROJECT=RPi ARCH=aarch64 DEVICE=${{ matrix.device }} -j$(nproc) image 2>&1 | tee build.log; then
             BUILD_RESULT=0
           else
             BUILD_RESULT=$?
@@ -607,9 +607,174 @@ jobs:
           echo "You can download the artifacts from:"
           echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-  notify-completion:
+  create-release:
     runs-on: ubuntu-latest
     needs: build-libreelec
+    if: success() && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: libreelec-*
+          merge-multiple: true
+          path: release-artifacts/
+
+      - name: Generate release info
+        id: release-info
+        run: |
+          # Generate release tag with timestamp
+          RELEASE_TAG="v$(date +'%Y.%m.%d')-$(echo ${{ github.sha }} | cut -c1-7)"
+          echo "tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+          
+          # Generate release name
+          RELEASE_NAME="LibreELEC Project Raven ${RELEASE_TAG}"
+          echo "name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
+          
+          # Generate release notes
+          cat > release-notes.md << 'NOTES'
+          # 🚀 LibreELEC Project Raven Release
+          
+          **Build Information:**
+          - **Commit:** ${{ github.sha }}
+          - **Date:** $(date +'%Y-%m-%d %H:%M:%S UTC')
+          - **Target:** Raspberry Pi 5 (64-bit)
+          - **LibreELEC:** 12.x Development Branch
+          
+          ## 📦 Included Images
+          
+          This release contains optimized LibreELEC images for Raspberry Pi 5:
+          
+          ### Main Image Files
+          - `LibreELEC-RPi5.aarch64-*.img.gz` - Compressed disk image (flash to SD card)
+          - `LibreELEC-RPi5.aarch64-*.tar` - TAR archive with additional files
+          
+          ## 🔧 Project Raven Features
+          
+          ### Boot Optimizations
+          - ✅ Pi 5 64-bit architecture support
+          - ✅ Optimized GPU memory allocation (256MB)
+          - ✅ Enhanced thermal management
+          - ✅ CEC support enabled
+          - ✅ Boot stability improvements
+          
+          ### Pre-installed Add-ons
+          - 🔐 **Tailscale VPN** - Secure remote access
+          - 📺 **Streaming Services** - Netflix, YouTube, Emby, Jellyfin, Plex
+          - 🎮 **Gaming** - RetroPlayer, Steam Link, Moonlight
+          - 🌐 **Browser** - Chromium for web browsing
+          
+          ### Networking & Management
+          - 🔑 SSH enabled by default (user: root, password: libreelec)
+          - 🌐 Web interface on port 8080
+          - 📡 Samba file sharing enabled
+          - 🏷️ Custom hostname: LibreELEC-Raven
+          
+          ## 💾 Installation Instructions
+          
+          ### Method 1: Raspberry Pi Imager (Recommended)
+          1. Download **Raspberry Pi Imager** from https://rpi.org/imager
+          2. Select "Use custom image" and choose the `.img.gz` file
+          3. Select your SD card and flash
+          
+          ### Method 2: Command Line
+          ```bash
+          # Linux/macOS
+          gunzip -c LibreELEC-RPi5.aarch64-*.img.gz | sudo dd of=/dev/sdX bs=4M status=progress
+          
+          # Replace /dev/sdX with your SD card device
+          ```
+          
+          ### Method 3: Windows
+          1. Use **Win32DiskImager** or **Rufus**
+          2. Extract the `.img.gz` file first
+          3. Flash the `.img` file to SD card
+          
+          ## 🚀 First Boot
+          
+          1. Insert SD card into Pi 5 and power on
+          2. Connect to your network (Ethernet recommended for first setup)
+          3. Access Kodi interface on your TV/monitor
+          4. Web management: `http://[pi-ip]:8080`
+          5. SSH access: `ssh root@[pi-ip]` (password: libreelec)
+          
+          ## 🔧 Tailscale Setup
+          
+          1. Navigate to Add-ons → Services → Tailscale
+          2. Follow the authentication prompt
+          3. Your Pi will appear in your Tailscale network
+          4. Access remotely via Tailscale IP
+          
+          ## 📊 System Requirements
+          
+          - **Hardware:** Raspberry Pi 5 (4GB or 8GB recommended)
+          - **Storage:** 32GB+ microSD card (Class 10 or faster)
+          - **Power:** Official Pi 5 power supply (5V/5A USB-C)
+          - **Display:** HDMI-compatible TV/monitor
+          
+          ## 🐛 Known Issues & Troubleshooting
+          
+          ### Boot Issues
+          - If boot fails, try reflashing the image
+          - Ensure using official Pi 5 power supply
+          - Check SD card compatibility
+          
+          ### Network Issues
+          - Ethernet is more reliable than Wi-Fi for initial setup
+          - Check router firewall settings for streaming services
+          
+          ### Performance Issues
+          - Ensure adequate cooling for Pi 5
+          - Check power supply voltage
+          - Consider faster SD card for better performance
+          
+          ## 📞 Support
+          
+          - **Issues:** Report bugs at https://github.com/${{ github.repository }}/issues
+          - **Documentation:** Check the project wiki
+          - **Community:** Discussions tab in GitHub repository
+          
+          ---
+          
+          **⚠️ Important Notes:**
+          - This is a development build based on LibreELEC 12.x
+          - Always backup important data before flashing
+          - Some add-ons may require additional configuration
+          - Pi 5 is a powerful device - ensure adequate cooling
+          
+          **Built with ❤️ by Project Raven Team**
+          NOTES
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.release-info.outputs.tag }}
+          name: ${{ steps.release-info.outputs.name }}
+          body_path: release-notes.md
+          files: release-artifacts/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Summary
+        run: |
+          echo "🎉 RELEASE CREATED SUCCESSFULLY!"
+          echo "📦 Release Tag: ${{ steps.release-info.outputs.tag }}"
+          echo "📄 Release Name: ${{ steps.release-info.outputs.name }}"
+          echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.release-info.outputs.tag }}"
+          echo ""
+          echo "The LibreELEC images are now available for download from the Releases page!"
+
+  notify-completion:
+    runs-on: ubuntu-latest
+    needs: [build-libreelec, create-release]
     if: always()
     steps:
       - name: Build Summary
@@ -624,6 +789,16 @@ jobs:
             echo "✅ BUILD SUCCESSFUL!"
             echo "Artifacts should be available for download at:"
             echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            if [ "${{ needs.create-release.result }}" = "success" ]; then
+              echo "🎉 RELEASE CREATED!"
+              echo "LibreELEC images are now available in Releases:"
+              echo "https://github.com/${{ github.repository }}/releases"
+            elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+              echo "⚠️ Release creation may have failed - check release job logs"
+            else
+              echo "ℹ️ Release only created for main branch pushes"
+            fi
           elif [ "${{ needs.build-libreelec.result }}" = "failure" ]; then
             echo "❌ BUILD FAILED!"
             echo "Please check the build logs for detailed error information."
