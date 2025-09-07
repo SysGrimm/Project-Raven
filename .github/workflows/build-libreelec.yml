@@ -412,28 +412,11 @@ jobs:
           
           echo "=== KERNEL PANIC PREVENTION v1.0 ==="
           
-          # Apply additional kernel stability patches
+          # Apply additional kernel stability configuration
           echo "Creating kernel stability configuration..."
           
-          # Add Pi 5 specific kernel patches for boot stability
-          mkdir -p projects/RPi/patches/linux
-          cat > projects/RPi/patches/linux/9999-raven-pi5-boot-stability.patch << 'PATCHEOF'
-          --- a/arch/arm64/boot/dts/broadcom/bcm2712-rpi-5-b.dts
-          +++ b/arch/arm64/boot/dts/broadcom/bcm2712-rpi-5-b.dts
-          @@ -20,6 +20,12 @@
-           	model = "Raspberry Pi 5 Model B";
-           	compatible = "raspberrypi,5-model-b", "brcm,bcm2712";
-           
-          +	/* Project Raven stability fixes */
-          +	memory@0 {
-          +		device_type = "memory";
-          +		reg = <0x0 0x0 0x0 0x40000000>;
-          +	};
-          +
-           	aliases {
-           		serial0 = &uart0;
-           		serial10 = &uart0;
-          PATCHEOF
+          # Note: Removed problematic DTS memory patch - letting firmware handle memory detection
+          # This provides better compatibility across all Pi 5 memory variants (2GB/4GB/8GB)
           
           # Create enhanced device tree configuration
           mkdir -p projects/RPi/devices/${{ matrix.device }}/linux
