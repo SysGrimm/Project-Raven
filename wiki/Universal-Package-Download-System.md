@@ -21,6 +21,87 @@ LibreELEC builds frequently failed due to:
 - **Current Status**: **40m51s+ runtime builds** reaching package 43+/290 (massive advancement from 1/290 immediate failures)  
 - **Achievement**: Systematic package resolution proving Universal System effectiveness across multiple pattern types
 
+## 🚀 Universal Package Download System v4.0 - Direct Build Integration
+
+**Status**: 🚀 ACTIVE TESTING  
+**Build ID**: 17521146827  
+**Approach**: Direct Source File Placement
+
+### The v4.0 Revolution
+
+After discovering that LibreELEC completely ignores global source directories (v3.0 failure), v4.0 implements a direct file placement strategy:
+
+1. **Pre-download Phase**: Download all 7 proven packages to `sources/` directory
+2. **Build Integration**: Copy sources directly to LibreELEC's expected build directory structure
+3. **No Complex Hooks**: Avoid YAML formatting issues with simple file operations
+
+### Implementation Strategy
+
+```yaml
+# Phase 1: Pre-download all packages
+cd libreelec-custom-build/LibreELEC.tv
+mkdir -p sources
+curl -L -o sources/bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz \
+  https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz
+# ... (7 packages total)
+
+# Phase 2: Build directory integration  
+BUILD_DIR="build.LibreELEC-RPi5.arm-12.0-devel"
+mkdir -p "$BUILD_DIR/sources"
+cp sources/* "$BUILD_DIR/sources/" 2>/dev/null || true
+```
+
+### Key Innovation Points
+
+- **Direct file placement** eliminates environment variable dependencies
+- **Build-specific directory structure** matches LibreELEC's internal expectations  
+- **Simplified YAML syntax** avoids complex shell script formatting constraints
+- **Pre-validated packages** using 7 proven working downloads
+
+### Expected Impact
+
+If successful, v4.0 should achieve:
+- ✅ All 7 packages immediately available to LibreELEC build system
+- ✅ Build progression beyond 40m51s current record
+- ✅ Potential advancement to packages 50+/290 or higher
+- ✅ Foundation for scaling to all 290 problematic packages
+
+---
+
+## ❌ Universal Package Download System v3.0 - FAILED
+
+**Status**: ❌ FAILED - LibreELEC ignores global sources  
+**Build ID**: 17521067512  
+**Critical Discovery**: LibreELEC completely ignores SOURCES_DIR environment variable
+
+### v3.0 Test Results
+
+✅ **Downloads Phase**: All 7 packages downloaded perfectly to global sources directory  
+❌ **Integration Phase**: LibreELEC build system completely ignored pre-downloaded files
+
+```bash
+[INSTALL] bcmstat
+get_pkg bcmstat  
+File bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz doesn't exist for package bcmstat!
+```
+
+### Critical Insights from v3.0 Failure
+
+1. **SOURCES_DIR ineffective**: LibreELEC ignores global source directory settings
+2. **Build-specific paths required**: LibreELEC expects sources in build directory structure
+3. **Download system works perfectly**: Pre-download logic is 100% successful
+4. **Integration challenge identified**: Need direct file placement, not environment variables
+
+### v3.0 → v4.0 Evolution
+
+The v3.0 failure provided crucial intelligence:
+- ✅ Universal download patterns work flawlessly  
+- ✅ All 7 packages download with correct filenames
+- ❌ LibreELEC requires build-specific source placement
+- 💡 **Solution**: Direct file copying to build directories (v4.0 approach)
+
+---
+
 ## 🎯 PROVEN SUCCESS STORIES
 
 ### ✅ bcmstat Package (GitHub Archive Pattern) - **RESOLVED** 🏆
