@@ -89,15 +89,32 @@ jobs:
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           
-          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v5.0 ==="
-          echo "Applying comprehensive package download fixes..."
+          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v5.0 - LibreELEC 12.x ==="
+          echo "Checking LibreELEC version and applying compatible fixes..."
           
-          # Apply existing package fixes (from previous versions)
-          echo "Applying bcmstat fix..."
+          # Check LibreELEC version and structure
+          echo "LibreELEC version detected:"
+          git log --oneline -1 || echo "Version info unavailable"
+          
+          # List available packages for debugging
+          echo "Available package categories:"
+          ls -la packages/ || echo "No packages directory found"
+          
+          # Apply version-specific fixes only if packages exist
+          echo "Checking for packages that need filename fixes..."
+          
+          # Only apply bcmstat fix if the package exists
           PKG_DIR="packages/devel/bcmstat"
-          sed -i 's|PKG_URL="https://github.com/popcornmix/bcmstat/archive/${PKG_VERSION}.tar.gz"|PKG_URL="https://github.com/popcornmix/bcmstat/archive/${PKG_VERSION}.tar.gz"\nPKG_SOURCE_NAME="${PKG_NAME}-${PKG_VERSION}.tar.gz"|' $PKG_DIR/package.mk
+          if [ -f "$PKG_DIR/package.mk" ]; then
+              echo "Applying bcmstat fix..."
+              sed -i 's|PKG_URL="https://github.com/popcornmix/bcmstat/archive/${PKG_VERSION}.tar.gz"|PKG_URL="https://github.com/popcornmix/bcmstat/archive/${PKG_VERSION}.tar.gz"\nPKG_SOURCE_NAME="${PKG_NAME}-${PKG_VERSION}.tar.gz"|' $PKG_DIR/package.mk
+              echo "✓ bcmstat fix applied"
+          else
+              echo "ℹ bcmstat package not found in LibreELEC 12.x - skipping fix"
+          fi
           
-          echo "✓ Comprehensive package fixes applied successfully!"
+          echo "✓ Universal Package Download System v5.0 preparation complete!"
+          echo "Ready for LibreELEC 12.x build process"
 
       - name: Pre-download critical packages
         run: |
