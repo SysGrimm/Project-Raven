@@ -97,6 +97,24 @@ jobs:
           # Force Package Override Strategy - Replace package definitions directly in LibreELEC source
           echo "🔧 Applying forced package overrides (v7.0)..."
           
+          # Find and replace gettext package definition directly in LibreELEC source
+          echo "🎯 Locating gettext package in LibreELEC source tree..."
+          GETTEXT_PACKAGE=$(find . -name "package.mk" -path "*/gettext/*" | head -1)
+          if [ -n "$GETTEXT_PACKAGE" ]; then
+            echo "🔄 Replacing gettext URL in $GETTEXT_PACKAGE"
+            # Backup original
+            cp "$GETTEXT_PACKAGE" "$GETTEXT_PACKAGE.backup"
+            # Replace ftp.gnu.org with kernel.org mirror (more reliable)
+            sed -i 's|https://ftp.gnu.org/pub/gnu/gettext/|https://mirrors.kernel.org/gnu/gettext/|g' "$GETTEXT_PACKAGE"
+            sed -i 's|http://ftp.gnu.org/pub/gnu/gettext/|https://mirrors.kernel.org/gnu/gettext/|g' "$GETTEXT_PACKAGE"
+            # Verify change
+            echo "📋 Gettext package after modification:"
+            grep -A 3 -B 3 "PKG_URL" "$GETTEXT_PACKAGE"
+            echo "✅ Gettext package URL replaced with kernel.org mirror"
+          else
+            echo "⚠️ Gettext package not found in LibreELEC source tree"
+          fi
+          
           # Find and replace GMP package definition directly in LibreELEC source
           echo "🎯 Locating GMP package in LibreELEC source tree..."
           find . -name "package.mk" -path "*/gmp/*" -exec echo "Found GMP package: {}" \;
@@ -141,6 +159,7 @@ jobs:
             ["speex-1.2.1.tar.gz"]="https://ftp.osuosl.org/pub/xiph/releases/speex/speex-1.2.1.tar.gz"
             ["binutils-2.42.tar.xz"]="https://mirrors.kernel.org/gnu/binutils/binutils-2.42.tar.xz"
             ["gmp-6.3.0.tar.xz"]="https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz"
+            ["gettext-0.22.5.tar.xz"]="https://mirrors.kernel.org/gnu/gettext/gettext-0.22.5.tar.xz"
           )
           
           for filename in "${!PACKAGE_URLS[@]}"; do
