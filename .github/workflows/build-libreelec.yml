@@ -91,9 +91,9 @@ jobs:
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           
-          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v7.2 - Direct Package Replacement ==="
+          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v7.3 - Direct Package Replacement ==="
           echo "Applying forced package replacement for reliable builds..."
-          echo "📦 Targeting: GMP, Binutils, Speex, Gettext, Nettle"
+          echo "📦 Targeting: GMP, Binutils, Speex, Gettext, Nettle, Libidn2"
           
           # Force Package Override Strategy - Replace package definitions directly in LibreELEC source
           echo "🔧 Applying forced package overrides (v7.0)..."
@@ -169,6 +169,24 @@ jobs:
             echo "⚠️ Nettle package not found in LibreELEC source tree"
           fi
           
+          # **NEW IN v7.3** - Fix libidn2 package URL
+          echo "🎯 Locating libidn2 package in LibreELEC source tree..."
+          LIBIDN2_PACKAGE=$(find . -name "package.mk" -path "*/libidn2/*" | head -1)
+          if [ -n "$LIBIDN2_PACKAGE" ]; then
+            echo "🔄 Replacing libidn2 URL in $LIBIDN2_PACKAGE"
+            # Backup original
+            cp "$LIBIDN2_PACKAGE" "$LIBIDN2_PACKAGE.backup"
+            # Replace ftpmirror.gnu.org with kernel.org mirror (proven reliable)
+            sed -i 's|https://ftpmirror.gnu.org/gnu/libidn/|https://mirrors.kernel.org/gnu/libidn/|g' "$LIBIDN2_PACKAGE"
+            sed -i 's|http://ftpmirror.gnu.org/gnu/libidn/|https://mirrors.kernel.org/gnu/libidn/|g' "$LIBIDN2_PACKAGE"
+            # Verify change
+            echo "📋 Libidn2 package after modification:"
+            grep -A 3 -B 3 "PKG_URL" "$LIBIDN2_PACKAGE"
+            echo "✅ Libidn2 package URL replaced with kernel.org mirror"
+          else
+            echo "⚠️ Libidn2 package not found in LibreELEC source tree"
+          fi
+          
           # Pre-download strategy as backup
           echo "💾 Pre-downloading packages to build cache..."
           mkdir -p sources/
@@ -180,6 +198,7 @@ jobs:
             ["gmp-6.3.0.tar.xz"]="https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz"
             ["gettext-0.22.5.tar.xz"]="https://mirrors.kernel.org/gnu/gettext/gettext-0.22.5.tar.xz"
             ["nettle-3.10.2.tar.gz"]="https://mirrors.kernel.org/gnu/nettle/nettle-3.10.2.tar.gz"
+            ["libidn2-2.3.7.tar.gz"]="https://mirrors.kernel.org/gnu/libidn/libidn2-2.3.7.tar.gz"
           )
           
           for filename in "${!PACKAGE_URLS[@]}"; do
