@@ -91,8 +91,9 @@ jobs:
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           
-          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v7.0 - Direct Package Replacement ==="
+          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v7.2 - Direct Package Replacement ==="
           echo "Applying forced package replacement for reliable builds..."
+          echo "📦 Targeting: GMP, Binutils, Speex, Gettext, Nettle"
           
           # Force Package Override Strategy - Replace package definitions directly in LibreELEC source
           echo "🔧 Applying forced package overrides (v7.0)..."
@@ -150,6 +151,24 @@ jobs:
             echo "✅ Binutils package ensured to use kernel.org mirror"
           fi
           
+          # **NEW IN v7.2** - Fix nettle package URL
+          echo "🎯 Locating nettle package in LibreELEC source tree..."
+          NETTLE_PACKAGE=$(find . -name "package.mk" -path "*/nettle/*" | head -1)
+          if [ -n "$NETTLE_PACKAGE" ]; then
+            echo "🔄 Replacing nettle URL in $NETTLE_PACKAGE"
+            # Backup original
+            cp "$NETTLE_PACKAGE" "$NETTLE_PACKAGE.backup"
+            # Replace ftp.gnu.org with kernel.org mirror (proven reliable)
+            sed -i 's|https://ftp.gnu.org/gnu/nettle/|https://mirrors.kernel.org/gnu/nettle/|g' "$NETTLE_PACKAGE"
+            sed -i 's|http://ftp.gnu.org/gnu/nettle/|https://mirrors.kernel.org/gnu/nettle/|g' "$NETTLE_PACKAGE"
+            # Verify change
+            echo "📋 Nettle package after modification:"
+            grep -A 3 -B 3 "PKG_URL" "$NETTLE_PACKAGE"
+            echo "✅ Nettle package URL replaced with kernel.org mirror"
+          else
+            echo "⚠️ Nettle package not found in LibreELEC source tree"
+          fi
+          
           # Pre-download strategy as backup
           echo "💾 Pre-downloading packages to build cache..."
           mkdir -p sources/
@@ -160,6 +179,7 @@ jobs:
             ["binutils-2.42.tar.xz"]="https://mirrors.kernel.org/gnu/binutils/binutils-2.42.tar.xz"
             ["gmp-6.3.0.tar.xz"]="https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz"
             ["gettext-0.22.5.tar.xz"]="https://mirrors.kernel.org/gnu/gettext/gettext-0.22.5.tar.xz"
+            ["nettle-3.10.2.tar.gz"]="https://mirrors.kernel.org/gnu/nettle/nettle-3.10.2.tar.gz"
           )
           
           for filename in "${!PACKAGE_URLS[@]}"; do
@@ -194,8 +214,8 @@ jobs:
           http://sources.libreelec.tv/mirror/|https://mirrors.kernel.org/gnu/
           EOF
           
-          echo "✅ Universal Package Download System v6.0 preparation complete!"
-          echo "Applied: Custom speex, binutils, gmp packages + mirror fallbacks"
+          echo "✅ Universal Package Download System v7.2 preparation complete!"
+          echo "Applied: Custom speex, binutils, gmp, gettext, nettle packages + mirror fallbacks"
 
       - name: Copy custom packages and apply boot fixes
         run: |
@@ -513,17 +533,33 @@ jobs:
           echo "Starting LibreELEC build for ${{ matrix.device }}..."
           echo "Build started at: $(date)"
           
+          # === MEMORY OPTIMIZATION FOR STABLE BUILDS ===
+          echo "🧠 Applying memory optimizations for Pi 5 stability & Pi Zero 2 W preparation..."
+          
+          # Calculate optimal job count - use 75% of available cores to prevent memory exhaustion
+          AVAILABLE_CORES=$(nproc)
+          OPTIMAL_JOBS=$((AVAILABLE_CORES * 3 / 4))
+          if [ $OPTIMAL_JOBS -lt 1 ]; then
+            OPTIMAL_JOBS=1
+          fi
+          echo "ℹ️ Available cores: $AVAILABLE_CORES, Using: $OPTIMAL_JOBS build jobs"
+          
+          # Set memory-friendly build options
+          export MAKEFLAGS="-j${OPTIMAL_JOBS}"
+          export CCACHE_MAXSIZE="2G"  # Limit ccache size to preserve memory
+          export CCACHE_COMPRESS="true"  # Compress ccache to save space
+          
           # Set bash strict mode for proper error handling
           set -euo pipefail
           
           # Start build with proper error handling
-          echo "Running: timeout 300m make PROJECT=RPi ARCH=aarch64 DEVICE=${{ matrix.device }} -j$(nproc) image"
+          echo "Running: timeout 300m make PROJECT=RPi ARCH=aarch64 DEVICE=${{ matrix.device }} -j${OPTIMAL_JOBS} image (Memory Optimized)"
           
           # Use a more robust approach for build monitoring
           BUILD_SUCCESS=false
           
-          # Run build with timeout and capture exit code properly
-          if timeout 300m make PROJECT=RPi ARCH=aarch64 DEVICE=${{ matrix.device }} -j$(nproc) image 2>&1 | tee build.log; then
+          # Run build with timeout and capture exit code properly (using memory-optimized settings)
+          if timeout 300m make PROJECT=RPi ARCH=aarch64 DEVICE=${{ matrix.device }} -j${OPTIMAL_JOBS} image 2>&1 | tee build.log; then
             BUILD_RESULT=0
           else
             BUILD_RESULT=$?
