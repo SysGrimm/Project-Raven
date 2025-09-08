@@ -91,56 +91,77 @@ jobs:
         run: |
           cd libreelec-custom-build/LibreELEC.tv
           
-          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v6.0 - LibreELEC 12.x ==="
-          echo "Applying critical package fixes for reliable builds..."
+          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v7.0 - Direct Package Replacement ==="
+          echo "Applying forced package replacement for reliable builds..."
           
-          # Check LibreELEC version and structure
-          echo "LibreELEC version detected:"
-          git log --oneline -1 || echo "Version info unavailable"
+          # Force Package Override Strategy - Replace package definitions directly in LibreELEC source
+          echo "🔧 Applying forced package overrides (v7.0)..."
           
-          # Apply custom package overrides from Project Raven
-          echo "🔧 Applying Project Raven package overrides..."
+          # Find and replace GMP package definition directly in LibreELEC source
+          echo "🎯 Locating GMP package in LibreELEC source tree..."
+          find . -name "package.mk" -path "*/gmp/*" -exec echo "Found GMP package: {}" \;
           
-          # Copy custom speex package (fixed in previous iteration)
-          if [ -f "../../packages/multimedia/speex/package.mk" ]; then
-            echo "Installing custom speex package..."
-            mkdir -p packages/multimedia/speex
-            cp ../../packages/multimedia/speex/package.mk packages/multimedia/speex/
-            echo "✅ Speex package override applied"
-          fi
-          
-          # Copy custom binutils package (current fix)
-          if [ -f "../../packages/toolchain/binutils/package.mk" ]; then
-            echo "Installing custom binutils package..."
-            mkdir -p packages/toolchain/binutils
-            cp ../../packages/toolchain/binutils/package.mk packages/toolchain/binutils/
-            echo "✅ Binutils package override applied (using kernel.org mirror)"
-          fi
-          
-          # Copy custom gmp package (current fix)
-          if [ -f "../../packages/toolchain/gmp/package.mk" ]; then
-            echo "Installing custom gmp package..."
-            mkdir -p packages/toolchain/gmp
-            cp ../../packages/toolchain/gmp/package.mk packages/toolchain/gmp/
-            echo "✅ GMP package override applied (using kernel.org mirror)"
-          fi
-          
-          # List available packages for debugging
-          echo "Available package categories:"
-          ls -la packages/ || echo "No packages directory found"
-          
-          # Apply version-specific fixes only if packages exist
-          echo "🔍 Checking for packages that need filename fixes..."
-          
-          # Only apply bcmstat fix if the package exists
-          PKG_DIR="packages/devel/bcmstat"
-          if [ -f "$PKG_DIR/package.mk" ]; then
-              echo "Applying bcmstat fix..."
-              sed -i 's|PKG_URL="https://github.com/popcornmix/bcmstat/archive/${PKG_VERSION}.tar.gz"|PKG_URL="https://github.com/popcornmix/bcmstat/archive/${PKG_VERSION}.tar.gz"\nPKG_SOURCE_NAME="${PKG_NAME}-${PKG_VERSION}.tar.gz"|' $PKG_DIR/package.mk
-              echo "✅ bcmstat fix applied"
+          # Replace GMP package URL directly in the LibreELEC source
+          GMP_PACKAGE=$(find . -name "package.mk" -path "*/gmp/*" | head -1)
+          if [ -n "$GMP_PACKAGE" ]; then
+            echo "� Replacing GMP URL in $GMP_PACKAGE"
+            # Backup original
+            cp "$GMP_PACKAGE" "$GMP_PACKAGE.backup"
+            # Replace gmplib.org with kernel.org mirror
+            sed -i 's|https://gmplib.org/download/gmp/|https://mirrors.kernel.org/gnu/gmp/|g' "$GMP_PACKAGE"
+            # Also replace any other gmp URLs that might exist
+            sed -i 's|http://gmplib.org/download/gmp/|https://mirrors.kernel.org/gnu/gmp/|g' "$GMP_PACKAGE"
+            # Verify change
+            echo "📋 GMP package after modification:"
+            grep -A 3 -B 3 "PKG_URL" "$GMP_PACKAGE"
+            echo "✅ GMP package URL replaced with kernel.org mirror"
           else
-              echo "ℹ️ bcmstat package not found in LibreELEC 12.x - skipping fix"
+            echo "⚠️ GMP package not found in LibreELEC source tree"
           fi
+          
+          # Do the same for binutils
+          echo "🎯 Locating binutils package in LibreELEC source tree..."
+          BINUTILS_PACKAGE=$(find . -name "package.mk" -path "*/binutils/*" | head -1)
+          if [ -n "$BINUTILS_PACKAGE" ]; then
+            echo "🔄 Ensuring binutils uses kernel.org mirror in $BINUTILS_PACKAGE"
+            # Backup original
+            cp "$BINUTILS_PACKAGE" "$BINUTILS_PACKAGE.backup"
+            # Replace any non-kernel.org URLs with kernel.org
+            sed -i 's|https://ftp.gnu.org/gnu/binutils/|https://mirrors.kernel.org/gnu/binutils/|g' "$BINUTILS_PACKAGE"
+            sed -i 's|https://sourceware.org/pub/binutils/releases/|https://mirrors.kernel.org/gnu/binutils/|g' "$BINUTILS_PACKAGE"
+            echo "✅ Binutils package ensured to use kernel.org mirror"
+          fi
+          
+          # Pre-download strategy as backup
+          echo "💾 Pre-downloading packages to build cache..."
+          mkdir -p sources/
+          
+          # Pre-download critical packages from reliable mirrors
+          declare -A PACKAGE_URLS=(
+            ["speex-1.2.1.tar.gz"]="https://archive.mozilla.org/pub/opus/speex-1.2.1.tar.gz"
+            ["binutils-2.42.tar.xz"]="https://mirrors.kernel.org/gnu/binutils/binutils-2.42.tar.xz"
+            ["gmp-6.3.0.tar.xz"]="https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz"
+          )
+          
+          for filename in "${!PACKAGE_URLS[@]}"; do
+            url="${PACKAGE_URLS[$filename]}"
+            echo "📥 Pre-downloading $filename from $url"
+            
+            # Download with retries
+            for attempt in 1 2 3; do
+              if wget -O "sources/$filename" "$url"; then
+                echo "✅ Successfully downloaded $filename"
+                break
+              else
+                echo "❌ Attempt $attempt failed for $filename"
+                if [ $attempt -eq 3 ]; then
+                  echo "🚨 Failed to download $filename after 3 attempts"
+                  exit 1
+                fi
+                sleep 2
+              fi
+            done
+          done
           
           # Add global mirror fallbacks for common packages
           echo "🌐 Setting up global mirror fallbacks..."
@@ -156,73 +177,6 @@ jobs:
           
           echo "✅ Universal Package Download System v6.0 preparation complete!"
           echo "Applied: Custom speex, binutils, gmp packages + mirror fallbacks"
-
-      - name: Pre-download critical packages
-        run: |
-          echo "=== UNIVERSAL PACKAGE DOWNLOAD SYSTEM v6.0 ==="
-          echo "Pre-downloading critical packages from reliable mirrors..."
-          
-          cd libreelec-custom-build/LibreELEC.tv
-          
-          # Create sources directory structure
-          mkdir -p sources/{speex,binutils,gmp,bcmstat,make}
-          
-          # Pre-download speex from working mirror
-          echo "📦 Pre-downloading speex..."
-          cd sources/speex
-          curl -L -o speex-1.2.1.tar.gz \
-            https://ftp.osuosl.org/pub/xiph/releases/speex/speex-1.2.1.tar.gz
-          cd ..
-          
-          # Pre-download binutils from kernel.org mirror  
-          echo "📦 Pre-downloading binutils..."
-          cd binutils
-          curl -L -o binutils-2.41.tar.xz \
-            https://mirrors.kernel.org/gnu/binutils/binutils-2.41.tar.xz
-          cd ..
-          
-          # Pre-download gmp from kernel.org mirror
-          echo "📦 Pre-downloading gmp..."
-          cd gmp
-          curl -L -o gmp-6.3.0.tar.xz \
-            https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz
-          cd ..
-          
-          # Pre-download bcmstat with correct filename
-          echo "📦 Pre-downloading bcmstat..."
-          cd bcmstat
-          curl -L -o bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz \
-            https://github.com/popcornmix/bcmstat/archive/1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz
-          cd ..
-          
-          # Pre-download make
-          echo "📦 Pre-downloading make..."
-          cd make
-          curl -L -o make-4.4.1.tar.gz \
-            https://mirrors.kernel.org/gnu/make/make-4.4.1.tar.gz
-          cd ..
-          
-          echo "✅ Critical packages pre-downloaded successfully!"
-          echo "Package sources available in $(pwd)"
-          ls -la
-          
-          cd ..
-          
-          # Install runtime filename fix script
-          echo '#!/bin/bash' > fix-github-archives.sh
-          echo 'BUILD_SOURCES="$BUILD/sources"' >> fix-github-archives.sh
-          echo 'if [ -d "$BUILD_SOURCES" ]; then' >> fix-github-archives.sh
-          echo '  cd "$BUILD_SOURCES"' >> fix-github-archives.sh
-          echo '  # Fix bcmstat GitHub archive naming' >> fix-github-archives.sh
-          echo '  if [ -f "1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz" ] && [ ! -f "bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz" ]; then' >> fix-github-archives.sh
-          echo '    ln -s "1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz" "bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz"' >> fix-github-archives.sh
-          echo '    echo "Fixed bcmstat filename with symlink"' >> fix-github-archives.sh
-          echo '  fi' >> fix-github-archives.sh
-          echo 'fi' >> fix-github-archives.sh
-          chmod +x fix-github-archives.sh
-          
-          echo "✅ Pre-download system ready"
-          ls -la sources/
 
       - name: Copy custom packages and apply boot fixes
         run: |
