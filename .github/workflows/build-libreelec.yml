@@ -138,7 +138,7 @@ jobs:
           
           # Pre-download critical packages from reliable mirrors
           declare -A PACKAGE_URLS=(
-            ["speex-1.2.1.tar.gz"]="https://archive.mozilla.org/pub/opus/speex-1.2.1.tar.gz"
+            ["speex-1.2.1.tar.gz"]="https://ftp.osuosl.org/pub/xiph/releases/speex/speex-1.2.1.tar.gz"
             ["binutils-2.42.tar.xz"]="https://mirrors.kernel.org/gnu/binutils/binutils-2.42.tar.xz"
             ["gmp-6.3.0.tar.xz"]="https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz"
           )
