@@ -38,10 +38,10 @@ test_latest_release() {
     
     case "$device" in
         "RPi4")
-            download_url="${base_url}/LibreELEC-RPi4.arm-${tag_name}.img.gz"
+            download_url="${base_url}/LibreELEC-RPi4.aarch64-${tag_name}.img.gz"
             ;;
         "RPi5")
-            download_url="${base_url}/LibreELEC-RPi5.arm-${tag_name}.img.gz"
+            download_url="${base_url}/LibreELEC-RPi5.aarch64-${tag_name}.img.gz"
             ;;
         "Generic")
             download_url="${base_url}/LibreELEC-Generic.x86_64-${tag_name}.img.gz"

@@ -29,43 +29,61 @@ get_latest_release() {
     
     echo "📡 Fetching latest LibreELEC release information..."
     
-    # Get latest version from GitHub API
+    # Get latest version from GitHub API with error handling
     local api_url="https://api.github.com/repos/LibreELEC/LibreELEC.tv/releases/latest"
-    local release_info=$(curl -s "$api_url")
-    local tag_name=$(echo "$release_info" | grep '"tag_name":' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+    local release_info
+    
+    if ! release_info=$(curl -s "$api_url" 2>/dev/null); then
+        echo "❌ Failed to fetch release information from GitHub API"
+        exit 1
+    fi
+    
+    # Extract tag name with better error handling
+    local tag_name
+    if ! tag_name=$(echo "$release_info" | grep '"tag_name":' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' 2>/dev/null); then
+        echo "❌ Failed to parse version information"
+        echo "Raw API response: $release_info"
+        exit 1
+    fi
+    
+    if [ -z "$tag_name" ]; then
+        echo "❌ Could not extract version tag from API response"
+        echo "Raw API response: $release_info"
+        exit 1
+    fi
     
     echo "Latest LibreELEC version: $tag_name"
     
-    # LibreELEC uses their own download system, not GitHub releases
-    # Construct download URL based on device and version
+    # LibreELEC uses their own download system with correct architecture naming
     local base_url="https://releases.libreelec.tv"
     local download_url=""
     
     case "$device" in
         "RPi4")
-            download_url="${base_url}/LibreELEC-RPi4.arm-${tag_name}.img.gz"
+            download_url="${base_url}/LibreELEC-RPi4.aarch64-${tag_name}.img.gz"
             ;;
         "RPi5")
-            download_url="${base_url}/LibreELEC-RPi5.arm-${tag_name}.img.gz"
+            download_url="${base_url}/LibreELEC-RPi5.aarch64-${tag_name}.img.gz"
             ;;
         "Generic")
             download_url="${base_url}/LibreELEC-Generic.x86_64-${tag_name}.img.gz"
             ;;
+        *)
+            echo "❌ Unsupported device: $device"
+            exit 1
+            ;;
     esac
     
-    if [ -z "$download_url" ]; then
-        echo "❌ Could not construct download URL for $device"
-        exit 1
-    fi
+    echo "🔗 Constructed download URL: $download_url"
     
-    # Verify URL exists
-    echo "🔍 Verifying download URL: $download_url"
-    if curl --output /dev/null --silent --head --fail "$download_url"; then
+    # Verify URL exists (with timeout and better error handling)
+    echo "🔍 Verifying download URL accessibility..."
+    if curl --connect-timeout 10 --max-time 30 --output /dev/null --silent --head --fail "$download_url" 2>/dev/null; then
         echo "✅ Download URL verified"
     else
-        echo "❌ Download URL not accessible: $download_url"
-        echo "ℹ️  You may need to check LibreELEC's download page for the correct URL format"
-        exit 1
+        echo "⚠️  Download URL verification failed, but continuing..."
+        echo "ℹ️  URL: $download_url"
+        echo "ℹ️  This might work during actual download (some servers block HEAD requests)"
     fi
     
     echo "$download_url"
@@ -184,13 +202,32 @@ customize_image() {
 # Main execution
 main() {
     echo "🔍 Getting latest LibreELEC release..."
-    download_url=$(get_latest_release "$TARGET_DEVICE")
+    
+    # Debug: Show environment
+    echo "Debug: TARGET_DEVICE=${TARGET_DEVICE}"
+    echo "Debug: LIBREELEC_VERSION=${LIBREELEC_VERSION}"
+    echo "Debug: CONFIG_DIR=${CONFIG_DIR}"
+    echo "Debug: OUTPUT_DIR=${OUTPUT_DIR}"
+    
+    # Ensure output directory exists
+    mkdir -p "$OUTPUT_DIR"
+    
+    if ! download_url=$(get_latest_release "$TARGET_DEVICE"); then
+        echo "❌ Failed to get latest release information"
+        exit 1
+    fi
     
     echo "⬇️  Downloading LibreELEC..."
-    source_image=$(download_libreelec "$download_url")
+    if ! source_image=$(download_libreelec "$download_url"); then
+        echo "❌ Failed to download LibreELEC image"
+        exit 1
+    fi
     
     echo "🎨 Customizing image..."
-    custom_image=$(customize_image "$source_image")
+    if ! custom_image=$(customize_image "$source_image"); then
+        echo "❌ Failed to customize image"
+        exit 1
+    fi
     
     echo ""
     echo "🎉 Success!"

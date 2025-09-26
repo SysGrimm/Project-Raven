@@ -58,11 +58,11 @@ jobs:
     - name: Create output directory
       run: mkdir -p output
       
-    - name: Download and customize LibreELEC
+    - name: Download and create configuration package
       run: |
         export TARGET_DEVICE="${TARGET_DEVICE}"
         export LIBREELEC_VERSION="${LIBREELEC_VERSION}"
-        ./scripts/customize-libreelec.sh
+        ./scripts/simple-build.sh
         
     - name: List output files
       run: |
@@ -103,19 +103,25 @@ jobs:
           - Build Number: ${{ github.run_number }}
           - Commit: ${{ github.sha }}
           
-          **Customizations Applied:**
-          - Custom boot configuration (config.txt, cmdline.txt)
-          - Pre-configured Kodi settings
-          - First-boot customization script
-          - Optimized for media center usage
+          **What's Included:**
+          - Official LibreELEC ${LIBREELEC_VERSION} image for ${TARGET_DEVICE}
+          - Raven Configuration Package with custom settings
+          - Pre-configured Kodi settings for media center use
+          - Performance-tuned boot configuration (4K support, overclocking)
+          - First-boot setup script for automated configuration
           
           **Installation:**
-          1. Download the `.img.gz` file for your device
-          2. Flash to SD card using Raspberry Pi Imager or similar
-          3. Boot and enjoy your customized LibreELEC system!
+          1. Download both the `.img.gz` image and `-Config.tar.gz` package
+          2. Flash the image to SD card using Raspberry Pi Imager
+          3. Extract the config package and copy `boot/` files to SD card
+          4. Boot your device - first-boot script handles the rest!
+          
+          **Files:**
+          - `LibreELEC-${TARGET_DEVICE}-*.img.gz` - Official LibreELEC image
+          - `LibreELEC-${TARGET_DEVICE}-*-Raven-Config.tar.gz` - Custom configuration package
           
           **Verification:**
-          Verify the download integrity using the provided `.sha256` file.
+          Verify downloads using the provided `.sha256` files.
         files: |
           output/*.img.gz
           output/*.sha256
