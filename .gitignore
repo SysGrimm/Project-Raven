@@ -13,3 +13,18 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Build outputs and working directories
+output/*.img
+output/*.img.gz
+image-customization/work/
+image-customization/*.img
+image-customization/*.gz
+
+# Downloaded LibreELEC images (keep checksums)
+output/LibreELEC-*.img.gz
+!output/*.sha256
+
+# Temporary mount points
+/mnt/
+/tmp/libreelec-*
