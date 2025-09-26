@@ -12,7 +12,20 @@ OUTPUT_DIR="$PROJECT_DIR/output"
 
 # Configuration
 TARGET_DEVICE="${TARGET_DEVICE:-RPi5}"
-LIBREELEC_VERSION="${LIBREELEC_VERSION:-12.2.0}"  # Use known stable version
+LIBREELEC_VERSION="${LIBREELEC_VERSION:-12.2.0}"
+
+# If version is "latest", fetch the actual version from GitHub API
+if [ "$LIBREELEC_VERSION" = "latest" ]; then
+    echo "🔍 Fetching latest LibreELEC version..."
+    LATEST_VERSION=$(curl -s "https://api.github.com/repos/LibreELEC/LibreELEC.tv/releases/latest" | grep '"tag_name":' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+    if [ -n "$LATEST_VERSION" ]; then
+        LIBREELEC_VERSION="$LATEST_VERSION"
+        echo "✅ Using LibreELEC version: $LIBREELEC_VERSION"
+    else
+        echo "⚠️  Could not fetch latest version, using default: 12.2.0"
+        LIBREELEC_VERSION="12.2.0"
+    fi
+fi
 
 echo "🚀 LibreELEC Configuration Package Builder"
 echo "==========================================="
@@ -54,6 +67,7 @@ download_libreelec() {
     
     if [ -f "$filepath" ]; then
         echo "📁 LibreELEC image already exists: $filepath"
+        echo "   $(ls -lh "$filepath" | awk '{print $5}')"
         return 0
     fi
     
@@ -63,6 +77,7 @@ download_libreelec() {
     
     if curl -L -f --progress-bar -o "$filepath" "$download_url"; then
         echo "✅ Download completed: $filepath"
+        echo "   $(ls -lh "$filepath" | awk '{print $5}')"
     else
         echo "❌ Download failed"
         exit 1
