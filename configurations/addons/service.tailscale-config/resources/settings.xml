@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings version="1">
+    <category id="general" label="30001">
+        <group id="1">
+            <setting id="enabled" type="boolean" label="30010" default="false">
+                <level>0</level>
+            </setting>
+            <setting id="authkey" type="string" label="30011" default="" enable="eq(-1,true)">
+                <level>0</level>
+            </setting>
+            <setting id="accept_routes" type="boolean" label="30012" default="true" enable="eq(-2,true)">
+                <level>0</level>
+            </setting>
+            <setting id="exit_node" type="string" label="30013" default="" enable="eq(-3,true)">
+                <level>1</level>
+            </setting>
+        </group>
+        <group id="2" label="30020">
+            <setting id="status" type="action" label="30021" action="RunScript(special://home/addons/service.tailscale-config/status.py)" enable="eq(-4,true)">
+                <level>0</level>
+            </setting>
+            <setting id="restart" type="action" label="30022" action="RunScript(special://home/addons/service.tailscale-config/restart.py)" enable="eq(-5,true)">
+                <level>0</level>
+            </setting>
+        </group>
+    </category>
+    <category id="advanced" label="30002">
+        <group id="1">
+            <setting id="hostname" type="string" label="30030" default="">
+                <level>1</level>
+            </setting>
+            <setting id="advertise_routes" type="string" label="30031" default="">
+                <level>2</level>
+            </setting>
+            <setting id="ssh_enabled" type="boolean" label="30032" default="true">
+                <level>1</level>
+            </setting>
+        </group>
+    </category>
+</settings>

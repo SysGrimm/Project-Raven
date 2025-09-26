@@ -29,7 +29,26 @@ fi
 
 # Install custom addons
 log "Installing custom addons..."
-# Add addon installation logic here
+
+# Install Tailscale if configuration is provided
+if [ -f /flash/tailscale-install.sh ]; then
+    log "Installing Tailscale VPN..."
+    chmod +x /flash/tailscale-install.sh
+    if /flash/tailscale-install.sh; then
+        log "Tailscale installation completed successfully"
+        
+        # Auto-connect if auth key is provided
+        if [ -f /storage/tailscale/config ]; then
+            . /storage/tailscale/config
+            if [ -n "$TAILSCALE_AUTH_KEY" ] && [ "$AUTO_CONNECT" = "true" ]; then
+                log "Auto-connecting to Tailscale network..."
+                /storage/tailscale-up "$TAILSCALE_AUTH_KEY" >> "$LOG_FILE" 2>&1 || log "Tailscale auto-connect failed (manual setup required)"
+            fi
+        fi
+    else
+        log "Tailscale installation failed"
+    fi
+fi
 
 # Set permissions
 log "Setting permissions..."

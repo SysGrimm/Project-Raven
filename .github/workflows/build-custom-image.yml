@@ -4,19 +4,25 @@ on:
   workflow_dispatch:
     inputs:
       target_device:
-        description: 'Target Device (RPi4, RPi5, Generic)'
+        description: 'Target Device (RPi4, RPi5, RPiZeroW2, Generic)'
         required: true
         default: 'RPi5'
         type: choice
         options:
         - RPi4
         - RPi5
+        - RPiZeroW2
         - Generic
       libreelec_version:
         description: 'LibreELEC Version (latest or specific version)'
         required: false
         default: 'latest'
         type: string
+      include_tailscale:
+        description: 'Include Tailscale VPN integration'
+        required: false
+        default: true
+        type: boolean
   push:
     branches: [ main ]
     paths:
@@ -42,9 +48,11 @@ jobs:
         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
           echo "TARGET_DEVICE=${{ github.event.inputs.target_device }}" >> $GITHUB_ENV
           echo "LIBREELEC_VERSION=${{ github.event.inputs.libreelec_version }}" >> $GITHUB_ENV
+          echo "INCLUDE_TAILSCALE=${{ github.event.inputs.include_tailscale }}" >> $GITHUB_ENV
         else
           echo "TARGET_DEVICE=RPi5" >> $GITHUB_ENV
           echo "LIBREELEC_VERSION=latest" >> $GITHUB_ENV
+          echo "INCLUDE_TAILSCALE=true" >> $GITHUB_ENV
         fi
         
     - name: Display build configuration
@@ -62,6 +70,7 @@ jobs:
       run: |
         export TARGET_DEVICE="${TARGET_DEVICE}"
         export LIBREELEC_VERSION="${LIBREELEC_VERSION}"
+        export INCLUDE_TAILSCALE="${INCLUDE_TAILSCALE}"
         ./scripts/simple-build.sh
         
     - name: List output files

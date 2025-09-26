@@ -1,22 +1,32 @@
 # Project Raven - Custom LibreELEC Images
 
-🚀 **Automated custom LibreELEC image builder** that takes official LibreELEC releases and applies custom configurations for media center deployments.
+🚀 **Automated custom LibreELEC image builder** with built-in Tailscale VPN that creates releases for Raspberry Pi 5 and Pi Zero W2.
 
-## Quick Start
+## 🎯 Quick Start
 
-1. **Run the build**: Use GitHub Actions to build a custom image
-2. **Download**: Get your customized `.img.gz` file from the releases
-3. **Flash**: Write to SD card using Raspberry Pi Imager
-4. **Boot**: Your customized LibreELEC system is ready!
+### Option 1: Download Pre-Built Releases (Recommended)
+1. **[📦 Go to Releases](https://github.com/SysGrimm/Project-Raven/releases)**
+2. **Download** the latest release for your device:
+   - `LibreELEC-RPi5-*-Raven-Config.tar.gz` (Raspberry Pi 5)
+   - `LibreELEC-RPiZeroW2-*-Raven-Config.tar.gz` (Raspberry Pi Zero W2)
+3. **Flash** the `.img.gz` to SD card using Raspberry Pi Imager
+4. **Extract** the config package and copy to SD card
+5. **Boot** - your system auto-configures!
 
-## Features
+### Option 2: Build Custom
+1. **Fork** this repository  
+2. **Run** GitHub Actions workflow: "Automated Release Build"
+3. **Download** your custom builds from the artifacts
 
-- ✅ **Official LibreELEC Base**: Uses latest official releases (no custom compilation)
-- ✅ **Automated Builds**: GitHub Actions workflow for consistent builds
-- ✅ **Multiple Devices**: Support for RPi4, RPi5, and Generic x86
-- ✅ **Custom Configurations**: Pre-configured Kodi settings and system tweaks
-- ✅ **First-Boot Setup**: Automatic customization on first boot
-- ✅ **Easy Updates**: Simply trigger a new build when LibreELEC releases updates
+## ✨ Features
+
+- 🎯 **Auto-Release System**: Triggers new releases when LibreELEC or Tailscale updates
+- 🔐 **Built-in Tailscale VPN**: Secure remote access with LibreELEC settings interface
+- 📱 **Multiple Devices**: Raspberry Pi 5 and Pi Zero W2 support
+- ⚙️ **Official LibreELEC Base**: Uses unmodified official releases
+- 🚀 **Automated Builds**: GitHub Actions CI/CD pipeline
+- 🛠️ **Custom Configurations**: Pre-configured Kodi settings and optimizations
+- 📦 **Easy Installation**: Download, flash, boot - that's it!
 
 ## Project Structure
 
@@ -58,11 +68,36 @@
 
 ### Via GitHub Actions (Recommended)
 
+## 🤖 Automated Release System
+
+Project Raven automatically creates new releases when:
+
+- **📦 New LibreELEC versions** are released
+- **🔐 New Tailscale versions** are available  
+- **💻 Code changes** are pushed to main branch
+
+### Release Schedule
+- **🕕 Daily checks** at 6 AM UTC for version updates
+- **⚡ Immediate builds** when code changes are detected
+- **📱 Manual triggers** available via GitHub Actions
+
+### What You Get
+Each release includes:
+- **RPi5 Images**: `LibreELEC-RPi5-*` files (Raspberry Pi 5)
+- **RPi Zero W2 Images**: `LibreELEC-RPiZeroW2-*` files (Pi Zero W2)  
+- **Configuration Packages**: Custom settings and Tailscale integration
+- **Checksums**: `.sha256` files for verification
+- **Latest Versions**: Always uses newest LibreELEC + Tailscale
+
+## 🚀 Build Your Own
+
+### Via GitHub Actions
+
 1. Go to the **Actions** tab in this repository
-2. Click **"Build Custom LibreELEC Image"**
-3. Select your target device (RPi4, RPi5, or Generic)
-4. Click **"Run workflow"**
-5. Download the custom image from the generated release
+2. Click **"Automated Release Build"** for automatic releases
+3. Or click **"Build Custom LibreELEC Image"** for manual builds
+4. Select your target device (RPi4, RPi5, RPiZeroW2, or Generic)
+5. Download from the generated release
 
 ### Locally
 
@@ -77,11 +112,12 @@ export TARGET_DEVICE=RPi5  # or RPi4, Generic
 ls output/
 ```
 
-## Supported Devices
+## 🎯 Supported Devices
 
-- **Raspberry Pi 4**: `TARGET_DEVICE=RPi4`
-- **Raspberry Pi 5**: `TARGET_DEVICE=RPi5` (default)
-- **Generic PC**: `TARGET_DEVICE=Generic`
+- **Raspberry Pi 5**: `LibreELEC-RPi5-*` (aarch64, latest performance)
+- **Raspberry Pi Zero W2**: `LibreELEC-RPiZeroW2-*` (arm, compact build)
+- **Raspberry Pi 4**: `LibreELEC-RPi4-*` (aarch64, manual builds only)
+- **Generic PC**: `LibreELEC-Generic-*` (x86_64, manual builds only)
 
 ## Configuration
 

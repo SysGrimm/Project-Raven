@@ -1,0 +1,247 @@
+name: Automated Release Build
+
+on:
+  # Trigger on code changes
+  push:
+    branches: [ main ]
+    paths:
+      - 'configurations/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+      - 'libreelec-tailscale-addon/**'
+      
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force new release even if no version changes'
+        required: false
+        default: false
+        type: boolean
+        
+  # Check for updates daily
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+
+jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      libreelec_version: ${{ steps.versions.outputs.libreelec_version }}
+      tailscale_version: ${{ steps.versions.outputs.tailscale_version }}
+      should_release: ${{ steps.check.outputs.should_release }}
+      release_reason: ${{ steps.check.outputs.release_reason }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Get current versions
+      id: versions
+      run: |
+        # Get latest LibreELEC version
+        LIBREELEC_VERSION=$(curl -s "https://api.github.com/repos/LibreELEC/LibreELEC.tv/releases/latest" | grep '"tag_name"' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+        echo "libreelec_version=$LIBREELEC_VERSION" >> $GITHUB_OUTPUT
+        
+        # Get latest Tailscale version
+        TAILSCALE_VERSION=$(curl -s "https://api.github.com/repos/tailscale/tailscale/releases/latest" | grep '"tag_name"' | sed -E 's/.*"tag_name": "v([^"]+)".*/\1/')
+        echo "tailscale_version=$TAILSCALE_VERSION" >> $GITHUB_OUTPUT
+        
+        echo "📋 Current Versions:"
+        echo "LibreELEC: $LIBREELEC_VERSION"
+        echo "Tailscale: $TAILSCALE_VERSION"
+        
+    - name: Check if release needed
+      id: check
+      run: |
+        SHOULD_RELEASE=false
+        RELEASE_REASON=""
+        
+        # Check if this is a forced release
+        if [ "${{ github.event.inputs.force_release }}" == "true" ]; then
+          SHOULD_RELEASE=true
+          RELEASE_REASON="Manual trigger"
+        fi
+        
+        # Check if triggered by code changes
+        if [ "${{ github.event_name }}" == "push" ]; then
+          SHOULD_RELEASE=true
+          RELEASE_REASON="Code changes"
+        fi
+        
+        # Check for version changes (if scheduled or manual without force)
+        if [ "${{ github.event_name }}" == "schedule" ] || ([ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.force_release }}" != "true" ]); then
+          # Get last release tag to compare versions
+          LAST_RELEASE=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' || echo "")
+          
+          if [ -z "$LAST_RELEASE" ]; then
+            SHOULD_RELEASE=true
+            RELEASE_REASON="First release"
+          else
+            # Check if versions changed (this is a simple check - you might want more sophisticated comparison)
+            echo "Last release: $LAST_RELEASE"
+            echo "Current LibreELEC: ${{ steps.versions.outputs.libreelec_version }}"
+            echo "Current Tailscale: ${{ steps.versions.outputs.tailscale_version }}"
+            
+            # Simple version comparison - if either version string appears different, trigger release
+            if [[ "$LAST_RELEASE" != *"${{ steps.versions.outputs.libreelec_version }}"* ]] || [[ "$LAST_RELEASE" != *"${{ steps.versions.outputs.tailscale_version }}"* ]]; then
+              SHOULD_RELEASE=true
+              RELEASE_REASON="Version update detected"
+            fi
+          fi
+        fi
+        
+        echo "should_release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
+        echo "release_reason=$RELEASE_REASON" >> $GITHUB_OUTPUT
+        
+        echo "🔍 Release Decision: $SHOULD_RELEASE"
+        echo "📝 Reason: $RELEASE_REASON"
+
+  build-images:
+    needs: check-versions
+    if: needs.check-versions.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        device: [RPi5, RPiZeroW2]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl wget gzip coreutils util-linux
+        
+    - name: Build custom image for ${{ matrix.device }}
+      run: |
+        export TARGET_DEVICE="${{ matrix.device }}"
+        export LIBREELEC_VERSION="${{ needs.check-versions.outputs.libreelec_version }}"
+        export INCLUDE_TAILSCALE=true
+        ./scripts/simple-build.sh
+        
+    - name: Calculate checksums
+      run: |
+        cd output
+        for file in *.gz; do
+          if [ -f "$file" ]; then
+            echo "📝 Calculating checksum for $file"
+            sha256sum "$file" > "${file}.sha256"
+          fi
+        done
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: libreelec-${{ matrix.device }}-${{ github.run_number }}
+        path: |
+          output/*.img.gz
+          output/*.tar.gz
+          output/*.sha256
+        retention-days: 7
+
+  create-release:
+    needs: [check-versions, build-images]
+    if: needs.check-versions.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: release-files
+        
+    - name: Prepare release files
+      run: |
+        mkdir -p release-output
+        find release-files -name "*.gz" -o -name "*.sha256" | xargs -I {} cp {} release-output/
+        ls -la release-output/
+        
+    - name: Generate release tag
+      id: tag
+      run: |
+        TIMESTAMP=$(date +"%Y%m%d-%H%M")
+        TAG="v${TIMESTAMP}-le${{ needs.check-versions.outputs.libreelec_version }}-ts${{ needs.check-versions.outputs.tailscale_version }}"
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "📋 Release Tag: $TAG"
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.tag.outputs.tag }}
+        name: "Project Raven Release ${{ steps.tag.outputs.tag }}"
+        body: |
+          ## 🚀 Project Raven - Custom LibreELEC Release
+          
+          **Release Trigger:** ${{ needs.check-versions.outputs.release_reason }}
+          **Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          
+          ### 📦 What's Included
+          - **LibreELEC Version:** ${{ needs.check-versions.outputs.libreelec_version }}
+          - **Tailscale Version:** ${{ needs.check-versions.outputs.tailscale_version }}
+          - **Tailscale VPN:** Built-in with settings interface
+          - **Custom Optimizations:** Performance tuning, 4K support, automated setup
+          
+          ### 🎯 Supported Devices
+          - **Raspberry Pi 5** (`LibreELEC-RPi5-*` files)
+          - **Raspberry Pi Zero W2** (`LibreELEC-RPiZeroW2-*` files)
+          
+          ### 📋 Installation Instructions
+          
+          1. **Download Files:**
+             - Download the `.img.gz` file for your device
+             - Download the corresponding `-Config.tar.gz` file
+             - Download `.sha256` files for verification
+          
+          2. **Flash Image:**
+             - Use Raspberry Pi Imager or similar tool
+             - Flash the `.img.gz` file to your SD card
+          
+          3. **Apply Configuration:**
+             - Extract the `-Config.tar.gz` file
+             - Copy the `boot/` folder contents to your SD card's boot partition
+          
+          4. **Boot & Configure:**
+             - Insert SD card and boot your device
+             - First-boot script will auto-configure everything
+             - Configure Tailscale: Settings → Add-ons → Services → Tailscale Configuration
+          
+          ### 🔐 Tailscale VPN Setup
+          
+          1. Get your auth key from [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)
+          2. In LibreELEC: Settings → Add-ons → Services → Tailscale Configuration
+          3. Enable Tailscale and enter your auth key
+          4. Your device will appear in your Tailscale network instantly!
+          
+          ### 🔍 File Verification
+          Verify your downloads using the provided `.sha256` files:
+          ```bash
+          sha256sum -c filename.sha256
+          ```
+          
+          ### 📁 Release Files
+          
+          **Raspberry Pi 5:**
+          - `LibreELEC-RPi5.aarch64-${{ needs.check-versions.outputs.libreelec_version }}.img.gz` - Base LibreELEC image
+          - `LibreELEC-RPi5-${{ needs.check-versions.outputs.libreelec_version }}-Raven-Config.tar.gz` - Custom configuration
+          
+          **Raspberry Pi Zero W2:**
+          - `LibreELEC-RPiZeroW2.arm-${{ needs.check-versions.outputs.libreelec_version }}.img.gz` - Base LibreELEC image  
+          - `LibreELEC-RPiZeroW2-${{ needs.check-versions.outputs.libreelec_version }}-Raven-Config.tar.gz` - Custom configuration
+          
+          ---
+          
+          🏠 **[Project Raven Home](https://github.com/${{ github.repository }})** | 📚 **[Documentation](https://github.com/${{ github.repository }}/wiki)** | 🐛 **[Issues](https://github.com/${{ github.repository }}/issues)**
+        files: release-output/*
+        draft: false
+        prerelease: false
+        make_latest: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Update latest release badge
+      run: |
+        echo "✅ Release ${{ steps.tag.outputs.tag }} created successfully!"
+        echo "🎯 Includes LibreELEC ${{ needs.check-versions.outputs.libreelec_version }} with Tailscale ${{ needs.check-versions.outputs.tailscale_version }}"
+        echo "📦 Built for RPi5 and RPi Zero W2"

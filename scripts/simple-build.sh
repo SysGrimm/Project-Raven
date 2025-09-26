@@ -13,6 +13,7 @@ OUTPUT_DIR="$PROJECT_DIR/output"
 # Configuration
 TARGET_DEVICE="${TARGET_DEVICE:-RPi5}"
 LIBREELEC_VERSION="${LIBREELEC_VERSION:-12.2.0}"
+INCLUDE_TAILSCALE="${INCLUDE_TAILSCALE:-true}"  # Include Tailscale by default
 
 # If version is "latest", fetch the actual version from GitHub API
 if [ "$LIBREELEC_VERSION" = "latest" ]; then
@@ -48,6 +49,9 @@ get_download_url() {
             ;;
         "RPi5")
             echo "${base_url}/LibreELEC-RPi5.aarch64-${version}.img.gz"
+            ;;
+        "RPiZeroW2")
+            echo "${base_url}/LibreELEC-RPi2.arm-${version}.img.gz"
             ;;
         "Generic")
             echo "${base_url}/LibreELEC-Generic.x86_64-${version}.img.gz"
@@ -119,11 +123,66 @@ create_config_package() {
         echo "✅ Added first-boot.sh"
     fi
     
+    # Copy Tailscale installation if enabled
+    if [ "$INCLUDE_TAILSCALE" = "true" ] && [ -f "$CONFIG_DIR/tailscale/install-tailscale.sh" ]; then
+        cp "$CONFIG_DIR/tailscale/install-tailscale.sh" "$package_dir/boot/tailscale-install.sh"
+        chmod +x "$package_dir/boot/tailscale-install.sh"
+        echo "✅ Added Tailscale installer"
+        
+        # Copy Tailscale config template
+        if [ -f "$CONFIG_DIR/tailscale/tailscale.conf" ]; then
+            cp "$CONFIG_DIR/tailscale/tailscale.conf" "$package_dir/boot/tailscale.conf.template"
+            echo "✅ Added Tailscale configuration template"
+        fi
+    fi
+    
     # Copy storage files (Kodi settings, etc.)
     if [ -d "$CONFIG_DIR/storage" ]; then
         cp -r "$CONFIG_DIR/storage/"* "$package_dir/storage/" 2>/dev/null || true
         echo "✅ Added storage files"
     fi
+    
+    # Always include Tailscale addon and configuration
+    echo "📡 Adding Tailscale integration..."
+    
+    # Copy the existing tailscale addon
+    if [ -d "$PROJECT_DIR/libreelec-tailscale-addon" ]; then
+        mkdir -p "$package_dir/storage/.kodi/addons/service.tailscale"
+        cp -r "$PROJECT_DIR/libreelec-tailscale-addon/source/"* "$package_dir/storage/.kodi/addons/service.tailscale/"
+        
+        # Copy addon metadata
+        cp "$PROJECT_DIR/libreelec-tailscale-addon/source/addon.xml" "$package_dir/storage/.kodi/addons/service.tailscale/"
+        echo "✅ Added Tailscale VPN addon"
+    fi
+    
+    # Copy Tailscale configuration addon
+    if [ -d "$CONFIG_DIR/addons/service.tailscale-config" ]; then
+        mkdir -p "$package_dir/storage/.kodi/addons/service.tailscale-config"
+        cp -r "$CONFIG_DIR/addons/service.tailscale-config/"* "$package_dir/storage/.kodi/addons/service.tailscale-config/"
+        echo "✅ Added Tailscale configuration addon"
+    fi
+    
+    # Create Tailscale service file for systemd
+    mkdir -p "$package_dir/system/etc/systemd/system"
+    cat > "$package_dir/system/etc/systemd/system/tailscale.service" << 'EOF'
+[Unit]
+Description=Tailscale VPN client
+Documentation=https://tailscale.com/kb/
+Wants=network-pre.target
+After=network-pre.target NetworkManager.service systemd-resolved.service
+
+[Service]
+Type=notify
+ExecStart=/storage/.kodi/addons/service.tailscale/bin/tailscale.start
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    echo "✅ Added Tailscale systemd service"
     
     # Create installation instructions
     cat > "$package_dir/instructions/README.md" << EOF
@@ -156,6 +215,31 @@ This package contains custom configurations for LibreELEC ${version} on ${device
 - Automated first-boot setup
 - Custom directory structure
 - Network optimizations
+
+### 🔐 Tailscale VPN Integration
+- **Built-in by default** - No extra downloads needed
+- Configure via LibreELEC Settings > Services > Tailscale Configuration
+- Secure remote access to your media center
+- Access your home network from anywhere
+
+## Tailscale Setup
+
+### Getting Your Auth Key
+1. Go to https://login.tailscale.com/admin/settings/keys
+2. Generate a new auth key (reusable recommended)
+3. Copy the key (starts with \`tskey-auth-...\`)
+
+### Configure in LibreELEC
+1. Navigate to **Settings > Add-ons > Services > Tailscale Configuration**
+2. **Enable Tailscale**: Turn on the toggle
+3. **Auth Key**: Paste your Tailscale auth key
+4. **Accept Routes**: Enable to access other devices on your Tailscale network
+5. Save settings - Tailscale will automatically connect!
+
+### Verification
+- Check connection: Settings > Services > Tailscale Configuration > Show Status
+- Your device will appear in the Tailscale admin console
+- You can now access your LibreELEC remotely via Tailscale IP
 
 ## Manual Installation
 
