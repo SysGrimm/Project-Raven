@@ -1,5 +1,10 @@
 name: Build Custom LibreELEC Image
 
+# Permissions needed for the workflow
+permissions:
+  contents: write  # Required to create releases
+  actions: read    # Required to read workflow artifacts
+
 on:
   workflow_dispatch:
     inputs:

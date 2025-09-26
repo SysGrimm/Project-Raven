@@ -1,5 +1,10 @@
 name: Check for Updates
 
+# Permissions needed for the workflow
+permissions:
+  actions: write   # Required to trigger other workflows
+  contents: read   # Required to read repository content
+
 on:
   # Check for updates twice daily
   schedule:

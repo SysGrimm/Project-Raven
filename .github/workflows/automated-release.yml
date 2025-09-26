@@ -1,5 +1,10 @@
 name: Automated Release Build
 
+# Permissions needed for the workflow
+permissions:
+  contents: write  # Required to create releases
+  actions: read    # Required to download artifacts
+
 on:
   # Trigger on code changes
   push:
@@ -163,8 +168,11 @@ jobs:
       run: |
         TIMESTAMP=$(date +"%Y%m%d-%H%M")
         TAG="v${TIMESTAMP}-le${{ needs.check-versions.outputs.libreelec_version }}-ts${{ needs.check-versions.outputs.tailscale_version }}"
+        BUILD_DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
         echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
         echo "📋 Release Tag: $TAG"
+        echo "📅 Build Date: $BUILD_DATE"
         
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
@@ -175,7 +183,7 @@ jobs:
           ## 🚀 Project Raven - Custom LibreELEC Release
           
           **Release Trigger:** ${{ needs.check-versions.outputs.release_reason }}
-          **Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          **Build Date:** ${{ steps.tag.outputs.build_date }}
           
           ### 📦 What's Included
           - **LibreELEC Version:** ${{ needs.check-versions.outputs.libreelec_version }}
