@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<settings version="1">
+    <section id="system">
+        <category id="display">
+            <group id="1">
+                <setting id="videoscreen.resolution" default="false">1920x1080@60.00</setting>
+                <setting id="videoscreen.screen" default="false">0</setting>
+                <setting id="videoscreen.monitor" default="false">Default</setting>
+                <setting id="videoscreen.preferedstereoscopicmode" default="true">0</setting>
+                <setting id="videoscreen.fakefullscreen" default="true">false</setting>
+            </group>
+        </category>
+        
+        <category id="audio">
+            <group id="1">
+                <setting id="audiooutput.audiodevice" default="false">ALSA:hdmi:CARD=vc4hdmi,DEV=0</setting>
+                <setting id="audiooutput.channels" default="false">2</setting>
+                <setting id="audiooutput.config" default="false">2</setting>
+                <setting id="audiooutput.samplerate" default="false">48000</setting>
+                <setting id="audiooutput.passthrough" default="false">true</setting>
+                <setting id="audiooutput.passthroughdevice" default="false">ALSA:hdmi:CARD=vc4hdmi,DEV=0</setting>
+                <setting id="audiooutput.ac3passthrough" default="false">true</setting>
+                <setting id="audiooutput.dtspassthrough" default="false">true</setting>
+            </group>
+        </category>
+        
+        <category id="input">
+            <group id="1">
+                <setting id="input.enablemouse" default="false">true</setting>
+                <setting id="input.enablejoystick" default="false">true</setting>
+            </group>
+        </category>
+        
+        <category id="network">
+            <group id="1">
+                <setting id="services.webserver" default="false">true</setting>
+                <setting id="services.webserverport" default="false">8080</setting>
+                <setting id="services.webserverusername" default="false">kodi</setting>
+                <setting id="services.webserverpassword" default="false"></setting>
+                <setting id="services.zeroconf" default="false">true</setting>
+            </group>
+        </category>
+    </section>
+
+    <section id="filelists">
+        <category id="1">
+            <group id="1">
+                <setting id="filelists.showparentdiritems" default="false">true</setting>
+                <setting id="filelists.showextensions" default="false">true</setting>
+                <setting id="filelists.ignorethewhensorting" default="false">true</setting>
+                <setting id="filelists.allowfiledeletion" default="false">true</setting>
+            </group>
+        </category>
+    </section>
+
+    <section id="lookandfeel">
+        <category id="skin">
+            <group id="1">
+                <setting id="lookandfeel.skin" default="false">skin.estuary</setting>
+                <setting id="lookandfeel.skincolors" default="true">SKINDEFAULT</setting>
+                <setting id="lookandfeel.skintheme" default="true">SKINDEFAULT</setting>
+                <setting id="lookandfeel.font" default="true">SKINDEFAULT</setting>
+            </group>
+        </category>
+        
+        <category id="screensaver">
+            <group id="1">
+                <setting id="screensaver.mode" default="false">screensaver.xbmc.builtin.black</setting>
+                <setting id="screensaver.time" default="false">10</setting>
+            </group>
+        </category>
+    </section>
+
+    <section id="videoplayer">
+        <category id="1">
+            <group id="1">
+                <setting id="videoplayer.useamcodec" default="false">true</setting>
+                <setting id="videoplayer.usevdpau" default="false">true</setting>
+                <setting id="videoplayer.usevaapi" default="false">true</setting>
+                <setting id="videoplayer.usemmal" default="false">true</setting>
+                <setting id="videoplayer.adjustrefreshrate" default="false">2</setting>
+                <setting id="videoplayer.pauseafterrefreshchange" default="false">0.1</setting>
+            </group>
+        </category>
+    </section>
+</settings>

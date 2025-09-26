@@ -1,0 +1,32 @@
+# Raspberry Pi 5 Configuration for LibreELEC
+# This file contains boot configuration parameters
+
+# GPU Memory Split (256MB for 4K video)
+gpu_mem=256
+
+# Enable 4K 60fps support
+hdmi_enable_4kp60=1
+
+# Audio Configuration
+dtparam=audio=on
+audio_pwm_mode=2
+
+# Enable I2C and SPI
+dtparam=i2c_arm=on
+dtparam=spi=on
+
+# CEC Support
+hdmi_ignore_cec_init=1
+
+# Performance Settings
+over_voltage=2
+arm_freq=2400
+gpu_freq=750
+
+# USB Settings
+max_usb_current=1
+
+# Custom settings for media center
+hdmi_force_hotplug=1
+hdmi_group=2
+hdmi_mode=82

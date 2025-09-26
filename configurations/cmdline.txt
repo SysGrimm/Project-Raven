@@ -1,0 +1,1 @@
+console=tty1 quiet ssh loglevel=7 vt.global_cursor_default=0

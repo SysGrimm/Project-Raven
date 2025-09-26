@@ -1,0 +1,125 @@
+name: Build Custom LibreELEC Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_device:
+        description: 'Target Device (RPi4, RPi5, Generic)'
+        required: true
+        default: 'RPi5'
+        type: choice
+        options:
+        - RPi4
+        - RPi5
+        - Generic
+      libreelec_version:
+        description: 'LibreELEC Version (latest or specific version)'
+        required: false
+        default: 'latest'
+        type: string
+  push:
+    branches: [ main ]
+    paths:
+      - 'configurations/**'
+      - 'scripts/customize-libreelec.sh'
+      - '.github/workflows/build-custom-image.yml'
+
+jobs:
+  build-custom-image:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl wget gzip coreutils util-linux
+        
+    - name: Set build parameters
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          echo "TARGET_DEVICE=${{ github.event.inputs.target_device }}" >> $GITHUB_ENV
+          echo "LIBREELEC_VERSION=${{ github.event.inputs.libreelec_version }}" >> $GITHUB_ENV
+        else
+          echo "TARGET_DEVICE=RPi5" >> $GITHUB_ENV
+          echo "LIBREELEC_VERSION=latest" >> $GITHUB_ENV
+        fi
+        
+    - name: Display build configuration
+      run: |
+        echo "🚀 Build Configuration"
+        echo "====================="
+        echo "Target Device: ${TARGET_DEVICE}"
+        echo "LibreELEC Version: ${LIBREELEC_VERSION}"
+        echo "Trigger: ${{ github.event_name }}"
+        
+    - name: Create output directory
+      run: mkdir -p output
+      
+    - name: Download and customize LibreELEC
+      run: |
+        export TARGET_DEVICE="${TARGET_DEVICE}"
+        export LIBREELEC_VERSION="${LIBREELEC_VERSION}"
+        ./scripts/customize-libreelec.sh
+        
+    - name: List output files
+      run: |
+        echo "📁 Generated files:"
+        ls -la output/
+        
+    - name: Calculate checksums
+      run: |
+        cd output
+        for file in *.gz; do
+          if [ -f "$file" ]; then
+            echo "📝 Calculating checksum for $file"
+            sha256sum "$file" > "${file}.sha256"
+          fi
+        done
+        
+    - name: Upload custom image
+      uses: actions/upload-artifact@v4
+      with:
+        name: libreelec-custom-${{ github.run_number }}
+        path: |
+          output/*.img.gz
+          output/*.sha256
+        retention-days: 30
+        
+    - name: Create release (on main branch push)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: custom-build-${{ github.run_number }}
+        name: Custom LibreELEC Build ${{ github.run_number }}
+        body: |
+          🚀 Custom LibreELEC Image Build
+          
+          **Configuration:**
+          - Target Device: ${TARGET_DEVICE}
+          - LibreELEC Version: ${LIBREELEC_VERSION}
+          - Build Number: ${{ github.run_number }}
+          - Commit: ${{ github.sha }}
+          
+          **Customizations Applied:**
+          - Custom boot configuration (config.txt, cmdline.txt)
+          - Pre-configured Kodi settings
+          - First-boot customization script
+          - Optimized for media center usage
+          
+          **Installation:**
+          1. Download the `.img.gz` file for your device
+          2. Flash to SD card using Raspberry Pi Imager or similar
+          3. Boot and enjoy your customized LibreELEC system!
+          
+          **Verification:**
+          Verify the download integrity using the provided `.sha256` file.
+        files: |
+          output/*.img.gz
+          output/*.sha256
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
