@@ -172,9 +172,9 @@ watch -n 1 'cat /sys/class/cec/cec0/state'
 | Approach | Complexity | Success Rate | Maintenance | Recommended |
 |----------|------------|--------------|-------------|-------------|
 | LibreELEC Migration | Low | 95% | Low |  Yes |
-| Kernel Patching | Very High | 70% | Very High | ❌ No |
-| Framework Disabling | Medium | 40% | Medium | ❌ No |
-| Module Blacklisting | Low | 10% | Low | ❌ No |
+| Kernel Patching | Very High | 70% | Very High | [ERROR] No |
+| Framework Disabling | Medium | 40% | Medium | [ERROR] No |
+| Module Blacklisting | Low | 10% | Low | [ERROR] No |
 
 ## Best Practices
 

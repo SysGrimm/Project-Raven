@@ -30,7 +30,7 @@ Quick reference for finding information in the Project-Raven wiki.
 | **Theme Development** | [[Theme-Customization]] | [[Performance-Optimization]] |
 | **Automation** | [[Automated-Deployment]] | [[Build-System]], [[Custom-Repositories]] |
 
-## 🚨 Troubleshooting
+## Troubleshooting
 
 | Problem Type | Primary Resource | Secondary Resources |
 |--------------|------------------|---------------------|
@@ -107,6 +107,7 @@ Quick reference for finding information in the Project-Raven wiki.
 - [[Network-Configuration]]
 - [[Theme-Customization]]
 - [[Performance-Optimization]]
+- [[Video-Optimization-Documentation]]
 - [[Security-Considerations]]
 
 ### Advanced (🔴)
@@ -115,6 +116,13 @@ Quick reference for finding information in the Project-Raven wiki.
 - [[Add-on-Development]]
 - [[Build-System]]
 - [[Automated-Deployment]]
+- [[Pi-CI-Testing-Integration]]
+
+## Project Status
+
+### Current Status
+- [[Implementation-Status]]
+- [[Version-2.0-Enhancements]]
 
 ## Update Frequency
 
@@ -128,7 +136,7 @@ Quick reference for finding information in the Project-Raven wiki.
 | [[Tailscale-Add-on]] | Per Version | Sept 2025 |
 | [[Architecture-Overview]] | Per Major Release | Sept 2025 |
 
-## 📱 Mobile-Friendly Pages
+## [MOBILE] Mobile-Friendly Pages
 
 These pages are optimized for mobile viewing:
 - [[Quick-Start-Guide]] - Essential setup steps

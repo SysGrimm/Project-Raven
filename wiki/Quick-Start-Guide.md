@@ -74,7 +74,7 @@ cd libreelec-custom-build
 - **IR Receiver** (if TV doesn't support CEC)
 - **USB Keyboard** (for initial setup)
 
-## 📺 Installation Steps
+## [MEDIA] Installation Steps
 
 ### Step 1: Flash the Image
 ```bash
@@ -131,7 +131,7 @@ ssh root@100.x.x.x  # Your Tailscale IP
 tailscale status
 ```
 
-## 🎮 CEC Remote Setup
+## CEC Remote Setup
 
 ### Automatic CEC (Most TVs)
 CEC should work immediately with most modern TVs:
@@ -156,7 +156,7 @@ echo "scan" | cec-client -s -d 1
 cec-client -l
 ```
 
-## 📱 Remote Access
+## [MOBILE] Remote Access
 
 ### Access Methods
 Once Tailscale is connected:
@@ -289,4 +289,4 @@ You've successfully completed the quick start when:
 
 ---
 
-**🎉 Congratulations!** You now have a fully functional, remotely accessible media center with secure VPN connectivity. Explore the wiki for advanced customization options!
+**[COMPLETE] Congratulations!** You now have a fully functional, remotely accessible media center with secure VPN connectivity. Explore the wiki for advanced customization options!

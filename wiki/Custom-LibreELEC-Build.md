@@ -13,7 +13,7 @@ The custom build system extends LibreELEC's official build framework to create t
 
 For comprehensive build reliability, see the **[Universal Package Download System](Universal-Package-Download-System.md)** documentation.
 
-## 📁 Build Directory Structure
+## [FOLDER] Build Directory Structure
 
 ```
 libreelec-custom-build/
@@ -368,7 +368,7 @@ done
 wait
 ```
 
-## 🧪 Testing and Validation
+## Testing and Validation
 
 ### Image Testing Process
 ```bash

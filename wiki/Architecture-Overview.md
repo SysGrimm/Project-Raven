@@ -202,7 +202,7 @@ Source Code → Configure → Compile → Package → Customize → Image
 └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘
 ```
 
-## 🔐 Security Architecture
+## [SECURITY] Security Architecture
 
 ### Security Layers
 
@@ -322,7 +322,7 @@ Source Code → Configure → Compile → Package → Customize → Image
 - **System Settings**: LibreELEC-specific configuration files
 - **Network Settings**: ConnMan-based network management
 
-## 🔌 Integration Points
+## Integration Points
 
 ### External System Integration
 

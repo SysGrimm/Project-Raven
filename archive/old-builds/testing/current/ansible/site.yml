@@ -1,0 +1,329 @@
+---
+# Project Raven - Raspberry Pi OS Configuration Playbook
+# This playbook configures a fresh Raspberry Pi OS installation
+
+- name: Project Raven System Configuration
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    raven_user: "pi"
+    kodi_user: "kodi"
+    gpu_memory: "256"
+    strip_os: true
+    
+  tasks:
+    - name: Display setup banner
+      debug:
+        msg: |
+          [LAUNCH] Project Raven - Ansible Configuration
+          ======================================
+          Target: {{ inventory_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Architecture: {{ ansible_architecture }}
+    
+    # System Updates
+    - name: Update package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+        
+    - name: Upgrade all packages
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+        
+    - name: Install essential packages
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - htop
+          - nano
+          - vim
+          - sudo
+          - software-properties-common
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+        state: present
+        
+    # OS Stripping (optional)
+    - name: Copy OS stripping script
+      copy:
+        src: "../scripts/strip-os.sh"
+        dest: "/opt/raven/strip-os.sh"
+        mode: '0755'
+        owner: root
+        group: root
+      when: strip_os is defined and strip_os|bool
+      
+    - name: Run OS stripping script
+      command: /opt/raven/strip-os.sh
+      when: strip_os is defined and strip_os|bool
+      register: strip_result
+      
+    - name: Display OS stripping results
+      debug:
+        var: strip_result.stdout_lines
+      when: strip_os is defined and strip_os|bool and strip_result is defined
+    
+    # SSH Configuration
+    - name: Ensure SSH is enabled and started
+      systemd:
+        name: ssh
+        enabled: yes
+        state: started
+        
+    - name: Configure SSH security settings
+      copy:
+        dest: /etc/ssh/sshd_config.d/raven.conf
+        content: |
+          # Project Raven SSH Configuration
+          Port 22
+          PermitRootLogin no
+          PubkeyAuthentication yes
+          PasswordAuthentication yes
+          ChallengeResponseAuthentication no
+          UsePAM yes
+          X11Forwarding yes
+          PrintMotd no
+          AcceptEnv LANG LC_*
+          Subsystem sftp /usr/lib/openssh/sftp-server
+        backup: yes
+      notify: restart ssh
+    
+    # Kodi Installation with Jellyfin Plugin
+    - name: Install Kodi and CEC support packages
+      apt:
+        name:
+          - kodi
+          - kodi-addon-peripheral-joystick
+          - libcec6
+          - cec-utils
+          - unzip
+          - wget
+        state: present
+        
+    - name: Create kodi user with proper groups
+      user:
+        name: "{{ kodi_user }}"
+        home: "/home/{{ kodi_user }}"
+        shell: /bin/bash
+        groups: audio,video,input,dialout,plugdev,tty,cdrom
+        append: yes
+        create_home: yes
+        
+    - name: Create Kodi userdata directory
+      file:
+        path: "/home/{{ kodi_user }}/.kodi/userdata"
+        state: directory
+        owner: "{{ kodi_user }}"
+        group: "{{ kodi_user }}"
+        mode: '0755'
+        
+    - name: Download and install Jellyfin for Kodi addon
+      unarchive:
+        src: https://repo.jellyfin.org/releases/client/kodi/repository.jellyfin.kodi.zip
+        dest: "/home/{{ kodi_user }}/.kodi/addons/"
+        remote_src: yes
+        owner: "{{ kodi_user }}"
+        group: "{{ kodi_user }}"
+        creates: "/home/{{ kodi_user }}/.kodi/addons/repository.jellyfin.kodi"
+        
+    - name: Configure CEC settings in Kodi
+      copy:
+        dest: "/home/{{ kodi_user }}/.kodi/userdata/advancedsettings.xml"
+        owner: "{{ kodi_user }}"
+        group: "{{ kodi_user }}"
+        content: |
+          <advancedsettings>
+              <cec>
+                  <enabled>true</enabled>
+                  <ceclogaddresses>true</ceclogaddresses>
+                  <poweroffshutdown>true</poweroffshutdown>
+                  <poweroninit>true</poweroninit>
+                  <usececcec>true</usececcec>
+                  <cecactivatesource>true</cecactivatesource>
+                  <cecstandbydeactivate>true</cecstandbydeactivate>
+              </cec>
+          </advancedsettings>
+        
+    - name: Configure Kodi systemd service for direct boot
+      copy:
+        dest: /etc/systemd/system/kodi.service
+        content: |
+          [Unit]
+          Description=Kodi Media Center
+          After=remote-fs.target sound.target network-online.target
+          Wants=network-online.target
+          Conflicts=getty@tty1.service
+
+          [Service]
+          Type=simple
+          User={{ kodi_user }}
+          Group={{ kodi_user }}
+          PAMName=login
+          TTYPath=/dev/tty1
+          ExecStart=/usr/bin/kodi-standalone
+          Restart=always
+          RestartSec=15
+          KillMode=process
+          StandardInput=tty
+          StandardOutput=inherit
+          StandardError=inherit
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: reload systemd
+      
+    - name: Disable desktop environments for direct Kodi boot
+      systemd:
+        name: "{{ item }}"
+        enabled: no
+      loop:
+        - lightdm
+        - gdm3
+        - sddm
+      ignore_errors: yes
+      
+    - name: Set default target to multi-user (no desktop)
+      file:
+        src: /lib/systemd/system/multi-user.target
+        dest: /etc/systemd/system/default.target
+        state: link
+        force: yes
+      
+    - name: Enable Kodi service
+      systemd:
+        name: kodi.service
+        enabled: yes
+        daemon_reload: yes
+    
+    # Tailscale Installation
+    - name: Add Tailscale GPG key
+      apt_key:
+        url: https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg
+        keyring: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        state: present
+        
+    - name: Add Tailscale repository
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu jammy main"
+        filename: tailscale
+        state: present
+        
+    - name: Install Tailscale
+      apt:
+        name: tailscale
+        state: present
+        update_cache: yes
+        
+    - name: Enable IP forwarding for Tailscale
+      sysctl:
+        name: "{{ item }}"
+        value: "1"
+        sysctl_set: yes
+        state: present
+        reload: yes
+      loop:
+        - net.ipv4.ip_forward
+        - net.ipv6.conf.all.forwarding
+        
+    - name: Enable and start Tailscale daemon
+      systemd:
+        name: tailscaled
+        enabled: yes
+        state: started
+    
+    # System Optimizations
+    - name: Disable swap for better performance
+      shell: |
+        dphys-swapfile swapoff || true
+        dphys-swapfile uninstall || true
+        update-rc.d dphys-swapfile remove || true
+        systemctl disable dphys-swapfile || true
+      ignore_errors: yes
+      
+    - name: Set I/O scheduler for better media performance
+      copy:
+        dest: /etc/udev/rules.d/60-scheduler.rules
+        content: |
+          ACTION=="add|change", KERNEL=="sd[a-z]*|mmcblk[0-9]*", ATTR{queue/scheduler}="deadline"
+          
+    - name: Increase file limits for media streaming
+      blockinfile:
+        path: /etc/security/limits.conf
+        block: |
+          # Project Raven optimizations
+          * soft nofile 65536
+          * hard nofile 65536
+          root soft nofile 65536
+          root hard nofile 65536
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - Project Raven"
+        
+    - name: Configure GPU memory split
+      lineinfile:
+        path: /boot/config.txt
+        line: "gpu_mem={{ gpu_memory }}"
+        create: yes
+        backup: yes
+      notify: reboot required
+    
+    # MOTD Configuration
+    - name: Create Project Raven MOTD
+      copy:
+        dest: /etc/motd
+        content: |
+            ____            _           _     ____                         
+           |  _ \ _ __ ___ (_) ___  ___| |_  |  _ \ __ ___   _____ _ __    
+           | |_) | '__/ _ \| |/ _ \/ __| __| | |_) / _` \ \ / / _ \ '_ \   
+           |  __/| | | (_) | |  __/ (__| |_  |  _ < (_| |\ V /  __/ | | |  
+           |_|   |_|  \___// |\___|\___|\__| |_| \_\__,_| \_/ \___|_| |_|  
+                         |__/                                            
+           
+           [LAUNCH] Raspberry Pi OS Edition with Tailscale VPN
+           
+           🔗 Network Status:
+           [MEDIA] Kodi Media Center: systemctl status kodi
+           [SECURITY] Tailscale VPN: sudo tailscale status
+           🌐 SSH Access: ssh {{ raven_user }}@{{ ansible_default_ipv4.address }}
+           
+           📚 Documentation: https://github.com/SysGrimm/Project-Raven/wiki
+           🐛 Issues: https://github.com/SysGrimm/Project-Raven/issues
+        backup: yes
+        
+    - name: Clean up package cache
+      apt:
+        autoremove: yes
+        autoclean: yes
+        
+    - name: Clean journal logs
+      shell: journalctl --vacuum-time=7d
+      
+    - name: Display completion message
+      debug:
+        msg: |
+          [COMPLETE] Project Raven configuration completed!
+          ========================================
+          [MEDIA] Kodi service: {{ ansible_service_mgr == 'systemd' and 'configured' or 'check manually' }}
+          [SECURITY] Tailscale: installed, run 'sudo tailscale up' to connect
+          [UPDATE] Reboot recommended for all changes to take effect
+  
+  handlers:
+    - name: restart ssh
+      systemd:
+        name: ssh
+        state: restarted
+        
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+        
+    - name: reboot required
+      debug:
+        msg: "Reboot required for GPU memory changes to take effect"

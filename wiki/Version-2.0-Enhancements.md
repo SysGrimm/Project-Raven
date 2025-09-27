@@ -182,7 +182,7 @@ enable_cec=true
 - Logical information hierarchy
 - Quick access to essential functions
 
-## 🔐 Security and Networking
+## [SECURITY] Security and Networking
 
 ### VPN Authentication Enhancement
 **Auth Key Implementation**:

@@ -1,0 +1,98 @@
+name: Build Raspberry Pi OS Image
+
+# Permissions needed for the workflow
+permissions:
+  contents: write  # Required to create releases
+  actions: read    # Required to read workflow artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: 'Image Variant'
+        required: true
+        default: 'lite'
+        type: choice
+        options:
+        - lite
+        - desktop
+      device:
+        description: 'Target Device'
+        required: true
+        default: 'rpi5'
+        type: choice
+        options:
+        - rpi4
+        - rpi5
+        - rpi-zero-2w
+        - all
+      create_release:
+        description: 'Create GitHub Release'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget xz-utils kpartx qemu-user-static
+
+    - name: Build Raspberry Pi OS image
+      run: |
+        cd raspios/scripts
+        sudo ./build-image.sh ${{ github.event.inputs.device }} ${{ github.event.inputs.variant }}
+        
+    - name: Calculate checksums
+      run: |
+        cd images
+        for file in *.img; do
+          if [ -f "$file" ]; then
+            sha256sum "$file" > "$file.sha256"
+            ls -lh "$file"
+          fi
+        done
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: project-raven-${{ github.event.inputs.device }}-${{ github.event.inputs.variant }}
+        path: |
+          images/*.img
+          images/*.sha256
+        retention-days: 30
+
+    - name: Create Release
+      if: github.event.inputs.create_release == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v$(date +'%Y.%m.%d')-${{ github.event.inputs.variant }}-$(echo $GITHUB_SHA | cut -c1-7)
+        name: "Project Raven ${{ github.event.inputs.variant }} - $(date +'%Y-%m-%d')"
+        body: |
+          # Project Raven - Raspberry Pi OS ${{ github.event.inputs.variant }}
+          
+          Manual build triggered on $(date +'%Y-%m-%d %H:%M:%S UTC')
+          
+          ## Features
+          - LibreELEC-style video optimizations
+          - Mandatory Project Raven boot splash  
+          - First-boot automation
+          - Hardware acceleration optimizations
+          - Kodi pre-configuration (if desktop variant)
+          
+          ## Installation
+          1. Download the .img file
+          2. Flash to SD card using Raspberry Pi Imager
+          3. Boot Raspberry Pi - first boot handles all configuration
+          
+          **Variant:** ${{ github.event.inputs.variant }}
+        files: images/*
+        draft: false
+        prerelease: false

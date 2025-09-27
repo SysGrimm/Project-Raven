@@ -1,0 +1,63 @@
+# Project Raven - Raspberry Pi OS Boot Configuration
+# Optimized for Kodi media center with LibreELEC video optimizations
+
+# Core LibreELEC-based optimizations
+################################################################################
+
+# LibreELEC GPU Memory Split - Optimized for H264/H265 hardware acceleration
+# Based on LibreELEC's default configuration for RPi4/RPi5
+gpu_mem=76
+
+# Display Configuration - LibreELEC optimizations
+display_auto_detect=1
+disable_overscan=1
+disable_fw_kms_setup=1
+
+# Video Core - LibreELEC's VC4 KMS driver with CMA optimization
+# CMA-512 provides optimal video memory for 4K playback
+dtoverlay=vc4-kms-v3d,cma-512
+max_framebuffers=0
+
+# CEC Hardware Support - LibreELEC CEC configuration
+# Prevents CEC init from waking TV on reboot
+hdmi_ignore_cec_init=1
+cec_osd_name=Project Raven
+
+# 64-bit ARM optimization (RPi4/RPi5)
+arm_64bit=1
+arm_boost=1
+kernel=kernel.img
+
+# 4K Video Support - LibreELEC 4K optimizations
+hdmi_enable_4kp60=1
+
+# Audio Configuration - LibreELEC audio settings
+dtparam=audio=on
+audio_pwm_mode=1
+
+# Hardware Decoding Optimizations
+# Enable H264/H265 hardware acceleration support
+start_x=1
+
+# Memory Split for different RAM sizes (LibreELEC approach)
+gpu_mem_256=128
+gpu_mem_512=128
+gpu_mem_1024=76
+
+# Performance Optimizations
+# Safe overclocking values from LibreELEC
+over_voltage=2
+arm_freq=1800
+
+# Optional: IR Remote Support (uncomment if needed)
+# dtoverlay=gpio-ir,gpio_pin=18
+
+# Optional: Composite Video Output (uncomment and modify cmdline.txt if needed)
+# For PAL: video=Composite-1:720x576@50ie
+# For NTSC: video=Composite-1:720x480@60ie
+# dtoverlay=vc4-kms-v3d,cma-512,composite=1
+# enable_tvout=1
+
+# System Optimizations
+camera_auto_detect=1
+enable_uart=1

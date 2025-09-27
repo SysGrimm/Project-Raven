@@ -2,10 +2,10 @@
 
 This page documents current known issues, limitations, and workarounds for Project-Raven components.
 
-## 🚨 Critical Issues
+## Critical Issues
 
 ### Issue #1: bcmstat Package GitHub Archive Filename Mismatch
-**Status**: 🔍 Under Active Investigation  
+**Status**: Under Active Investigation  
 **Affects**: All LibreELEC builds  
 **Symptoms**: Build fails at package 1/290 with "File bcmstat-HASH.tar.gz doesn't exist"
 
@@ -16,15 +16,15 @@ This page documents current known issues, limitations, and workarounds for Proje
 - Build progression improved from immediate failures to 2-3 minute consistent failures
 
 **Current Status**: 
-- ✅ Universal Package Download System implemented
-- ✅ Build workflow optimization completed  
-- ✅ Multiple workflow trigger conflicts resolved
-- 🔄 **Active Work**: Direct filename resolution during download phase
+- [SUCCESS] Universal Package Download System implemented
+- [SUCCESS] Build workflow optimization completed  
+- [SUCCESS] Multiple workflow trigger conflicts resolved
+- [UPDATE] **Active Work**: Direct filename resolution during download phase
 
 **Tracking**: High priority - blocking all LibreELEC builds
 
 ### Issue #2: Raspberry Pi 5 CEC Intermittent Failures
-**Status**: 🔍 Under Investigation  
+**Status**: Under Investigation  
 **Affects**: Raspberry Pi 5 with specific TV models  
 **Symptoms**: CEC remote control works initially but stops responding after 30-60 minutes
 
@@ -42,7 +42,7 @@ cec_osd_name=LibreELEC
 **Tracking**: [GitHub Issue #42](https://github.com/SysGrimm/Project-Raven/issues/42)
 
 ### Issue #3: Tailscale Authentication Timeout on Slow Networks
-**Status**: 🔧 Known Limitation  
+**Status**: [CONFIG] Known Limitation  
 **Affects**: Networks with >500ms latency to Tailscale servers  
 **Symptoms**: Add-on shows "Authentication failed" during initial setup
 
@@ -180,7 +180,7 @@ make clean-package-kodi
 make clean-package-tailscale
 ```
 
-## 📱 Mobile App Compatibility
+## [MOBILE] Mobile App Compatibility
 
 ### Kore Remote App Issues
 

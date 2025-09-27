@@ -23,7 +23,7 @@ LibreELEC builds frequently failed due to:
 
 ## � Universal Package Download System v5.0 - Runtime Filename Correction
 
-**Status**: 🚀 ACTIVE TESTING  
+**Status**: [LAUNCH] ACTIVE TESTING  
 **Build ID**: 17521347861  
 **Innovation**: Real-time build monitoring with dynamic symlink filename fixes  
 
@@ -42,22 +42,22 @@ done
 ```
 
 ### Expected Impact
-- ✅ **Intelligent adaptation**: Detects and fixes GitHub archive mismatches in real-time
-- ✅ **Zero build interruption**: Symlinks created before LibreELEC needs them
-- ✅ **Foundation for automation**: Can scale to fix all 290 package filename issues
-- ✅ **Proven architecture**: Built on v4.0's successful pre-download framework
+- [SUCCESS] **Intelligent adaptation**: Detects and fixes GitHub archive mismatches in real-time
+- [SUCCESS] **Zero build interruption**: Symlinks created before LibreELEC needs them
+- [SUCCESS] **Foundation for automation**: Can scale to fix all 290 package filename issues
+- [SUCCESS] **Proven architecture**: Built on v4.0's successful pre-download framework
 
-## 🚀 Universal Package Download System v4.0 - Direct Build Integration
+## [LAUNCH] Universal Package Download System v4.0 - Direct Build Integration
 
-**Status**: ✅ ANALYSIS COMPLETE - Root Cause Identified  
+**Status**: [SUCCESS] ANALYSIS COMPLETE - Root Cause Identified  
 **Build ID**: 17521146827  
 **Critical Discovery**: GitHub archive filename mismatch pattern discovered  
 
 ### The v4.0 Success Story
 v4.0 achieved **perfect pre-download functionality** but revealed the final barrier:
-- ✅ All 7 packages downloaded successfully  
-- ✅ Files correctly placed in build directory
-- ❌ LibreELEC expects `bcmstat-HASH.tar.gz` but downloads `HASH.tar.gz`
+- [SUCCESS] All 7 packages downloaded successfully  
+- [SUCCESS] Files correctly placed in build directory
+- [ERROR] LibreELEC expects `bcmstat-HASH.tar.gz` but downloads `HASH.tar.gz`
 
 ### Root Cause Revelation
 ```bash
@@ -71,9 +71,9 @@ bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz
 ### v4.0 Legacy Impact
 v4.0's "failure" was actually the **breakthrough moment** that identified the exact filename pattern issue, leading directly to the v5.0 symlink solution.
 
-## �🚀 Universal Package Download System v4.0 - Direct Build Integration
+## �[LAUNCH] Universal Package Download System v4.0 - Direct Build Integration
 
-**Status**: 🚀 ACTIVE TESTING  
+**Status**: [LAUNCH] ACTIVE TESTING  
 **Build ID**: 17521146827  
 **Approach**: Direct Source File Placement
 
@@ -111,23 +111,23 @@ cp sources/* "$BUILD_DIR/sources/" 2>/dev/null || true
 ### Expected Impact
 
 If successful, v4.0 should achieve:
-- ✅ All 7 packages immediately available to LibreELEC build system
-- ✅ Build progression beyond 40m51s current record
-- ✅ Potential advancement to packages 50+/290 or higher
-- ✅ Foundation for scaling to all 290 problematic packages
+- [SUCCESS] All 7 packages immediately available to LibreELEC build system
+- [SUCCESS] Build progression beyond 40m51s current record
+- [SUCCESS] Potential advancement to packages 50+/290 or higher
+- [SUCCESS] Foundation for scaling to all 290 problematic packages
 
 ---
 
-## ❌ Universal Package Download System v3.0 - FAILED
+## [ERROR] Universal Package Download System v3.0 - FAILED
 
-**Status**: ❌ FAILED - LibreELEC ignores global sources  
+**Status**: [ERROR] FAILED - LibreELEC ignores global sources  
 **Build ID**: 17521067512  
 **Critical Discovery**: LibreELEC completely ignores SOURCES_DIR environment variable
 
 ### v3.0 Test Results
 
-✅ **Downloads Phase**: All 7 packages downloaded perfectly to global sources directory  
-❌ **Integration Phase**: LibreELEC build system completely ignored pre-downloaded files
+[SUCCESS] **Downloads Phase**: All 7 packages downloaded perfectly to global sources directory  
+[ERROR] **Integration Phase**: LibreELEC build system completely ignored pre-downloaded files
 
 ```bash
 [INSTALL] bcmstat
@@ -145,58 +145,58 @@ File bcmstat-1698ec66f7dd38b21d92958dfe08a79dd07300a5.tar.gz doesn't exist for p
 ### v3.0 → v4.0 Evolution
 
 The v3.0 failure provided crucial intelligence:
-- ✅ Universal download patterns work flawlessly  
-- ✅ All 7 packages download with correct filenames
-- ❌ LibreELEC requires build-specific source placement
-- 💡 **Solution**: Direct file copying to build directories (v4.0 approach)
+- [SUCCESS] Universal download patterns work flawlessly  
+- [SUCCESS] All 7 packages download with correct filenames
+- [ERROR] LibreELEC requires build-specific source placement
+- [INFO] **Solution**: Direct file copying to build directories (v4.0 approach)
 
 ---
 
-## 🎯 PROVEN SUCCESS STORIES
+## [TARGET] PROVEN SUCCESS STORIES
 
-### ✅ bcmstat Package (GitHub Archive Pattern) - **RESOLVED** 🏆
+### [SUCCESS] bcmstat Package (GitHub Archive Pattern) - **RESOLVED** [RESOLVED]
 - **Issue**: GitHub archive filename mismatch (`HASH.tar.gz` vs `bcmstat-HASH.tar.gz`)
 - **Solution**: Pre-download with correct filename mapping from popcornmix/bcmstat repository
-- **Result**: ✅ **FIRST BREAKTHROUGH** - Builds progressed from immediate failures to 2+ minutes
-- **Status**: ✅ **WORKING** - GitHub archive pattern successfully implemented
+- **Result**: [SUCCESS] **FIRST BREAKTHROUGH** - Builds progressed from immediate failures to 2+ minutes
+- **Status**: [SUCCESS] **WORKING** - GitHub archive pattern successfully implemented
 
-### ✅ configtools Package (GNU Savannah Pattern) - **RESOLVED** 🏆  
+### [SUCCESS] configtools Package (GNU Savannah Pattern) - **RESOLVED** [RESOLVED]  
 - **Issue**: GNU Savannah snapshot filename mismatch (`config-HASH.tar.gz` vs `configtools-HASH.tar.gz`)
 - **Solution**: Pre-download from GNU Savannah git snapshots with correct filename mapping
-- **Result**: ✅ **SECOND SUCCESS** - Builds advanced from 2m to 8m29s runtime (4x improvement)
-- **Status**: ✅ **WORKING** - GNU Savannah pattern successfully implemented
+- **Result**: [SUCCESS] **SECOND SUCCESS** - Builds advanced from 2m to 8m29s runtime (4x improvement)
+- **Status**: [SUCCESS] **WORKING** - GNU Savannah pattern successfully implemented
 
-### ✅ make Package (GNU Mirror Pattern) - **RESOLVED** 🏆
+### [SUCCESS] make Package (GNU Mirror Pattern) - **RESOLVED** [RESOLVED]
 - **Issue**: GNU mirror timeout/404 errors, version mismatches causing build failures
 - **Solution**: Direct download from primary GNU FTP server with correct version mapping
-- **Result**: ✅ **THIRD BREAKTHROUGH** - Builds progressed from 8m29s to 20+ minutes (3x improvement)  
-- **Status**: ✅ **WORKING** - GNU mirror pattern successfully implemented
+- **Result**: [SUCCESS] **THIRD BREAKTHROUGH** - Builds progressed from 8m29s to 20+ minutes (3x improvement)  
+- **Status**: [SUCCESS] **WORKING** - GNU mirror pattern successfully implemented
 
-### ✅ fakeroot Package (Debian Package Pattern) - **RESOLVED** 🏆
+### [SUCCESS] fakeroot Package (Debian Package Pattern) - **RESOLVED** [RESOLVED]
 - **Issue**: Debian package filename/version mismatch (`fakeroot_1.37.1.2.orig.tar.gz` vs `fakeroot-1.34.tar.gz`)
 - **Solution**: Pre-download from Debian repository with expected filename mapping
-- **Result**: ✅ **FOURTH SUCCESS** - Systematic progression continuing, builds reaching 37+/290 packages  
-- **Status**: ✅ **WORKING** - Debian package pattern successfully implemented
+- **Result**: [SUCCESS] **FOURTH SUCCESS** - Systematic progression continuing, builds reaching 37+/290 packages  
+- **Status**: [SUCCESS] **WORKING** - Debian package pattern successfully implemented
 
-### ✅ ninja Package (GitHub Archive Pattern v2) - **RESOLVED** 🏆
+### [SUCCESS] ninja Package (GitHub Archive Pattern v2) - **RESOLVED** [RESOLVED]
 - **Issue**: GitHub archive filename mismatch (`v1.11.1.tar.gz` vs `ninja-1.11.1.tar.gz`)
 - **Solution**: Pre-download from ninja-build/ninja repository with correct filename mapping
-- **Result**: ✅ **FIFTH SUCCESS** - Continued systematic progression, builds reaching 43+/290 packages (40m51s+ runtime)
-- **Status**: ✅ **WORKING** - Second GitHub archive pattern successfully implemented
+- **Result**: [SUCCESS] **FIFTH SUCCESS** - Continued systematic progression, builds reaching 43+/290 packages (40m51s+ runtime)
+- **Status**: [SUCCESS] **WORKING** - Second GitHub archive pattern successfully implemented
 
-### ✅ autoconf Package (GNU Mirror Pattern v2) - **RESOLVED** �
+### [SUCCESS] autoconf Package (GNU Mirror Pattern v2) - **RESOLVED** �
 - **Issue**: GNU mirror failures - ftpmirror.gnu.org (502 Bad Gateway), mirrors.kernel.org (404 Not Found)
 - **Solution**: Pre-download from primary GNU FTP server (ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.xz)
-- **Result**: ✅ **SIXTH SUCCESS** - Builds progressed from 40m51s to 41m15s, reaching package 50+/290
-- **Status**: ✅ **WORKING** - GNU mirror pattern v2 successfully implemented
+- **Result**: [SUCCESS] **SIXTH SUCCESS** - Builds progressed from 40m51s to 41m15s, reaching package 50+/290
+- **Status**: [SUCCESS] **WORKING** - GNU mirror pattern v2 successfully implemented
 
-### 🚀 setuptools Package (GitHub Archive Pattern v3) - **TARGETED FOR FIX** 🎯
+### [LAUNCH] setuptools Package (GitHub Archive Pattern v3) - **TARGETED FOR FIX** [TARGET]
 - **Issue**: GitHub archive filename mismatch (`v52.0.0.tar.gz` vs `setuptools-52.0.0.tar.gz`)
 - **Solution**: Pre-download from pypa/setuptools repository with correct filename mapping
 - **Target**: Continue systematic progression beyond package 50/290, extend runtime beyond 41m15s
-- **Status**: 🔄 **IN PROGRESS** - Seventh package fix implementing proven GitHub pattern v3
+- **Status**: [UPDATE] **IN PROGRESS** - Seventh package fix implementing proven GitHub pattern v3
 
-### 🚀 Build Progression Timeline
+### [LAUNCH] Build Progression Timeline
 - **Before**: Immediate failures at package 1/290
 - **bcmstat Fix**: 2+ minute runtime (major breakthrough)
 - **configtools Fix**: 8m29s runtime (4x improvement)  
@@ -652,7 +652,7 @@ grep "Applied fix" package_fixes.log
 - **Metrics Dashboard**: Build success rate and performance monitoring
 - **Automated Testing**: Continuous validation of package downloads
 
-## 📝 Integration with Other Systems
+## [SETUP] Integration with Other Systems
 
 ### CI/CD Integration
 The Universal Package Download System integrates with:
@@ -667,7 +667,7 @@ The Universal Package Download System integrates with:
 - **AlertManager**: Failure notification system
 - **Log Aggregation**: ELK stack compatibility
 
-## 🔒 Security Considerations
+## Security Considerations
 
 ### Package Integrity
 - **Checksum Verification**: SHA256 validation for all downloads

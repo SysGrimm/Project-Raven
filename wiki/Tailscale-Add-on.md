@@ -114,7 +114,7 @@ class TailscaleService:
 - **Configuration**: `tailscaled.state` (encrypted device keys)
 - **Logs**: Integrated with Kodi logging system
 
-## 🔐 Authentication Flow
+## [SECURITY] Authentication Flow
 
 ### Initial Setup
 1. Add-on starts `tailscaled` daemon
@@ -245,7 +245,7 @@ tail -f /storage/.kodi/temp/kodi.log | grep -i tailscale
 /storage/.kodi/addons/service.tailscale/bin/tailscale ping peer-hostname
 ```
 
-## 🔒 Security Considerations
+## Security Considerations
 
 ### Encryption
 - **WireGuard Protocol**: All traffic encrypted with modern cryptography
