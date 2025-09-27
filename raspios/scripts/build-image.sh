@@ -6,7 +6,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 RASPIOS_DIR="${PROJECT_ROOT}/raspios"
 BUILD_DIR="${PROJECT_ROOT}/build"
 IMAGES_DIR="${PROJECT_ROOT}/images"
