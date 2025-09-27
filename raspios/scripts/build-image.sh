@@ -50,7 +50,7 @@ check_prerequisites() {
     log "Checking build prerequisites..."
     
     # Check for required tools
-    local required_tools=("wget" "xz" "parted" "losetup" "mount" "umount")
+    local required_tools=("wget" "xz" "parted" "losetup" "mount" "umount" "kpartx")
     for tool in "${required_tools[@]}"; do
         if ! command -v "$tool" &> /dev/null; then
             error "Required tool '$tool' is not installed"
@@ -124,12 +124,64 @@ customize_image() {
     
     log "Customizing Raspberry Pi OS image..."
     
-    # Create loop device
-    local loop_device
-    loop_device=$(losetup -f --show "$image_path")
+    # Debug: Check if the image file exists and its size
+    if [ ! -f "$image_path" ]; then
+        error "Image file not found: $image_path"
+    fi
     
-    # Create partitions
-    partprobe "$loop_device"
+    log "Image file size: $(du -h "$image_path" | cut -f1)"
+    
+    # Create loop device with better error handling
+    local loop_device
+    log "Setting up loop device for $image_path..."
+    
+    # First try to find available loop device
+    if ! loop_device=$(losetup -f 2>/dev/null); then
+        error "No available loop devices found"
+    fi
+    
+    log "Using loop device: $loop_device"
+    
+    # Set up the loop device
+    if ! losetup "$loop_device" "$image_path"; then
+        error "Failed to set up loop device $loop_device for $image_path"
+    fi
+    
+    # Wait a moment for the device to be ready
+    sleep 2
+    
+    # Use kpartx to create device maps
+    log "Creating device maps with kpartx..."
+    if ! kpartx -av "$loop_device" > /tmp/kpartx.out 2>&1; then
+        log "kpartx output:"
+        cat /tmp/kpartx.out
+        losetup -d "$loop_device"
+        error "Failed to create device maps with kpartx"
+    fi
+    
+    # Parse kpartx output to find the mapped devices
+    local boot_device
+    local root_device
+    boot_device="/dev/mapper/$(basename "$loop_device")p1"
+    root_device="/dev/mapper/$(basename "$loop_device")p2"
+    
+    # Wait for devices to appear
+    local timeout=10
+    while [ $timeout -gt 0 ] && [ ! -e "$boot_device" ]; do
+        sleep 1
+        timeout=$((timeout - 1))
+    done
+    
+    if [ ! -e "$boot_device" ] || [ ! -e "$root_device" ]; then
+        log "Available devices in /dev/mapper/:"
+        ls -la /dev/mapper/
+        kpartx -dv "$loop_device" || true
+        losetup -d "$loop_device" || true
+        error "Device mapping failed. Boot device: $boot_device, Root device: $root_device"
+    fi
+    
+    log "Found boot device: $boot_device"
+    log "Found root device: $root_device"
     
     # Mount boot and root partitions
     local boot_mount="/mnt/raven-boot"
@@ -137,8 +189,20 @@ customize_image() {
     
     mkdir -p "$boot_mount" "$root_mount"
     
-    mount "${loop_device}p1" "$boot_mount"
-    mount "${loop_device}p2" "$root_mount"
+    log "Mounting boot partition..."
+    if ! mount "$boot_device" "$boot_mount"; then
+        kpartx -dv "$loop_device" || true
+        losetup -d "$loop_device" || true
+        error "Failed to mount boot partition"
+    fi
+    
+    log "Mounting root partition..."
+    if ! mount "$root_device" "$root_mount"; then
+        umount "$boot_mount" || true
+        kpartx -dv "$loop_device" || true
+        losetup -d "$loop_device" || true
+        error "Failed to mount root partition"
+    fi
     
     # Customize boot partition
     log "Customizing boot partition..."
@@ -224,9 +288,15 @@ EOF
     success "Image customization completed"
     
     # Cleanup mounts
-    umount "$boot_mount" "$root_mount"
-    rmdir "$boot_mount" "$root_mount"
-    losetup -d "$loop_device"
+    log "Cleaning up mounts and devices..."
+    umount "$boot_mount" "$root_mount" || true
+    rmdir "$boot_mount" "$root_mount" || true
+    
+    # Remove kpartx mappings
+    kpartx -dv "$loop_device" || true
+    
+    # Remove loop device
+    losetup -d "$loop_device" || true
     
     # Copy customized image to output
     mkdir -p "$IMAGES_DIR"
