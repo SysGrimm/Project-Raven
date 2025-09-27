@@ -92,26 +92,26 @@ download_base_image() {
             ;;
     esac
     
-    log "Downloading Raspberry Pi OS $variant image..."
+    log "Downloading Raspberry Pi OS $variant image..." >&2
     
     mkdir -p "$BUILD_DIR"
     cd "$BUILD_DIR"
     
     if [ ! -f "$filename" ]; then
-        wget -O "$filename" "$url"
-        success "Downloaded $filename"
+        wget -O "$filename" "$url" >&2
+        success "Downloaded $filename" >&2
     else
-        info "$filename already exists, skipping download"
+        info "$filename already exists, skipping download" >&2
     fi
     
     # Extract image
     local img_name="${filename%.xz}"
     if [ ! -f "$img_name" ]; then
-        log "Extracting image..."
-        xz -d -k "$filename"
-        success "Extracted to $img_name"
+        log "Extracting image..." >&2
+        xz -d -k "$filename" >&2
+        success "Extracted to $img_name" >&2
     else
-        info "$img_name already extracted"
+        info "$img_name already extracted" >&2
     fi
     
     echo "$BUILD_DIR/$img_name"
@@ -123,6 +123,9 @@ customize_image() {
     local output_name="$2"
     
     log "Customizing Raspberry Pi OS image..."
+    
+    # Debug: Print received image path
+    echo "Received image path: '$image_path'" >&2
     
     # Debug: Check if the image file exists and its size
     if [ ! -f "$image_path" ]; then
